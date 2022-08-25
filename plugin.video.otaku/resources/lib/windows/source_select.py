@@ -5,7 +5,8 @@ from resources.lib.ui import control
 from resources.lib.windows.base_window import BaseWindow
 from resources.lib.windows.resolver import Resolver
 from resources.lib.ui import database
-
+from resources.lib.indexers import simkl
+from resources.lib import OtakuBrowser as browser
 
 class SourceSelect(BaseWindow):
 
@@ -21,15 +22,32 @@ class SourceSelect(BaseWindow):
         self.last_action = 0
         control.closeBusyDialog()
         self.stream_link = None
+        anime_init = browser.OtakuBrowser().get_anime_init(actionArgs.get('anilist_id'), filter_lang=None)
+        episode = int(actionArgs.get('episode'))
+        if episode != '':
+            seasonNum = anime_init[0][episode-1].get('info').get('season')
+            episodeNum = anime_init[0][episode-1].get('info').get('episode')
+            self.setProperty('item.info.season', str(seasonNum))
+            self.setProperty('item.info.episode', str(episodeNum))
+            self.setProperty('item.art.poster', anime_init[0][episode-1].get('image').get('poster'))
+            self.setProperty('item.art.thumb', anime_init[0][episode-1].get('image').get('thumb'))
+            self.setProperty('item.art.fanart', anime_init[0][episode-1].get('image').get('fanart'))
+            self.setProperty('item.info.title', anime_init[0][episode-1].get('info').get('title'))
+            self.setProperty('item.info.aired', anime_init[0][episode-1].get('info').get('aired'))
+            self.setProperty('item.info.plot', anime_init[0][episode-1].get('info').get('plot'))
+            try:
+                year, month, day = anime_init[0][episode-1].get('info').get('aired', '0000-00-00').split('-')
+            except:
+                year =''
+            self.setProperty('item.info.year', year)
 
     def onInit(self):
+        
         self.display_list = self.getControl(1000)
         menu_items = []
-
         for idx, i in enumerate(self.sources):
             if not i:
                 continue
-
             menu_item = control.menuItem(label='%s' % i['release_title'])
             for info in list(i.keys()):
                 try:

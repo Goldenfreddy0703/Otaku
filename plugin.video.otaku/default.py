@@ -334,7 +334,7 @@ def PLAY_GOGO(payload, params):
 def PLAY(payload, params):
     anilist_id, episode, filter_lang = payload.rsplit("/")
     sources = _BROWSER.get_sources(anilist_id, episode, filter_lang, 'show')
-    _mock_args = {"anilist_id": anilist_id}
+    _mock_args = {"anilist_id": anilist_id, "episode": episode}
 
     if control.getSetting('general.playstyle.episode') == '1' or params.get('source_select'):
 

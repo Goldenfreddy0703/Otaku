@@ -50,6 +50,18 @@
                     <width>1820</width>
                     <font>font12</font>
                     <textcolor>AAFFFFFF</textcolor>
+                    <label>[B]  - Username:[/B]</label>
+                    <hinttext>Enter username   </hinttext>
+                    <disabledcolor>FF000000</disabledcolor>
+                  	<invalidcolor>FFFFFFFF</invalidcolor>
+                  	<pulseonselect>no</pulseonselect>
+                </control>
+                <control type="edit" id="1001">
+                    <left>-10</left>
+                    <height>100</height>
+                    <width>1820</width>
+                    <font>font12</font>
+                    <textcolor>AAFFFFFF</textcolor>
                     <label>[B]  - Auth token:[/B]</label>
                     <hinttext>Enter auth token   </hinttext>
                     <disabledcolor>FF000000</disabledcolor>
@@ -61,7 +73,7 @@
        </control>
 
        <control type="group">
-          <top>75</top>
+          <top>175</top>
           <left>50</left>
             <control type="grouplist" id="2000">
                 <onup>4000</onup>
