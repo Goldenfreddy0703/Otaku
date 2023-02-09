@@ -272,7 +272,6 @@ def _get_view_type(viewType):
 
 
 def xbmc_add_player_item(name, url, art={}, info={}, draw_cm=None, bulk_add=False):
-    ok = True
     u = addon_url(url)
     cm = []
     if draw_cm is not None:
@@ -280,20 +279,31 @@ def xbmc_add_player_item(name, url, art={}, info={}, draw_cm=None, bulk_add=Fals
             cm.append((draw_cm[0], 'RunPlugin(plugin://{0}/{1}/{2})'.format(ADDON_ID, draw_cm[1], url)))
 
     liz = xbmcgui.ListItem(name)
-    cast = info.pop('cast2') if isinstance(info, dict) and 'cast2' in info.keys() else []
-    liz.setInfo('video', info)
+    
+    # cast = info.pop('cast2') if isinstance(info, dict) and 'cast2' in info.keys() else []
+    # liz.setInfo('video', info)
 
     if art is None or type(art) is not dict:
         art = {}
-
     if art.get('fanart') is None:
         art['fanart'] = OTAKU_FANART_PATH
-
     liz.setArt(art)
-    if cast:
-        liz.setCast(cast)
+    
     liz.setProperty("Video", "true")
     liz.setProperty("IsPlayable", "true")
+    
+    if info:
+        vinfo = liz.getVideoInfoTag()
+        vinfo.setTitle(info['title'])
+        vinfo.setTvShowTitle(info.get('tvshowtitle'))
+        vinfo.setPlot(info.get('plot'))
+        vinfo.setEpisode(info.get('episode', 0))
+        vinfo.setSeason(info.get('season', 0))
+        vinfo.setFirstAired(info.get('aired'))
+        vinfo.setMediaType(info['mediatype'])
+        vinfo.setPlaycount(info.get('playcount', 0))
+        vinfo.setCast(info.get('cast', []))
+    
     liz.addContextMenuItems(cm)
     if bulk_add:
         return (u, liz, False)
@@ -303,7 +313,6 @@ def xbmc_add_player_item(name, url, art={}, info={}, draw_cm=None, bulk_add=Fals
 
 
 def xbmc_add_dir(name, url, art={}, info={}, draw_cm=None):
-    ok = True
     u = addon_url(url)
     cm = [('Trakt Meta Correction', 'RunPlugin(plugin://{0}/trakt_correction/{1})'.format(ADDON_ID, url))]
     if draw_cm is not None:
@@ -314,22 +323,34 @@ def xbmc_add_dir(name, url, art={}, info={}, draw_cm=None):
             cm.append(('Add to Watchlist', 'RunPlugin(plugin://{0}/add_to_watchlist/{1})'.format(ADDON_ID, url)))
 
     liz = xbmcgui.ListItem(name)
-    cast = info.pop('cast2') if isinstance(info, dict) and 'cast2' in info.keys() else []
-    liz.setInfo('video', info)
+    
+    # cast = info.pop('cast2') if isinstance(info, dict) and 'cast2' in info.keys() else []
+    # liz.setInfo('video', info)
 
     if art is None or type(art) is not dict:
         art = {}
-
     if art.get('fanart') is None:
         art['fanart'] = OTAKU_FANART_PATH
-
     liz.setArt(art)
-    if cast:
-        liz.setCast(cast)
-
+    
+    if info:
+        vinfo = liz.getVideoInfoTag()
+        vinfo.setTitle(info['title'])
+        vinfo.setPlot(info.get('plot'))
+        if info.get('rating'):
+            vinfo.setRating(info['rating'])
+        vinfo.setYear(info.get('year', 0))
+        vinfo.setTvShowStatus(info.get('status'))
+        vinfo.setMpaa(info.get('mpaa'))
+        vinfo.setMediaType(info['mediatype'])
+        vinfo.setGenres(info.get('genre', []))
+        vinfo.setPremiered(info.get('premiered'))
+        vinfo.setStudios(info.get('studio', []))
+        vinfo.setDuration(info.get('duration', 0))
+        vinfo.setCast(info.get('cast', []))
+        
     liz.addContextMenuItems(cm)
-    ok = xbmcplugin.addDirectoryItem(handle=HANDLE, url=u, listitem=liz, isFolder=True)
-    return ok
+    return xbmcplugin.addDirectoryItem(handle=HANDLE, url=u, listitem=liz, isFolder=True)
 
 
 def draw_items(video_data, contentType="tvshows", viewType=None, draw_cm=None, bulk_add=False):
