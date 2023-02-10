@@ -336,7 +336,7 @@ def xbmc_add_dir(name, url, art={}, info={}, draw_cm=None):
         vinfo.setPlot(info.get('plot'))
         if info.get('rating'):
             vinfo.setRating(info['rating'])
-        vinfo.setYear(info.get('year', 0))
+        vinfo.setYear(int(info.get('year', 0)))
         vinfo.setTvShowStatus(info.get('status'))
         vinfo.setMpaa(info.get('mpaa'))
         vinfo.setMediaType(info['mediatype'])
