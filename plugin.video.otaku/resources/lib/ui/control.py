@@ -162,9 +162,6 @@ def copy2clip(txt):
             p.communicate(input=txt)
         except:
             pass
-    else:
-        pass
-    pass
 
 
 def colorString(text, color=None):
@@ -298,7 +295,7 @@ def xbmc_add_player_item(name, url, art={}, info={}, draw_cm=None, bulk_add=Fals
         vinfo.setTvShowTitle(info.get('tvshowtitle'))
         vinfo.setPlot(info.get('plot'))
         vinfo.setEpisode(info.get('episode', 0))
-        vinfo.setSeason(info.get('season', 0))
+        vinfo.setSeason(int(info.get('season', 0)))
         vinfo.setFirstAired(info.get('aired'))
         vinfo.setMediaType(info['mediatype'])
         vinfo.setPlaycount(info.get('playcount', 0))
