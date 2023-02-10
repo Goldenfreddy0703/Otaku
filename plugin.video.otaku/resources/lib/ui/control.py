@@ -277,12 +277,13 @@ def xbmc_add_player_item(name, url, art={}, info={}, draw_cm=None, bulk_add=Fals
             cm.append((draw_cm[0], 'RunPlugin(plugin://{0}/{1}/{2})'.format(ADDON_ID, draw_cm[1], url)))
 
     liz = xbmcgui.ListItem(name)
-    
+    cast = info.pop('cast2') if isinstance(info, dict) and 'cast2' in info.keys() else []
+    if cast:
+        liz.setCast(cast)
+
     if kodi_version < 20:
-        cast = info.pop('cast2') if isinstance(info, dict) and 'cast2' in info.keys() else []
         liz.setInfo('video', info)
-        if cast:
-            liz.setCast(cast)
+
     else:
         if info:
             vinfo = liz.getVideoInfoTag()
@@ -294,14 +295,13 @@ def xbmc_add_player_item(name, url, art={}, info={}, draw_cm=None, bulk_add=Fals
             vinfo.setFirstAired(info.get('aired'))
             vinfo.setMediaType(info['mediatype'])
             vinfo.setPlaycount(info.get('playcount', 0))
-            vinfo.setCast(info.get('cast', []))
-            
+
     if art is None or type(art) is not dict:
         art = {}
     if art.get('fanart') is None:
         art['fanart'] = OTAKU_FANART_PATH
     liz.setArt(art)
-    
+
     liz.setProperty("Video", "true")
     liz.setProperty("IsPlayable", "true")
 
@@ -323,18 +323,19 @@ def xbmc_add_dir(name, url, art={}, info={}, draw_cm=None):
             cm.append(('Add to Watchlist', 'RunPlugin(plugin://{0}/add_to_watchlist/{1})'.format(ADDON_ID, url)))
 
     liz = xbmcgui.ListItem(name)
-    
+
     if art is None or type(art) is not dict:
         art = {}
     if art.get('fanart') is None:
         art['fanart'] = OTAKU_FANART_PATH
     liz.setArt(art)
-    
+
+    cast = info.pop('cast2') if isinstance(info, dict) and 'cast2' in info.keys() else []
+    if cast:
+        liz.setCast(cast)
+
     if kodi_version < 20:
-        cast = info.pop('cast2') if isinstance(info, dict) and 'cast2' in info.keys() else []
         liz.setInfo('video', info)
-        if cast:
-            liz.setCast(cast)
     else:
         if info:
             vinfo = liz.getVideoInfoTag()
@@ -350,8 +351,7 @@ def xbmc_add_dir(name, url, art={}, info={}, draw_cm=None):
             vinfo.setPremiered(info.get('premiered'))
             vinfo.setStudios(info.get('studio', []))
             vinfo.setDuration(info.get('duration', 0))
-            vinfo.setCast(info.get('cast', []))
-        
+
     liz.addContextMenuItems(cm)
     return xbmcplugin.addDirectoryItem(handle=HANDLE, url=u, listitem=liz, isFolder=True)
 
@@ -425,7 +425,8 @@ def getChangeLog():
         changelog_text = f.read()
         f.close()
     else:
-        return xbmc.executebuiltin('Notification(%s, %s, %d, %s)' % ('Otaku', 'Changelog file not found.', 5000, xbmcgui.NOTIFICATION_ERROR))
+        return xbmc.executebuiltin(
+            'Notification(%s, %s, %d, %s)' % ('Otaku', 'Changelog file not found.', 5000, xbmcgui.NOTIFICATION_ERROR))
 
     # Read news file
     news_text = ""
