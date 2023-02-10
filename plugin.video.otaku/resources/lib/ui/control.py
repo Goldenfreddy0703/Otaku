@@ -26,6 +26,7 @@ LOGINFO = xbmc.LOGNOTICE if PY2 else xbmc.LOGINFO
 INPUT_ALPHANUM = xbmcgui.INPUT_ALPHANUM
 dataPath = TRANSLATEPATH(addonInfo('profile'))
 ADDON_PATH = __settings__.getAddonInfo('path')
+kodi_version = int(xbmc.getInfoLabel("System.BuildVersion").split(".")[0])
 
 cacheFile = os.path.join(dataPath, 'cache.db')
 cacheFile_lock = threading.Lock()
@@ -277,9 +278,24 @@ def xbmc_add_player_item(name, url, art={}, info={}, draw_cm=None, bulk_add=Fals
 
     liz = xbmcgui.ListItem(name)
     
-    # cast = info.pop('cast2') if isinstance(info, dict) and 'cast2' in info.keys() else []
-    # liz.setInfo('video', info)
-
+    if kodi_version < 20:
+        cast = info.pop('cast2') if isinstance(info, dict) and 'cast2' in info.keys() else []
+        liz.setInfo('video', info)
+        if cast:
+            liz.setCast(cast)
+    else:
+        if info:
+            vinfo = liz.getVideoInfoTag()
+            vinfo.setTitle(info['title'])
+            vinfo.setTvShowTitle(info.get('tvshowtitle'))
+            vinfo.setPlot(info.get('plot'))
+            vinfo.setEpisode(info.get('episode', 0))
+            vinfo.setSeason(int(info.get('season', 0)))
+            vinfo.setFirstAired(info.get('aired'))
+            vinfo.setMediaType(info['mediatype'])
+            vinfo.setPlaycount(info.get('playcount', 0))
+            vinfo.setCast(info.get('cast', []))
+            
     if art is None or type(art) is not dict:
         art = {}
     if art.get('fanart') is None:
@@ -288,25 +304,12 @@ def xbmc_add_player_item(name, url, art={}, info={}, draw_cm=None, bulk_add=Fals
     
     liz.setProperty("Video", "true")
     liz.setProperty("IsPlayable", "true")
-    
-    if info:
-        vinfo = liz.getVideoInfoTag()
-        vinfo.setTitle(info['title'])
-        vinfo.setTvShowTitle(info.get('tvshowtitle'))
-        vinfo.setPlot(info.get('plot'))
-        vinfo.setEpisode(info.get('episode', 0))
-        vinfo.setSeason(int(info.get('season', 0)))
-        vinfo.setFirstAired(info.get('aired'))
-        vinfo.setMediaType(info['mediatype'])
-        vinfo.setPlaycount(info.get('playcount', 0))
-        vinfo.setCast(info.get('cast', []))
-    
+
     liz.addContextMenuItems(cm)
     if bulk_add:
         return (u, liz, False)
     else:
-        ok = xbmcplugin.addDirectoryItem(handle=HANDLE, url=u, listitem=liz, isFolder=False)
-        return ok
+        return xbmcplugin.addDirectoryItem(handle=HANDLE, url=u, listitem=liz, isFolder=False)
 
 
 def xbmc_add_dir(name, url, art={}, info={}, draw_cm=None):
@@ -321,30 +324,33 @@ def xbmc_add_dir(name, url, art={}, info={}, draw_cm=None):
 
     liz = xbmcgui.ListItem(name)
     
-    # cast = info.pop('cast2') if isinstance(info, dict) and 'cast2' in info.keys() else []
-    # liz.setInfo('video', info)
-
     if art is None or type(art) is not dict:
         art = {}
     if art.get('fanart') is None:
         art['fanart'] = OTAKU_FANART_PATH
     liz.setArt(art)
     
-    if info:
-        vinfo = liz.getVideoInfoTag()
-        vinfo.setTitle(info['title'])
-        vinfo.setPlot(info.get('plot'))
-        if info.get('rating'):
-            vinfo.setRating(info['rating'])
-        vinfo.setYear(int(info.get('year', 0)))
-        vinfo.setTvShowStatus(info.get('status'))
-        vinfo.setMpaa(info.get('mpaa'))
-        vinfo.setMediaType(info['mediatype'])
-        vinfo.setGenres(info.get('genre', []))
-        vinfo.setPremiered(info.get('premiered'))
-        vinfo.setStudios(info.get('studio', []))
-        vinfo.setDuration(info.get('duration', 0))
-        vinfo.setCast(info.get('cast', []))
+    if kodi_version < 20:
+        cast = info.pop('cast2') if isinstance(info, dict) and 'cast2' in info.keys() else []
+        liz.setInfo('video', info)
+        if cast:
+            liz.setCast(cast)
+    else:
+        if info:
+            vinfo = liz.getVideoInfoTag()
+            vinfo.setTitle(info['title'])
+            vinfo.setPlot(info.get('plot'))
+            if info.get('rating'):
+                vinfo.setRating(info['rating'])
+            vinfo.setYear(int(info.get('year', 0)))
+            vinfo.setTvShowStatus(info.get('status'))
+            vinfo.setMpaa(info.get('mpaa'))
+            vinfo.setMediaType(info['mediatype'])
+            vinfo.setGenres(info.get('genre', []))
+            vinfo.setPremiered(info.get('premiered'))
+            vinfo.setStudios(info.get('studio', []))
+            vinfo.setDuration(info.get('duration', 0))
+            vinfo.setCast(info.get('cast', []))
         
     liz.addContextMenuItems(cm)
     return xbmcplugin.addDirectoryItem(handle=HANDLE, url=u, listitem=liz, isFolder=True)
