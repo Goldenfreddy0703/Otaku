@@ -407,6 +407,7 @@ def authPremiumize(payload, params):
 
 @route('settings')
 def SETTINGS(payload, params):
+    database.cache_clear()
     return control.settingsMenu()
 
 
