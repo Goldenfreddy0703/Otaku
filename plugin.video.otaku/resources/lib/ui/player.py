@@ -192,49 +192,53 @@ class watchlistPlayer(xbmc.Player):
 
         control.closeAllDialogs()
 
-        # Subtitle Preferences
-        subtitle_lang = self.getAvailableSubtitleStreams()
-        if len(subtitle_lang) > 1:
-            subtitles = [
-                "eng", "jpn", "spa", "fre", "ger", "ita",
-                "dut", "rus", "por", "kor", "chi", "ara",
-                "hin", "tur", "pol", "swe", "nor", "dan",
-                "fin"
-            ]
-            preferred_subtitle = subtitles[int(control.getSetting('general.subtitles'))]
+        if control.getSetting('general.kodi_language') == 'true':
+            # do not execute the code block
+            pass
+        else:
+            # Subtitle Preferences
+            subtitle_lang = self.getAvailableSubtitleStreams()
+            if len(subtitle_lang) > 1:
+                subtitles = [
+                    "eng", "jpn", "spa", "fre", "ger", "ita",
+                    "dut", "rus", "por", "kor", "chi", "ara",
+                    "hin", "tur", "pol", "swe", "nor", "dan",
+                    "fin"
+                ]
+                preferred_subtitle = subtitles[int(control.getSetting('general.subtitles'))]
 
-            try:
-                subtitle_int = subtitle_lang.index(preferred_subtitle)
-                self.setSubtitleStream(subtitle_int)
-            except ValueError:
-                preferred_subtitle = "eng"
                 try:
                     subtitle_int = subtitle_lang.index(preferred_subtitle)
                     self.setSubtitleStream(subtitle_int)
                 except ValueError:
-                    # Handle the ValueError by setting subtitle_int to 0 (first available subtitle stream)
-                    subtitle_int = 0
+                    preferred_subtitle = "eng"
+                    try:
+                        subtitle_int = subtitle_lang.index(preferred_subtitle)
+                        self.setSubtitleStream(subtitle_int)
+                    except ValueError:
+                        # Handle the ValueError by setting subtitle_int to 0 (first available subtitle stream)
+                        subtitle_int = 0
 
-                    self.setSubtitleStream(subtitle_int)
+                        self.setSubtitleStream(subtitle_int)
 
-        # Audio Preferences
-        audio_lang = self.getAvailableAudioStreams()
-        if len(audio_lang) > 1:
-            audios = ['jpn', 'eng']
-            preferred_audio = audios[int(control.getSetting('general.audio'))]
+            # Audio Preferences
+            audio_lang = self.getAvailableAudioStreams()
+            if len(audio_lang) > 1:
+                audios = ['jpn', 'eng']
+                preferred_audio = audios[int(control.getSetting('general.audio'))]
 
-            try:
-                audio_int = audio_lang.index(preferred_audio)
-            except ValueError:
-                # Handle the ValueError by setting audio_int to 0 (play the first audio stream)
-                audio_int = 0
+                try:
+                    audio_int = audio_lang.index(preferred_audio)
+                except ValueError:
+                    # Handle the ValueError by setting audio_int to 0 (play the first audio stream)
+                    audio_int = 0
 
-            self.setAudioStream(audio_int)
+                self.setAudioStream(audio_int)
 
-            if preferred_audio == "eng":
-                self.showSubtitles(False)
-            else:
-                self.showSubtitles(True)
+                if preferred_audio == "eng":
+                    self.showSubtitles(False)
+                else:
+                    self.showSubtitles(True)
 
         if control.getSetting('general.dubsubtitles') == 'true':
             self.showSubtitles(True)

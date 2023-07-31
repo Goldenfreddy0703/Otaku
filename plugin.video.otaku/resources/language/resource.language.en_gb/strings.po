@@ -967,6 +967,10 @@ msgctxt "#40494"
 msgid "- Episode Min Size (GB)"
 msgstr ""
 
+msgctxt "#40495"
+msgid "Use Kodi's Preferred Language Settings"
+msgstr ""
+
 ######MAIN Category DIRECTORY#######
 msgctxt "#50000"
 msgid "Airing Anime Calendar"

@@ -73,8 +73,9 @@
 		<!-- Preferences -->
 		<setting type="lsep" label="40313" />
 		<setting type="sep"/>
-		<setting id="general.audio" type="enum" label="40314" default="40315" lvalues="40315|40316" />
-		<setting id="general.subtitles" type="enum" label="40435" default="40436" lvalues="40436|40437|40438|40439|40440|40441|40442|40443|40444|40445|40446|40447|40448|40449|40450|40451|40452|40453|40454" />
+		<setting id="general.kodi_language" type="bool" label="40495" default="false" />
+		<setting id="general.audio" type="enum" label="40314" default="40315" lvalues="40315|40316" enable="eq(-1,false)" />
+		<setting id="general.subtitles" type="enum" label="40435" default="40436" lvalues="40436|40437|40438|40439|40440|40441|40442|40443|40444|40445|40446|40447|40448|40449|40450|40451|40452|40453|40454" enable="eq(-2,false)" />
 		<setting id="general.source" type="labelenum" label="40330" default="Sub" values="Sub|Dub|Both" />
 		<setting id="general.sourcesort" type="labelenum" label="40333" default="Random" values="Random|Sub|Dub" visible="eq(-1,Both)" />
 		<setting id="general.playlist_length" type="slider" label="40459" default="30" range="10,5,50" option="int" />
