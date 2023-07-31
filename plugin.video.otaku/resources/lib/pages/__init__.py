@@ -192,7 +192,7 @@ class Sources(DisplayWindow):
             self.close()
             return
 
-        sourcesList = self.sortSources(self.torrentCacheSources, self.embedSources, filter_lang)
+        sourcesList = self.sortSources(self.torrentCacheSources, self.embedSources, filter_lang, media_type)
         self.return_data = sourcesList
         self.close()
         # control.log('Sorted sources :\n {0}'.format(sourcesList), 'info')
@@ -302,7 +302,7 @@ class Sources(DisplayWindow):
 
         return p
 
-    def sortSources(self, torrent_list, embed_list, filter_lang):
+    def sortSources(self, torrent_list, embed_list, filter_lang, media_type):
         sort_method = int(control.getSetting('general.sortsources'))
 
         sortedList = []
@@ -321,6 +321,35 @@ class Sources(DisplayWindow):
             torrent_list = [i for i in _torrent_list if i['lang'] != filter_lang]
 
             embed_list = [i for i in embed_list if i['lang'] != filter_lang]
+
+        filter_option = control.getSetting('general.fileFilter')
+
+        if filter_option == '1':
+          #web speed
+          webspeed = control.getSetting('general.webspeed')
+          #len_in_sec = ???
+          _torrent_list = torrent_list
+
+          torrent_list = [i for i in _torrent_list if ((float(i['size'][:-3])*8000) / len_in_sec) <= webspeed]
+
+          embed_list = [i for i in embed_list if i['size'] <= webspeed]
+          pass
+        elif filter_option == '2':
+          #hard limit
+          _torrent_list = torrent_list
+
+          if media_type == 'movie':
+            max_GB = float(control.getSetting('general.movie.maxGB'))
+            min_GB = float(control.getSetting('general.movie.minGB'))
+          else:
+            max_GB = float(control.getSetting('general.episode.maxGB'))
+            min_GB = float(control.getSetting('general.episode.minGB'))
+
+          torrent_list = [i for i in _torrent_list if i['size'] != 'NA' and min_GB <= float(i['size'][:-3]) <= max_GB]
+          embed_list= [i for i in embed_list if i['size'] != 'NA' and min_GB <= float(i['size'][:-3]) <= max_GB]
+        else:
+          #no filter
+          pass
 
         # Get the value of the 'sourcesort.menu' setting
         sort_option = control.getSetting('general.sourcesort')

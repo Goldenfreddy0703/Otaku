@@ -943,6 +943,30 @@ msgctxt "#40488"
 msgid "Clean Cache On Update"
 msgstr ""
 
+msgctxt "#40489"
+msgid "Source Filtering by Size"
+msgstr ""
+
+msgctxt "#40490"
+msgid "Internet Speed (Mbps)"
+msgstr ""
+
+msgctxt "#40491"
+msgid "- Movie Max Size (GB)"
+msgstr ""
+
+msgctxt "#40492"
+msgid "- Movie Min Size (GB)"
+msgstr ""
+
+msgctxt "#40493"
+msgid "- Episode Max Size (GB)"
+msgstr ""
+
+msgctxt "#40494"
+msgid "- Episode Min Size (GB)"
+msgstr ""
+
 ######MAIN Category DIRECTORY#######
 msgctxt "#50000"
 msgid "Airing Anime Calendar"

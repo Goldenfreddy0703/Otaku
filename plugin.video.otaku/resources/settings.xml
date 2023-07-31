@@ -109,6 +109,12 @@
 		<setting type="lsep" label="40327"/>
 		<setting id="general.maxResolution" type="enum" label="40328" values="4k|1080p|720p|NA" default="0" />
 		<setting id="general.disable265" type="bool" label="40329" default="false" />
+    <setting id="general.fileFilter" type="enum" label="40489" values="Off|Internet Speed|Hard Limit" default="0" />
+    <setting id="general.webspeed" type="number" label="40490" default="20" allowempty="false" visible="eq(-1, 1)"/>
+    <setting id="general.movie.maxGB" type="slider" label="40491" default="10" range="0,0.1,100" visible="eq(-2, 2)"/>
+    <setting id="general.movie.minGB" type="slider" label="40492" default="0" range="0,0.1,100" visible="eq(-3, 2)"/>
+    <setting id="general.episode.maxGB" type="slider" label="40493" default="10" range="0,0.1,100" visible="eq(-4, 2)"/>
+    <setting id="general.episode.minGB" type="slider" label="40494" default="0" range="0,0.1,100" visible="eq(-5, 2)"/>
 		<setting type="sep" />
 		<!-- Manual File Selection -->
 		<setting type="lsep" label="40481"/>
