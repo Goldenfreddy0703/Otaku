@@ -3235,6 +3235,7 @@ class AniListBrowser():
         kodi_meta['poster'] = res['coverImage']['extraLarge']
         kodi_meta['status'] = res.get('status')
         kodi_meta['format'] = res.get('format')
+        kodi_meta['duration'] = res.get('duration')
         if res.get('format') != 'TV':
             if res.get('averageScore'):
                 kodi_meta['rating'] = res.get('averageScore') / 10.0

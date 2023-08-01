@@ -87,6 +87,7 @@ class Sources(DisplayWindow):
         rescrape = args['rescrape']
         get_backup = args['get_backup']
         self.setProperty('process_started', 'true')
+        duration = args['duration']
 
         if control.real_debrid_enabled() or control.all_debrid_enabled() or control.debrid_link_enabled() or control.premiumize_enabled():
             if control.getSetting('provider.nyaa') == 'true' or control.getSetting('provider.nyaaalt') == 'true':
@@ -192,7 +193,7 @@ class Sources(DisplayWindow):
             self.close()
             return
 
-        sourcesList = self.sortSources(self.torrentCacheSources, self.embedSources, filter_lang, media_type)
+        sourcesList = self.sortSources(self.torrentCacheSources, self.embedSources, filter_lang, media_type, duration)
         self.return_data = sourcesList
         self.close()
         # control.log('Sorted sources :\n {0}'.format(sourcesList), 'info')
@@ -302,7 +303,7 @@ class Sources(DisplayWindow):
 
         return p
 
-    def sortSources(self, torrent_list, embed_list, filter_lang, media_type):
+    def sortSources(self, torrent_list, embed_list, filter_lang, media_type, duration):
         sort_method = int(control.getSetting('general.sortsources'))
 
         sortedList = []
@@ -325,15 +326,14 @@ class Sources(DisplayWindow):
         filter_option = control.getSetting('general.fileFilter')
 
         if filter_option == '1':
-          #web speed
-          webspeed = control.getSetting('general.webspeed')
-          #len_in_sec = ???
+          #web speed limit
+          webspeed = int(control.getSetting('general.webspeed'))
+          len_in_sec = int(duration) * 60
+
           _torrent_list = torrent_list
+          torrent_list = [i for i in _torrent_list if i['size'] != 'NA' and ((float(i['size'][:-3])*8000) / len_in_sec) <= webspeed]
 
-          torrent_list = [i for i in _torrent_list if ((float(i['size'][:-3])*8000) / len_in_sec) <= webspeed]
-
-          embed_list = [i for i in embed_list if i['size'] <= webspeed]
-          pass
+          embed_list = [i for i in embed_list if i['size'] != 'NA' and ((float(i['size'][:-3])*8000) / len_in_sec) <= webspeed]
         elif filter_option == '2':
           #hard limit
           _torrent_list = torrent_list
