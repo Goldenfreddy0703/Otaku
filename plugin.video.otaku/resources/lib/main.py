@@ -2362,7 +2362,7 @@ def SEARCH_RESULTS_TV(payload, params):
 
 @route('play/*')
 def PLAY(payload, params):
-    import web_pdb; web_pdb.set_trace()
+    # import web_pdb; web_pdb.set_trace()
     if payload:
         payload_list = payload.rsplit("/")
         anilist_id, episode, filter_lang = payload_list
