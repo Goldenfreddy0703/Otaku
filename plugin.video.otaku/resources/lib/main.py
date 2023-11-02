@@ -16,11 +16,14 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
 
+import ast
 import pickle
 import six
 import time
 from resources.lib.AniListBrowser import AniListBrowser
 from resources.lib.OtakuBrowser import OtakuBrowser
+from resources.lib.indexers.anify import ANIFYAPI
+from resources.lib.indexers.tmdb2anilist import get_tmdb_to_anilist_id_movie
 from resources.lib.ui import control, database, player, utils
 from resources.lib.ui.router import route, router_process
 from resources.lib.WatchlistIntegration import add_watchlist, watchlist_update_episode
@@ -2359,7 +2362,32 @@ def SEARCH_RESULTS_TV(payload, params):
 
 @route('play/*')
 def PLAY(payload, params):
-    anilist_id, episode, filter_lang = payload.rsplit("/")
+    import web_pdb; web_pdb.set_trace()
+    if payload:
+        payload_list = payload.rsplit("/")
+        anilist_id, episode, filter_lang = payload_list
+    else:
+        anify_api = ANIFYAPI()
+        action_args = params['actionArgs']
+        if isinstance(action_args, str):
+            action_args = ast.literal_eval(action_args)
+        tmdb_id = action_args['tmdb_id']
+        episode = action_args['episode']
+        filter_lang = action_args['filter_lang'] if 'filter_lang' in action_args else None
+        anilist_id = anify_api.get_anilist_id_tv('tmdb', tmdb_id)
+        show_meta = database.get_show(anilist_id)
+        if show_meta:
+            mal_id = show_meta['mal_id']
+            kitsu_id = show_meta['kitsu_id']
+        else:
+            mal_id = None
+            kitsu_id = None
+    # Need a back up for getting anilist_id, works 90% of the time
+    if not anilist_id:
+        from kodi_six import xbmc, xbmcaddon, xbmcplugin, xbmcvfs
+        xbmc.executebuiltin('Notification({0}, {1}, {2}, {3})'.format(xbmcaddon.Addon().getAddonInfo('name'), 'No Anilist ID Found, Might be a special or not in database', 5000, xbmcvfs.translatePath(xbmcaddon.Addon().getAddonInfo('path') + '/icon.png')))
+        return
+
     source_select = bool(params.get('source_select'))
     rescrape = bool(params.get('rescrape'))
     sources = _BROWSER.get_sources(anilist_id, episode, filter_lang, 'show', rescrape, source_select)
@@ -2368,27 +2396,43 @@ def PLAY(payload, params):
     if control.getSetting('general.playstyle.episode') == '1' or source_select or rescrape:
         from resources.lib.windows.source_select import SourceSelect
         link = SourceSelect(*('source_select.xml', control.ADDON_PATH), actionArgs=_mock_args, sources=sources, rescrape=rescrape).doModal()
-
     else:
         from resources.lib.windows.resolver import Resolver
         resolver = Resolver(*('resolver.xml', control.ADDON_PATH), actionArgs=_mock_args)
         link = resolver.doModal(sources, {}, False)
-    player.play_source(link, anilist_id, watchlist_update_episode, _BROWSER.get_episodeList, int(episode),
-                       source_select=source_select, rescrape=rescrape)
+
+    player.play_source(link, anilist_id, watchlist_update_episode, _BROWSER.get_episodeList, int(episode), source_select=source_select, rescrape=rescrape)
+
 
 
 @route('play_movie/*')
 def PLAY_MOVIE(payload, params):
-    payload_list = payload.rsplit("/")
-    anilist_id, mal_id, kitsu_id = payload_list
+    # import web_pdb; web_pdb.set_trace()
+    if payload:
+        payload_list = payload.rsplit("/")
+        anilist_id, mal_id, kitsu_id = payload_list
+    else:
+        anify_api = ANIFYAPI()
+        action_args = params['actionArgs']
+        if isinstance(action_args, str):
+            action_args = ast.literal_eval(action_args)
+        tmdb_id = action_args['tmdb_id']
+        anilist_id = anify_api.get_anilist_id_movie('tmdb', tmdb_id)
+        show_meta = database.get_show(anilist_id)
+        if show_meta:
+            mal_id = show_meta['mal_id']
+            kitsu_id = show_meta['kitsu_id']
+        else:
+            mal_id = None
+            kitsu_id = None
+    # Need a back up for getting anilist_id, works 90% of the time
+    if not anilist_id:
+        from kodi_six import xbmc, xbmcaddon, xbmcplugin, xbmcvfs
+        xbmc.executebuiltin('Notification({0}, {1}, {2}, {3})'.format(xbmcaddon.Addon().getAddonInfo('name'), 'No Anilist ID Found, Might be a special or not in database', 5000, xbmcvfs.translatePath(xbmcaddon.Addon().getAddonInfo('path') + '/icon.png')))
+        return
+
     source_select = bool(params.get('source_select'))
     rescrape = bool(params.get('rescrape'))
-    if not anilist_id:
-        try:
-            anilist_id = database.get_show_mal(mal_id)['anilist_id']
-        except TypeError:
-            show_meta = _ANILIST_BROWSER.get_mal_to_anilist(mal_id)
-            anilist_id = show_meta['anilist_id']
     sources = _BROWSER.get_sources(anilist_id, 1, None, 'movie', rescrape, source_select)
     _mock_args = {'anilist_id': anilist_id}
 
@@ -2451,76 +2495,20 @@ def DELETE_ANIME_DATABASE(payload, params):
     database.remove_season(anilist_id)
     control.notify('Removed "%s" from database' % title_user)
 
-# @route('tmdb_helper')
-# def TMDB_HELPER(payload, params):
-#    from resources.lib.indexers.anilist import AnilistAPI
-#    from resources.lib.indexers.trakt import TRAKTAPI
-#    trakt_show_name = params['title']
-#    source_select = params['sourceselect']
-#    action_args = ast.literal_eval(params.get('actionArgs'))
-#    media_type = action_args['item_type']
-#    trakt_id = action_args['trakt_id']
-#    season = action_args.get('season', None)
-#    episode = action_args.get('episode', 1)
-#    if not trakt_show_name:
-#        trakt_show = TRAKTAPI().get_trakt_show(trakt_id, media_type)
-#        trakt_show_name = trakt_show['title']
-#    if not media_type == 'movie':
-#        if int(season) > 1 and not trakt_show_name.lower() == 'one piece' and not trakt_show_name.lower() == 'case closed':
-#            trakt_show_name += " season " + str(season)
-#    if 'attack on titan' == trakt_show_name.lower():
-#        if int(season) == 4:
-#            if int(episode) <= 16:
-#                trakt_show_name = 'attack on titan final season'
-#            elif int(episode) <= 28:
-#                trakt_show_name = 'attack on titan final season part 2'
-#            elif int(episode) > 28:
-#                trakt_show_name = 'attack on titan final season part 3'
-#    params = {}
-#    params['dict_key'] = ('data', 'Page', 'media')
-#    params['query_path'] = 'search/anime'
-#    params['variables'] = {'page': 1,
-#                           'search': trakt_show_name,
-#                           'sort': 'SEARCH_MATCH',
-#                           'type': 'ANIME'}
-#    result, page = AnilistAPI().post_json(AnilistAPI._URL, **params)
-#    top_result = result[0]
-#    if not top_result['anilist_object']['info']['mediatype'] == media_type:
-#        for x in result:
-#            if x['anilist_object']['info']['mediatype'] == media_type:
-#                top_result = x
-#                break
-#    if media_type == 'movie':
-#        pars = {}
-#        pars['action_args'] = {'anilist_id': top_result['anilist_id'], 'mediatype': media_type}
-#        if source_select == 'true':
-#            pars['source_select'] = 'true'
-#        PLAY_MOVIE('', pars)
-#    else:
-#        if "part" in top_result['anilist_object']['info']['title'].lower() and not 'attack on titan' == trakt_show_name:
-#            if xbmcgui.Dialog().yesno('Anime Season', "Is this season split into parts AND is this episode in the second part?"):
-#                params['variables']['search'] = trakt_show_name + " part 2"
-#                params['dict_key'] = ('data', 'Page', 'media')
-#                params['query_path'] = 'search/anime'
-#                refetched_anilist, op = AnilistAPI().post_json(AnilistAPI._URL, **params)
-#                pars = {}
-#                pars['action_args'] = {'anilist_id': refetched_anilist[0]['anilist_id'], 'episode': episode, 'mediatype': media_type}
-#                if source_select == 'true':
-#                    pars['source_select'] = 'true'
-#                _BROWSER.get_sources('', pars)
-#
-#            else:
-#                pars = {}
-#                pars['action_args'] = {'anilist_id': top_result['anilist_id'], 'episode': episode, 'mediatype': media_type}
-#                if source_select == 'true':
-#                    pars['source_select'] = 'true'
-#                _BROWSER.get_sources('', pars)
-#        else:
-#            pars = {}
-#            if source_select == 'true':
-#                pars['source_select'] = 'true'
-#            pars['action_args'] = {'anilist_id': top_result['anilist_id'], 'episode': episode, 'mediatype': media_type}
-#            _BROWSER.get_sources('', pars)
+
+@route('tmdb_helper')
+def TMDB_HELPER(payload, params):
+    # import web_pdb; web_pdb.set_trace()
+    action_args = params['actionArgs']
+    # Check if action_args is a string and deserialize it
+    if isinstance(action_args, str):
+        action_args = ast.literal_eval(action_args)
+
+    media_type = action_args['item_type']
+    if media_type == 'movie':
+        return PLAY_MOVIE(payload, params)
+    else:
+        PLAY(payload, params)
 
 
 @route('tools')

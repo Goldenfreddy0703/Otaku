@@ -1,6 +1,7 @@
 import json
 from six.moves import urllib_parse
 from resources.lib.ui import client, database
+import requests
 
 
 class ANIFYAPI:
@@ -18,18 +19,11 @@ class ANIFYAPI:
         elif 'apikey' not in params.keys():
             params.update({'apikey': self.apikey})
 
-        response = database.get(
-            client.request,
-            4,
-            url,
-            params=params,
-            error=True,
-            output='extended',
-            timeout=10
-        )
+        response = requests.get(url)
+        print(response)
+        
         data = {}
-        if response and int(response[1]) < 300:
-            data = json.loads(response[0])
+        data = response.json()
         return data
 
     def _parse_episode_view(self, res, show_id, show_meta, season, poster, fanart, eps_watched, update_time, title_disable):
@@ -80,3 +74,27 @@ class ANIFYAPI:
                 sources = self._json_request(self.streamUrl, params)
 
         return sources
+    
+    def get_anilist_id_movie(self, provider_id, media_id):
+        url = f"/media?providerId={provider_id}&id=/movie/{media_id}"
+        params = {'fields': ['mappings']}
+        response_data = self._json_request(url, params)
+
+        anilist_id = None
+        for mapping in response_data.get('mappings', []):
+            if mapping['providerType'] == 'META' and mapping['providerId'] == 'anilist':
+                anilist_id = mapping['id']
+                break
+        return anilist_id  # Return None if no match is found
+    
+    def get_anilist_id_tv(self, provider_id, media_id):
+        url = f"/media?providerId={provider_id}&id=/tv/{media_id}"
+        params = {'fields': ['mappings']}
+        response_data = self._json_request(url, params)
+
+        anilist_id = None
+        for mapping in response_data.get('mappings', []):
+            if mapping['providerType'] == 'META' and mapping['providerId'] == 'anilist':
+                anilist_id = mapping['id']
+                break
+        return anilist_id
