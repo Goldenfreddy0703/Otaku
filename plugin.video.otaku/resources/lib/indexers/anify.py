@@ -85,10 +85,14 @@ class ANIFYAPI:
             if mapping['providerType'] == 'META' and mapping['providerId'] == 'anilist':
                 anilist_id = mapping['id']
                 break
-        return anilist_id  # Return None if no match is found
+        return anilist_id
     
-    def get_anilist_id_tv(self, provider_id, media_id):
-        url = f"/media?providerId={provider_id}&id=/tv/{media_id}"
+    def get_anilist_id_tv(self, provider_id, media_id, tvdb_id=False):
+        if tvdb_id:
+            url = f"/media?providerId=tvdb&id=%2Fseries%2F{media_id}"
+        else:
+            url = f"/media?providerId={provider_id}&id=/tv/{media_id}"
+        
         params = {'fields': ['mappings']}
         response_data = self._json_request(url, params)
 

@@ -2369,19 +2369,30 @@ def PLAY(payload, params):
     else:
         anify_api = ANIFYAPI()
         action_args = params['actionArgs']
+        anilist_id = None
+        show_meta = None
+
         if isinstance(action_args, str):
             action_args = ast.literal_eval(action_args)
-        tmdb_id = action_args['tmdb_id']
-        episode = action_args['episode']
-        filter_lang = action_args['filter_lang'] if 'filter_lang' in action_args else None
-        anilist_id = anify_api.get_anilist_id_tv('tmdb', tmdb_id)
-        show_meta = database.get_show(anilist_id)
-        if show_meta:
-            mal_id = show_meta['mal_id']
-            kitsu_id = show_meta['kitsu_id']
+            episode = action_args['episode']
+            filter_lang = action_args.get('filter_lang', None)
+
+            if action_args.get('tvdb_id'):
+                tvdb_id = action_args['tvdb_id']
+                anilist_id = anify_api.get_anilist_id_tv('tvdb', tvdb_id, True)
+                show_meta = database.get_show(anilist_id)
+            else:
+                tmdb_id = action_args['tmdb_id']
+                anilist_id = anify_api.get_anilist_id_tv('tmdb', tmdb_id, False)
+                show_meta = database.get_show(anilist_id) 
+            if show_meta:
+                mal_id = show_meta['mal_id']
+                kitsu_id = show_meta['kitsu_id']
+            else:
+                mal_id = None
+                kitsu_id = None
         else:
-            mal_id = None
-            kitsu_id = None
+            return
     # Need a back up for getting anilist_id, works 90% of the time
     if not anilist_id:
         from kodi_six import xbmc, xbmcaddon, xbmcplugin, xbmcvfs
@@ -2390,7 +2401,7 @@ def PLAY(payload, params):
 
     source_select = bool(params.get('source_select'))
     rescrape = bool(params.get('rescrape'))
-    sources = _BROWSER.get_sources(anilist_id, episode, filter_lang, 'show', rescrape, source_select)
+    sources = _BROWSER.get_sources(anilist_id, str(episode), filter_lang, 'show', rescrape, source_select)
     _mock_args = {"anilist_id": anilist_id, "episode": episode}
 
     if control.getSetting('general.playstyle.episode') == '1' or source_select or rescrape:
