@@ -7,13 +7,7 @@ def get_tmdb_to_anilist_id_tv(tmdb_id, seasonnum):
     # Convert Tmdb ID to Anilist ID
 
     url = 'https://tmdb2anilist.slidemovies.org/tv/?id=%s&s=%s' % (tmdb_id, seasonnum)
-    params = {
-        'tmdb_id': 0,
-        'anilist_id': 0,
-        'mal_id': 0
-    }
-
-    r = client.request(url, params=params)
+    r = client.request(url)
     if r:
         r = json.loads(r)
     return r

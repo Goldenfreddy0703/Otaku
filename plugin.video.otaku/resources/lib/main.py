@@ -23,7 +23,7 @@ import time
 from resources.lib.AniListBrowser import AniListBrowser
 from resources.lib.OtakuBrowser import OtakuBrowser
 from resources.lib.indexers.anify import ANIFYAPI
-from resources.lib.indexers.tmdb2anilist import get_tmdb_to_anilist_id_movie
+from resources.lib.indexers.tmdb2anilist import get_tmdb_to_anilist_id_movie, get_tmdb_to_anilist_id_tv
 from resources.lib.ui import control, database, player, utils
 from resources.lib.ui.router import route, router_process
 from resources.lib.WatchlistIntegration import add_watchlist, watchlist_update_episode
@@ -2362,7 +2362,6 @@ def SEARCH_RESULTS_TV(payload, params):
 
 @route('play/*')
 def PLAY(payload, params):
-    # import web_pdb; web_pdb.set_trace()
     if payload:
         payload_list = payload.rsplit("/")
         anilist_id, episode, filter_lang = payload_list
@@ -2375,21 +2374,25 @@ def PLAY(payload, params):
         if isinstance(action_args, str):
             action_args = ast.literal_eval(action_args)
             episode = action_args['episode']
+            season = action_args.get('season', None)
             filter_lang = action_args.get('filter_lang', None)
 
-            if action_args.get('tvdb_id'):
-                tvdb_id = action_args['tvdb_id']
-                anilist_id = anify_api.get_anilist_id_tv('tvdb', tvdb_id, True)
+            # if action_args.get('tvdb_id'):
+            #     tvdb_id = action_args['tvdb_id']
+            #     anilist_id = anify_api.get_anilist_id_tv('tvdb', tvdb_id, True)
+            #     show_meta = database.get_show(anilist_id)
+            # else:
+            tmdb_id = action_args['tmdb_id']
+            show_ids = get_tmdb_to_anilist_id_tv(tmdb_id, seasonnum=season)
+            if show_ids:
+                show_ids = {k: int(v) for k, v in show_ids.items()}
+                anilist_id = show_ids['anilist_id']
                 show_meta = database.get_show(anilist_id)
-            else:
-                tmdb_id = action_args['tmdb_id']
-                anilist_id = anify_api.get_anilist_id_tv('tmdb', tmdb_id, False)
-                show_meta = database.get_show(anilist_id) 
             if show_meta:
                 mal_id = show_meta['mal_id']
                 kitsu_id = show_meta['kitsu_id']
             else:
-                mal_id = None
+                mal_id = int(show_ids['mal_id'])
                 kitsu_id = None
         else:
             return
