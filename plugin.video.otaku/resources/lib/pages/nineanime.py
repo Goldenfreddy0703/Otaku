@@ -28,7 +28,7 @@ class sources(BrowserBase):
                 8,
                 anilist_id,
                 episode,
-                '9anime',
+                'zoro',
                 x
             )
             if r and r.get('sources'):
