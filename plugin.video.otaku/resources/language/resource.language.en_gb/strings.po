@@ -2,8 +2,16 @@
 # Addon Name: otaku
 # Addon id: plugin.video.otaku
 # Addon Provider: TeamOtaku
+#
 msgid ""
 msgstr ""
+"Last-Translator: Goldenfreddy0703\n"
+"Language-Team: \n"
+"Language: en_GB\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Generator: Poedit 3.4.2\n"
 
 ######MAIN MENU DIRECTORY#######
 msgctxt "#30000"
