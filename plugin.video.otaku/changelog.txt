@@ -1,3 +1,9 @@
+Changelog 0.4.62[20240119]:
+- New languages added 
+- Brazilian portuguese 
+- French from France 
+- Arabic from Saudi Arabia
+
 Changelog 0.4.61[20240108]:
 - Fixed meta for Simkl
 - Set Skip Intro Default to 3
