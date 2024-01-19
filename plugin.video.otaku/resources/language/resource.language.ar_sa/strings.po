@@ -1,0 +1,1441 @@
+# Kodi Media Center language file
+# Addon Name: otaku
+# Addon id: plugin.video.otaku
+# Addon Provider: TeamOtaku
+#
+msgid ""
+msgstr ""
+"Last-Translator: taiseer999\n"
+"Language-Team: \n"
+"Language: fr_FR\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Generator: Poedit 3.4.2\n"
+
+######MAIN MENU DIRECTORY#######
+msgctxt "#30000"
+msgid "Last Watched: "
+msgstr "اخر مشاهدة"
+
+######TOOLS & SEARCH DIRECTORY#######
+msgctxt "#30027"
+msgid "View Changelog"
+msgstr "لرؤية سجل التغيرات"
+
+msgctxt "#30020"
+msgid "Open Settings Menu"
+msgstr "فتح قائمة الاعدادات"
+
+msgctxt "#30021"
+msgid "Clear Cache"
+msgstr "مسح الذاكرة"
+
+msgctxt "#30022"
+msgid "Clear Local Torrent Cache"
+msgstr "نسح ذاكرة التورنت"
+
+msgctxt "#30023"
+msgid "Clear Search History"
+msgstr "مسح سجل البحث"
+
+msgctxt "#30024"
+msgid "Wipe Addon Data"
+msgstr "مسح معلومات الاضافة"
+
+msgctxt "#30025"
+msgid "This will completely clear your addon settings. Are you sure you want to do this?"
+msgstr "تحذير سيتم مسح اعدادات الاضافة - هل انت متآكد من الاستمرار؟"
+
+msgctxt "#30026"
+msgid "Rebuild Database"
+msgstr "اعادة بناء المعلومات"
+
+######DEBRID DIRECTORY#######
+msgctxt "#30100"
+msgid "Open this link in a browser: {}"
+msgstr "فتح الوصلة في المستكشف"
+
+msgctxt "#30101"
+msgid "Enter the code: {}"
+msgstr "ادخل الرمز {}"
+
+msgctxt "#30102"
+msgid "This code has been copied to your clipboard"
+msgstr "تم حفظ الرمز الي الذاكرة"
+
+msgctxt "#30103"
+msgid "Authentication is completed"
+msgstr "تم التوثيق"
+
+msgctxt "#30104"
+msgid "Please Note\nYou appear to have authorized a non-premium account and will not be able to play items using this account"
+msgstr "الرجاء ملاحظة\nYou قام بتوثيق حاسب غير مميز ولذلك لن يعرض العناصر بهذا الحساب"
+
+msgctxt "#30105"
+msgid "Authentication with Real-Debrid has failed, please try again"
+msgstr "لم يتم توثيق حساب الريل ديبرد الرجاء المحاولة مرة اخرى"
+
+######DATABASE.PY######
+msgctxt "#30200"
+msgid "Cache"
+msgstr "الذاكرة المؤقتة"
+
+msgctxt "#30201"
+msgid "All Cache Successfully Cleared"
+msgstr "تم مسح الذاكرة بنجاح"
+
+msgctxt "#30202"
+msgid "Local Result Cache Successfully Cleared"
+msgstr ""
+
+msgctxt "#30203"
+msgid "[COLOR red]WARNING[/COLOR]\nThis will reset all meta information, are you sure?"
+msgstr [COLOR red]تنبيه[/COLOR]\nسوف تفقد جميع معلوماتك?"
+
+msgctxt "#30204"
+msgid "Database"
+msgstr "قاعدة بيانات"
+
+msgctxt "#30205"
+msgid "Metadata Database Successfully Cleared"
+msgstr "تم مسح بياناتك بنجاح"
+
+######SKINS DIRECTORY######
+msgctxt "#40100"
+msgid "[B]Open this link in a browser: [COLOR deepskyblue]https://armkai.vercel.app/api/mal[/COLOR][/B]"
+msgid "[B]افتح الوصلة في المُتصفح: [COLOR deepskyblue]https://armkai.vercel.app/api/mal[/COLOR][/B]"
+
+msgctxt "#40101"
+msgid "[B]After authorizing, MAL will redirect to its homepage. Copy & paste the redirect url (e.g. url [COLOR deepskyblue]https://myanimelist.net/?code=...[/COLOR]) below.[/B]"
+msgstr "[B]بعد التوثيق, MAL سينقلك لصفتحته. الرجاء نسخ ولصق  url (e.g. url [COLOR deepskyblue]https://myanimelist.net/?code=...[/COLOR]) below.[/B]"
+
+msgctxt "#40105"
+msgid "[B]Open this link in a browser: [COLOR deepskyblue]https://armkai.vercel.app/api/anilist[/COLOR][/B]"
+msgstr "[B]افتح الوصلة في المُتصفح: [COLOR deepskyblue]https://armkai.vercel.app/api/anilist[/COLOR][/B]"
+
+msgctxt "#40106"
+msgid "[B]After authorizing, copy & paste the token below.[/B]"
+msgstr "[Bبعد التوثيق، قم بنسخ ولصق الرمز بالاسفل[/B]"
+
+msgctxt "#40110"
+msgid "[B]*Note: If using addon on Amazon Fire TV Stick/Android TV Box, you can copy & paste text using a Kodi remote app like [COLOR limegreen]Kore[/COLOR] or [COLOR limegreen]Yatse[/COLOR][/B]"
+msgstr "[B]*ملاحظة: ان كنت تسخدم الاضافة على Amazon Fire TV Stick/Android TV Box,   قم بنسخ ولصق باستخدام تطبيق كودي للريموت[COLOR limegreen]Kore[/COLOR] او [COLOR limegreen]Yatse[/COLOR][/B]"
+
+msgctxt "#40221"
+msgid "Torrents"
+msgstr "تورنت"
+
+msgctxt "#40222"
+msgid "Cached"
+msgstr "محفوظ بالذاكرة"
+
+msgctxt "#40223"
+msgid "Embeds"
+msgstr "محنوى"
+
+msgctxt "#40224"
+msgid "Cloudfiles"
+msgstr "ملفات من سيرفر"
+
+msgctxt "#40225"
+msgid "Remaining providers"
+msgstr "مقدمي الخدمات المتبقية"
+
+msgctxt "#40226"
+msgid "Provider"
+msgstr "مقدمي الخدمات"
+
+msgctxt "#40227"
+msgid "Source"
+msgstr "مصدر"
+
+msgctxt "#40228"
+msgid "Resolution"
+msgstr "دقة الشاشة"
+
+msgctxt "#40229"
+msgid "Info"
+msgstr "معلومات"
+
+msgctxt "#40230"
+msgid "Year"
+msgstr "السنة"
+
+msgctxt "#40231"
+msgid "Rating"
+msgstr "التقيم"
+
+msgctxt "#40232"
+msgid "Aired"
+msgstr "تم البث"
+
+msgctxt "#40233"
+msgid "Debrid"
+msgstr "ديبرد"
+
+msgctxt "#40234"
+msgid "Size"
+msgstr "الحجم"
+
+msgctxt "#40235"
+msgid "Provider"
+msgstr "المزود"
+
+msgctxt "#40236"
+msgid "Source type"
+msgstr "نوع المصدر"
+
+msgctxt "#40237"
+msgid "Resolution"
+msgstr "الدقة"
+
+msgctxt "#40238"
+msgid "Info"
+msgstr "معلومات"
+
+######SETTINGS.XML VALUES######
+msgctxt "#40300"
+msgid "General"
+msgstr "عام"
+
+msgctxt "#40301"
+msgid "Enable search history"
+msgstr "تمكين سجل البحث"
+
+msgctxt "#40302"
+msgid "Content Customization"
+msgstr "تخصيص المحتوى"
+
+msgctxt "#40303"
+msgid "Set view types"
+msgstr "اعداد نوع طريقة العرض"
+
+msgctxt "#40304"
+msgid "Menu view type"
+msgstr "طريقة عرض القائمة"
+
+msgctxt "#40305"
+msgid "addons"
+msgstr "الاضافات"
+
+msgctxt "#40306"
+msgid "tvshows"
+msgstr "مسلسلات"
+
+msgctxt "#40307"
+msgid "Playback"
+msgstr "عرض"
+
+msgctxt "#40308"
+msgid "Movie Play Style"
+msgstr "طريقةعرض الفلم"
+
+msgctxt "#40309"
+msgid "Episode Play Style"
+msgstr "طريقةعرض الحلقة"
+
+msgctxt "#40310"
+msgid "Auto Play"
+msgstr "تشغيل تلقائي"
+
+msgctxt "#40311"
+msgid "Source Select"
+msgstr "اختار المصدر"
+
+msgctxt "#40312"
+msgid "Auto try next link on resolve failure (Source Select)"
+msgstr "تلقائيا ستتم المحاولة للولة لحل المشكلة عن طريق اختيار المصدر"
+
+msgctxt "#40313"
+msgid "Preferences"
+msgstr "الخيارات"
+
+msgctxt "#40314"
+msgid "Preferred Audio Playback (Dual Audio)"
+msgstr "تفضيل تشغيل الدبلجة - دبلجة مزدوجة"
+
+msgctxt "#40315"
+msgid "Japanese"
+msgstr "اليبانية"
+
+msgctxt "#40316"
+msgid "English"
+msgstr "الانجليزية"
+
+msgctxt "#40317"
+msgid "Playing Next Dialog"
+msgstr "تشغيل الحوار القادم "
+
+msgctxt "#40318"
+msgid "Enable Playing Next Dialog"
+msgstr "تمكين تشغيل الحوار القادم"
+
+msgctxt "#40319"
+msgid "Minimum Seconds Left Before Showing Dialog"
+msgstr "الوقت المتبقى قبل اظار الحوار"
+
+msgctxt "#40320"
+msgid "Default Action if Nothing Selected"
+msgstr "التصرف الافتراضي ان لم تقم بالاختيار"
+
+msgctxt "#40321"
+msgid "Play"
+msgstr "تشغيل"
+
+msgctxt "#40322"
+msgid "Pause"
+msgstr "توقف مؤقت"
+
+msgctxt "#40323"
+msgid "Skip Intro Dialog"
+msgstr "تخطي حوار المقدمة"
+
+msgctxt "#40324"
+msgid "Enable Skip Intro Dialog"
+msgstr "تفعيل تخطي حوار المقدمة"
+
+msgctxt "#40325"
+msgid "Seconds to skip"
+msgstr "الوقت بالثواني للتخطي"
+
+msgctxt "#40326"
+msgid "Sort & Filter"
+msgstr "الفرز"
+
+msgctxt "#40327"
+msgid "Source Filters"
+msgstr "فرز المصادر"
+
+msgctxt "#40328"
+msgid "Max Resolution"
+msgstr "اعلى دقة"
+
+msgctxt "#40329"
+msgid "Hide HEVC Items"
+msgstr "اخفاء عناصر ال HEVC "
+
+msgctxt "#40330"
+msgid "Preferred Source Type"
+msgstr "انواع المصادر المفضلة"
+
+msgctxt "#40331"
+msgid "Sort Sourcing"
+msgstr "فرز المصادر"
+
+msgctxt "#40332"
+msgid "Sort Sources Method"
+msgstr "طريقة فرز المصادر"
+
+msgctxt "#40333"
+msgid "Teritary Sort Preferences"
+msgstr "طريقة فرز الخدمات"
+
+msgctxt "#40334"
+msgid "Accounts"
+msgstr "الحسابات"
+
+msgctxt "#40335"
+msgid "Real-Debrid"
+msgstr "ريل ديبرد"
+
+msgctxt "#40336"
+msgid "Enable Real-Debrid..."
+msgstr "تمكين ريل ديبرد"
+
+msgctxt "#40337"
+msgid "Real-Debrid Username"
+msgstr "اسم المستخدم في ريل ديبرد"
+
+msgctxt "#40338"
+msgid "Authorize Real-Debrid..."
+msgstr "توثيق ريل ديبرد"
+
+msgctxt "#40339"
+msgid "Real-Debrid Priority"
+msgstr "اولوية ريل ديبرد"
+
+msgctxt "#40340"
+msgid "AllDebrid"
+msgstr ""
+
+msgctxt "#40341"
+msgid "Enable AllDebrid..."
+msgstr "تفعيل AllDebrid"
+
+msgctxt "#40342"
+msgid "AllDebrid Username"
+msgstr "اسم المستخدم AllDebrid"
+
+msgctxt "#40343"
+msgid "Authorize AllDebrid..."
+msgstr "توثيق AllDebrid"
+
+msgctxt "#40344"
+msgid "All-Debrid Priority"
+msgstr "اولوية AllDebrid"
+
+msgctxt "#40345"
+msgid "Watchlist"
+msgstr "قائمة المشاهدة"
+
+msgctxt "#40346"
+msgid "Update Watchlist"
+msgstr "تحديث قائمة المشاهدة"
+
+msgctxt "#40347"
+msgid "Watchlist to update"
+msgstr "قائمة المشاهدة محدثة"
+
+msgctxt "#40348"
+msgid "AniList"
+msgstr "AniList"
+
+msgctxt "#40349"
+msgid "Enable AniList"
+msgstr "تمكين AniList"
+
+msgctxt "#40350"
+msgid "Username:"
+msgstr "اسم المستخدم"
+
+msgctxt "#40351"
+msgid "Token:"
+msgstr "الرمز"
+
+msgctxt "#40352"
+msgid "Click to Authorize..."
+msgstr "اضغط للتوثيق"
+
+msgctxt "#40353"
+msgid "List settings..."
+msgstr "اظهر الاعدادات"
+
+msgctxt "#40354"
+msgid "Sort by:"
+msgstr "فرز عن طريق"
+
+msgctxt "#40355"
+msgid "Kitsu"
+msgstr "Kitsu"
+
+msgctxt "#40356"
+msgid "Enable Kitsu"
+msgstr "تميكن Kitsu"
+
+msgctxt "#40357"
+msgid "Email:"
+msgstr "عنوان الايميل"
+
+msgctxt "#40358"
+msgid "Password:"
+msgstr "كلمة السر"
+
+msgctxt "#40359"
+msgid "Click to Login..."
+msgstr "اضغط للدخول ...."
+
+msgctxt "#40360"
+msgid "How titles will be displayed:"
+msgstr "طريقة ظهور العنواين"
+
+msgctxt "#40361"
+msgid "MyAnimeList"
+msgstr "MyAnimeList"
+
+msgctxt "#40362"
+msgid "Enable MyAnimeList"
+msgstr "تمكين MyAnimeList"
+
+msgctxt "#40363"
+msgid "Premiumize"
+msgstr "Premiumize"
+
+msgctxt "#40364"
+msgid "Enable Premiumize..."
+msgstr "تمكين Premiumize"
+
+msgctxt "#40365"
+msgid "Premiumize Username"
+msgstr "اسم المستخدم Premiumize"
+
+msgctxt "#40366"
+msgid "Authorize Premiumize..."
+msgstr "توثيق Premiumize"
+
+msgctxt "#40367"
+msgid "Premiumize Priority"
+msgstr "اولوية Premiumize"
+
+msgctxt "#40368"
+msgid "episodes"
+msgstr "الحلقات"
+
+msgctxt "#40369"
+msgid "Title Language"
+msgstr "لغة العنوان"
+
+msgctxt "#40370"
+msgid "Romaji (Shingeki no Kyojin)"
+msgstr ""
+
+msgctxt "#40371"
+msgid "English (Attack on Titan)"
+msgstr ""
+
+msgctxt "#40372"
+msgid "Inspect Cloud Files on Scrape"
+msgstr ""
+
+msgctxt "#40373"
+msgid "Language Invoker Options"
+msgstr ""
+
+msgctxt "#40374"
+msgid "Re-Use Language Invoker Status"
+msgstr ""
+
+msgctxt "#40375"
+msgid "Toggle Re-Use Language Invoker"
+msgstr ""
+
+msgctxt "#40376"
+msgid "Auto close dialog"
+msgstr "غلق تلقائي لنافذة الحور"
+
+msgctxt "#40377"
+msgid "Seconds before closing"
+msgstr "الوقت ثواني قبل الاغلاق"
+
+msgctxt "#40378"
+msgid "Enable Gogo Scraping"
+msgstr ""
+
+msgctxt "#40379"
+msgid "Enable Source Scraping"
+msgstr ""
+
+msgctxt "#40380"
+msgid "Enable Season Parsing (Disable if Performance Issues)"
+msgstr ""
+
+msgctxt "#40381"
+msgid "Enable Season Part Scraping"
+msgstr ""
+
+msgctxt "#40382"
+msgid "Manual Watchlist Update"
+msgstr "تحديق يدوي لقائمة المشاهدة"
+
+msgctxt "#40383"
+msgid "seconds"
+msgstr "ثواني"
+
+msgctxt "#40384"
+msgid "Playing in"
+msgstr "العرض خلال"
+
+msgctxt "#40385"
+msgid "Next Up"
+msgstr "العرض القادم"
+
+msgctxt "#40386"
+msgid "Play now"
+msgstr "يعرض الان"
+
+msgctxt "#40387"
+msgid "Search Subs For Language Other Than English"
+msgstr "البحث عن ترجمات للغة غير الانجليزية"
+
+msgctxt "#40388"
+msgid "Icon Theme"
+msgstr "ثيم الايقونة"
+
+msgctxt "#40389"
+msgid "Coloured"
+msgstr "ملون"
+
+msgctxt "#40390"
+msgid "White"
+msgstr "ابيض"
+
+msgctxt "#40391"
+msgid "Set Content Format"
+msgstr "تعين شكل المحتوي"
+
+msgctxt "#40392"
+msgid "Format"
+msgstr "تعين"
+
+msgctxt "#40393"
+msgid "TV"
+msgstr "تلفزيون"
+
+msgctxt "#40394"
+msgid "MOVIE"
+msgstr "فلم"
+
+msgctxt "#40395"
+msgid "TV_SHORT"
+msgstr "تلفزيون مختصر"
+
+msgctxt "#40396"
+msgid "SPECIAL"
+msgstr "خاص"
+
+msgctxt "#40397"
+msgid "OVA"
+msgstr ""
+
+msgctxt "#40398"
+msgid "ONA"
+msgstr ""
+
+msgctxt "#40399"
+msgid "MUSIC"
+msgstr "موسيقى"
+
+msgctxt "#40400"
+msgid ""
+msgstr ""
+
+msgctxt "#40401"
+msgid ""
+msgstr ""
+
+msgctxt "#40402"
+msgid ""
+msgstr ""
+
+msgctxt "#40403"
+msgid ""
+msgstr ""
+
+msgctxt "#40404"
+msgid ""
+msgstr ""
+
+msgctxt "#40405"
+msgid ""
+msgstr ""
+
+msgctxt "#40406"
+msgid ""
+msgstr ""
+
+msgctxt "#40407"
+msgid ""
+msgstr ""
+
+msgctxt "#40408"
+msgid ""
+msgstr ""
+
+msgctxt "#40409"
+msgid "Search Filter"
+msgstr "تخصيص البخث"
+
+msgctxt "#40410"
+msgid "Enable searching mature titles only"
+msgstr ""
+
+msgctxt "#40411"
+msgid "Debrid-Link"
+msgstr ""
+
+msgctxt "#40412"
+msgid "Enable Debrid-Link..."
+msgstr ""
+
+msgctxt "#40413"
+msgid "Debrid-Link Username"
+msgstr ""
+
+msgctxt "#40414"
+msgid "Authorize Debrid-Link..."
+msgstr ""
+
+msgctxt "#40415"
+msgid "Debrid-Link Priority"
+msgstr ""
+
+msgctxt "#40416"
+msgid "Maintenance"
+msgstr "صيانة"
+
+msgctxt "#40417"
+msgid "Hide Sub Sources"
+msgstr "اخفاء مصادر الترجمة"
+
+msgctxt "#40418"
+msgid "Set Country Of Origin"
+msgstr "تعين بلد المنشآ"
+
+msgctxt "#40419"
+msgid "Country"
+msgstr "البلد"
+
+msgctxt "#40420"
+msgid "Japan"
+msgstr "اليابان"
+
+msgctxt "#40421"
+msgid "South Korea"
+msgstr "كوريا الجنوبية"
+
+msgctxt "#40422"
+msgid "China"
+msgstr "الصين"
+
+msgctxt "#40423"
+msgid "Taiwan"
+msgstr "تيوان"
+
+msgctxt "#40424"
+msgid "Set Delay in Seconds Before Showing Dialog"
+msgstr "تاخير الوقت ثواني قبل عرض الحوار"
+
+msgctxt "#40425"
+msgid "Timeout for finding sources (seconds)"
+msgstr "الوقت الاقصى لايجاد مصادر (بالثواني)"
+
+msgctxt "#40426"
+msgid "Show Changelog every update"
+msgstr "تغير سجل التغيرات عند كل تحديث"
+
+msgctxt "#40427"
+msgid "Enable Automatic Subtitles for Dub Streams"
+msgstr "تمكين الترجمات تلقائيا للهروض المدبلجة"
+
+msgctxt "#40428"
+msgid "Set Anime Filter"
+msgstr "تعين فلتر انمي"
+
+msgctxt "#40429"
+msgid "Filter"
+msgstr "فلتر"
+
+msgctxt "#40430"
+msgid "Duration of how long the Dialog will appear"
+msgstr "الوقت المخصص للحوار للظهور"
+
+msgctxt "#40431"
+msgid "Enable Aniskip [COLOR yellow]BETA[/COLOR]"
+msgstr ""
+
+msgctxt "#40432"
+msgid "Offset for Aniskip (seconds)"
+msgstr ""
+
+msgctxt "#40433"
+msgid "Disable Scraping Screen Fanart"
+msgstr ""
+
+msgctxt "#40434"
+msgid "Disable Scraping Screen Clearlogo"
+msgstr ""
+
+msgctxt "#40435"
+msgid "Preferred Subtitle Language"
+msgstr "لغة الترجمة المفضلة"
+
+msgctxt "#40436"
+msgid "English"
+msgstr "انجليزي"
+
+msgctxt "#40437"
+msgid "Japanese"
+msgstr "ياباني"
+
+msgctxt "#40438"
+msgid "Spanish"
+msgstr "اسباني"
+
+msgctxt "#40439"
+msgid "French"
+msgstr "فرنسي"
+
+msgctxt "#40440"
+msgid "German"
+msgstr "الماني"
+
+msgctxt "#40441"
+msgid "Italian"
+msgstr "ايطالي"
+
+msgctxt "#40442"
+msgid "Dutch"
+msgstr "هولندي"
+
+msgctxt "#40443"
+msgid "Russian"
+msgstr "روسي"
+
+msgctxt "#40444"
+msgid "Portuguese"
+msgstr "برتغالي"
+
+msgctxt "#40445"
+msgid "Korean"
+msgstr "كوري"
+
+msgctxt "#40446"
+msgid "Chinese"
+msgstr "صيني"
+
+msgctxt "#40447"
+msgid "Arabic"
+msgstr "عربي"
+
+msgctxt "#40448"
+msgid "Hindi"
+msgstr "هندي"
+
+msgctxt "#40449"
+msgid "Turkish"
+msgstr "تركي"
+
+msgctxt "#40450"
+msgid "Polish"
+msgstr "بولندي"
+
+msgctxt "#40451"
+msgid "Swedish"
+msgstr "سويدي"
+
+msgctxt "#40452"
+msgid "Norwegian"
+msgstr "نرويجي"
+
+msgctxt "#40453"
+msgid "Danish"
+msgstr "دنماركي"
+
+msgctxt "#40454"
+msgid "Finnish"
+msgstr "فلندي"
+
+msgctxt "#40455"
+msgid "Dialog Theme (Use only if you're on the skin)"
+msgstr "ثيم الجوار (للاستخدام فقط عند استخدامك لمظهر)"
+
+msgctxt "#40456"
+msgid "Default"
+msgstr "الافتراضي"
+
+msgctxt "#40457"
+msgid "Arctic Horizon 2"
+msgstr ""
+
+msgctxt "#40458"
+msgid "AuraMod"
+msgstr ""
+
+msgctxt "#40459"
+msgid "Preferred Playlist Size"
+msgstr "حجم المكتبة المفضل"
+
+msgctxt "#40460"
+msgid "Enable Automatic Outro Skip"
+msgstr " تمكين تجاوز فيديو النهاية تلقائيا"
+
+msgctxt "#40461"
+msgid "Enable Automatic Intro Skip"
+msgstr "تمكين فيديو البداية تلقائيا"
+
+msgctxt "#40462"
+msgid "Prioritize Dual-Audio Sources"
+msgstr "اعطاء الاولية للمصادر التى تحوي عدة لغات دبلجة"
+
+msgctxt "#40463"
+msgid "Prioritize Multisubs Sources"
+msgstr "اعطاء الاولية للمصادر التى تحوي عدة لغات ترجمة"
+
+msgctxt "#40464"
+msgid "Prioritize Batch Sources"
+msgstr ""
+
+msgctxt "#40465"
+msgid "Prioritized Source Sorting"
+msgstr ""
+
+msgctxt "#40466"
+msgid "Set Items Per Page"
+msgstr "تخصيص عدة عناصر لكل صفحة"
+
+msgctxt "#40467"
+msgid "Items"
+msgstr "العناصر"
+
+msgctxt "#40468"
+msgid "Prioritize By Season"
+msgstr "الاولوية للمواسم"
+
+msgctxt "#40469"
+msgid "Season Number"
+msgstr "اصدار او رقم الموسم"
+
+msgctxt "#40470"
+msgid "Prioritize By Part"
+msgstr "الاولوية للاجزاء"
+
+msgctxt "#40471"
+msgid "Part Number"
+msgstr "رقم الجزء"
+
+msgctxt "#40472"
+msgid "Set Streaming Site"
+msgstr "تعين موقع البث"
+
+msgctxt "#40473"
+msgid "Site"
+msgstr "الموقع"
+
+msgctxt "#40474"
+msgid "Advanced"
+msgstr "متقدم"
+
+msgctxt "#40475"
+msgid "Manual Episode Meta Api Override"
+msgstr ""
+
+msgctxt "#40476"
+msgid "Api"
+msgstr ""
+
+msgctxt "#40477"
+msgid "Consumet Self-Hosting"
+msgstr ""
+
+msgctxt "#40478"
+msgid "Enable Consumet Self-Hosting"
+msgstr ""
+
+msgctxt "#40479"
+msgid "Self-Host Url"
+msgstr ""
+
+msgctxt "#40480"
+msgid "Hosting Instructions"
+msgstr ""
+
+msgctxt "#40481"
+msgid "Manual File Selection"
+msgstr "اختيار يدوي للملف"
+
+msgctxt "#40482"
+msgid "Enable Manual File Selection for Batch Torrents"
+msgstr ""
+
+msgctxt "#40483"
+msgid "Smart Episode Scrolling (Only works in List View )"
+msgstr "تصفح تلقاذي للحلقات فقط في list mode"
+
+msgctxt "#40484"
+msgid "Artwork Customization"
+msgstr "تخصيص Artwork"
+
+msgctxt "#40485"
+msgid "General Customization"
+msgstr "تخصيص عام"
+
+msgctxt "#40486"
+msgid "Hide Episode Info and Plot"
+msgstr "اخفاء معلومات الحلقة والحبكة"
+
+msgctxt "#40487"
+msgid "Smart Scroll Wait Time"
+msgstr "تاخير وقت التصفحال تلقائي "
+
+msgctxt "#40488"
+msgid "Clean Cache On Update"
+msgstr "تنظيف ذاكرة الماش بعد التحديث"
+
+msgctxt "#40489"
+msgid "Source Filtering by Size"
+msgstr "التصنيف حسب الحجم من المصدر"
+
+msgctxt "#40490"
+msgid "Internet Speed (Mbps)"
+msgstr "سرعة اتصال (Mbps)"
+
+msgctxt "#40491"
+msgid "Movie Max Size (GB)"
+msgstr "اقصى حد حجم ملف للفلم (GB)"
+
+msgctxt "#40492"
+msgid "Movie Min Size (GB)"
+msgstr "اقل حجم ملف الفلم (GB)"
+
+msgctxt "#40493"
+msgid "Episode Max Size (GB)"
+msgstr "اقصى حد حجم ملف الحلقة (GB)"
+
+msgctxt "#40494"
+msgid "Episode Min Size (GB)"
+msgstr "اقل حجم ملف للحلقة (GB)"
+
+msgctxt "#40495"
+msgid "Use Kodi's Preferred Language Settings"
+msgstr "استخدم لغة الترجمة من اعدادت اللغة  لكودي "
+
+msgctxt "#40496"
+msgid "Terminate on Cloud Sources"
+msgstr "Terminate on Cloud Sources"
+
+msgctxt "#40497"
+msgid "Off"
+msgstr "غير مفعل"
+
+msgctxt "#40498"
+msgid "Internet Speed"
+msgstr "سرعة النت"
+
+msgctxt "#40499"
+msgid "Hard Limit"
+msgstr "Hard Limit"
+
+msgctxt "#40500"
+msgid "Hide BATCH Items"
+msgstr "Hide BATCH Items"
+
+msgctxt "#40501"
+msgid "Show Delete from Database in Context Menu"
+msgstr "Show Delete from Database in Context Menu"
+
+msgctxt "#40502"
+msgid "Re-Use Language Invoker"
+msgstr "Re-Use Language Invoker"
+
+msgctxt "#40503"
+msgid "Toggle Re-Use Language Invoker:    [COLOR red]Faster speeds but some instability![/COLOR]"
+msgstr "Toggle Re-Use Language Invoker:    [COLOR red]Faster speeds but some instability![/COLOR]"
+
+msgctxt "#40504"
+msgid "Universal Sub Embeds (Will Be Based By Region)"
+msgstr "اضافة الترجمة اعتمادا علي الموقع"
+
+msgctxt "#40505"
+msgid "English Sub/Dub Embeds"
+msgstr "الترجمة/ الدبلجة للانجليزية"
+
+msgctxt "#40506"
+msgid "Portuguese Sub/Dub Embeds"
+msgstr "الترجمة/ الدبلجة البرتغالية"
+
+msgctxt "#40507"
+msgid "None"
+msgstr "لا شئ"
+
+msgctxt "#40508"
+msgid "Spanish Sub/Dub Embeds"
+msgstr "الترجمة/ الدبلجة للاسبانية"
+
+msgctxt "#40509"
+msgid "French Sub/Dub Embeds"
+msgstr "الترجمة/ الدبلجة للفرنسية"
+
+msgctxt "#40510"
+msgid "Simkl"
+msgstr "Simkl"
+
+msgctxt "#40511"
+msgid "Enable Simkl"
+msgstr "تفعيل Simkl"
+
+msgctxt "#40512"
+msgid "Context Menu Customization"
+msgstr "تخصيص قائمة السياق"
+
+msgctxt "#40513"
+msgid "Show 'Marked as Watched [COLOR blue](Watchlist)[/COLOR]' in Context Menu"
+msgstr "اظهر 'تمت مشاهدته [COLOR blue](Watchlist)[/COLOR]' في قائمة السياق"
+
+msgctxt "#40514"
+msgid "Set Percent to Mark as Watched"
+msgstr "اعداد النسبة لتعليم ما تمت مشاهدته"
+
+msgctxt "#40515"
+msgid "NOTE: Next up Dialog will not begin until this percentage is met"
+msgstr "ملاحظة: الحوار للحلقة القادمة لن يظهر حتى تتوافق النسبة"
+
+msgctxt "#40516"
+msgid "Hide Unaired Episodes"
+msgstr "اخفاء الحلقات التي لم تبث"
+
+msgctxt "#40517"
+msgid "Set Content Year"
+msgstr "وضع الخيار للسنة"
+
+msgctxt "#40518"
+msgid "Year"
+msgstr "العام"
+
+msgctxt "#40519"
+msgid "Set Content Season"
+msgstr "وضع الخيار للموسم"
+
+msgctxt "#40520"
+msgid "Season"
+msgstr "الموسم"
+
+msgctxt "#40521"
+msgid "Winter"
+msgstr "الشتاء"
+
+msgctxt "#40522"
+msgid "Spring"
+msgstr "الربيع"
+
+msgctxt "#40523"
+msgid "Summer"
+msgstr "الصيف"
+
+msgctxt "#40524"
+msgid "Fall"
+msgstr "الخريف"
+
+msgctxt "#40526"
+msgid "Arctic Fuse"
+msgstr "Arctic Fuse"
+
+######MAIN Category DIRECTORY#######
+msgctxt "#50000"
+msgid "Airing Anime Calendar"
+msgstr "رزنامة بث الانمي"
+
+msgctxt "#50001"
+msgid "Airing Anime"
+msgstr "بث الانمي"
+
+msgctxt "#50002"
+msgid "Movies"
+msgstr "افلام"
+
+msgctxt "#50003"
+msgid "TV Shows"
+msgstr "مسلسلات"
+
+msgctxt "#50004"
+msgid "Trending"
+msgstr "شائع"
+
+msgctxt "#50005"
+msgid "Popular"
+msgstr "مشهور"
+
+msgctxt "#50006"
+msgid "Voted"
+msgstr "تم التصويت عليه"
+
+msgctxt "#50007"
+msgid "Completed"
+msgstr "انتهى"
+
+msgctxt "#50008"
+msgid "Upcoming"
+msgstr "قادم"
+
+msgctxt "#50009"
+msgid "Top 100 Anime"
+msgstr "افضل ١٠٠ عمل انمي"
+
+msgctxt "#50010"
+msgid "Genres & Tags"
+msgstr "التصنيفات والرموز"
+
+msgctxt "#50011"
+msgid "Search"
+msgstr "بحث"
+
+msgctxt "#50012"
+msgid "Tools"
+msgstr "ادوات"
+
+msgctxt "#50013"
+msgid "Trending Last year"
+msgstr "شائع في العام الماضي"
+
+msgctxt "#50014"
+msgid "Popular Last year"
+msgstr "مشهور في العام الماضي"
+
+msgctxt "#50015"
+msgid "Voted Last year"
+msgstr "تم التصويت العام الماضي"
+
+msgctxt "#50016"
+msgid "Completed Last year"
+msgstr "انتهى العام الماضي"
+
+msgctxt "#50017"
+msgid "Upcoming Last year"
+msgstr "قادم العام الماضي"
+
+msgctxt "#50018"
+msgid "Trending This year"
+msgstr "شائع هذا العام"
+
+msgctxt "#50019"
+msgid "Popular This year"
+msgstr "مشهور هذا العام"
+
+msgctxt "#50020"
+msgid "Voted This year"
+msgstr "تم التصويت هذا العام"
+
+msgctxt "#50021"
+msgid "Completed This year"
+msgstr "انتهى هذا العام"
+
+msgctxt "#50022"
+msgid "Upcoming This year"
+msgstr "قادم هذا العام"
+
+msgctxt "#50023"
+msgid "Upcoming Next year"
+msgstr "قادم العام القادم"
+
+msgctxt "#50024"
+msgid "Trending Last Season"
+msgstr "الموسم الاخير الشائع"
+
+msgctxt "#50025"
+msgid "Popular Last Season"
+msgstr "الموسم الاخير المشهور"
+
+msgctxt "#50026"
+msgid "Voted Last Season"
+msgstr "تم التوصيت على الموسم الاخير"
+
+msgctxt "#50027"
+msgid "Completed Last Season"
+msgstr "اكتمل الموسم الاخير"
+
+msgctxt "#50028"
+msgid "Upcoming Last Season"
+msgstr "القادم الموسم الاخير"
+
+msgctxt "#50029"
+msgid "Trending This Season"
+msgstr "الشائع هذا الموسم"
+
+msgctxt "#50030"
+msgid "Popular This Season"
+msgstr "المشهور هذا الموسم"
+
+msgctxt "#50031"
+msgid "Voted This Season"
+msgstr "تم التصويت هذا الموسم"
+
+msgctxt "#50032"
+msgid "Completed This Season"
+msgstr "استكمل هذا الموسم"
+
+msgctxt "#50033"
+msgid "Upcoming This Season"
+msgstr "قادم هذا الموسم"
+
+msgctxt "#50034"
+msgid "Upcoming Next Season"
+msgstr "الموسم القادم"
+
+msgctxt "#50035"
+msgid "All Time Trending"
+msgstr "الاكثر شيوعا"
+
+msgctxt "#50036"
+msgid "All Time Popular"
+msgstr "الاشهر"
+
+msgctxt "#50037"
+msgid "All Time Voted"
+msgstr "الاعلي تصويتا"
+
+msgctxt "#50050"
+msgid "Mainmenu Customize"
+msgstr "تخصيص القائمة الرئيسية"
+
+msgctxt "#50051"
+msgid "Main Menu Items"
+msgstr "عناصر القائمة الرئيسية"
+
+msgctxt "#50052"
+msgid "Movie Menu Items"
+msgstr "عناصر قائمة الافلام الرئيسية "
+
+msgctxt "#50053"
+msgid "TV Show Menu Items"
+msgstr "عناصر قائمة المسلسلات الرئيسية"
+
+msgctxt "#50054"
+msgid "Submenu Customize"
+msgstr "تخصيص القوائم الفرعية"
+
+msgctxt "#50055"
+msgid "Main Menu - Trending Items"
+msgstr "القائمة الرئيسية -  الشائعة"
+
+msgctxt "#50056"
+msgid "Main Menu - Popular Items"
+msgstr "القائمة الرئيسية - المشهورة"
+
+msgctxt "#50057"
+msgid "Main Menu - Voted Items"
+msgstr "القائمة الرئيسية - تم التصويت عليها"
+
+msgctxt "#50058"
+msgid "Main Menu - Completed Items"
+msgstr "القائمة الرئيسية -  العناصر التى شوهدت"
+
+msgctxt "#50059"
+msgid "Main Menu - Upcoming Items"
+msgstr "القائمة الرئيسية - العناصر القادمة"
+
+msgctxt "#50060"
+msgid "Movies - Trending Items"
+msgstr "الافلام - الشائعة"
+
+msgctxt "#50061"
+msgid "Movies - Popular Items"
+msgstr "الافلام - المشهورة"
+
+msgctxt "#50062"
+msgid "Movies - Voted Items"
+msgstr "الافلام - تم التصويت عليها"
+
+msgctxt "#50063"
+msgid "Movies - Completed Items"
+msgstr "الافلام - المشاهدة"
+
+msgctxt "#50064"
+msgid "Movies - Upcoming Items"
+msgstr "الافلام - القادمة"
+
+msgctxt "#50065"
+msgid "TV Shows - Trending Items"
+msgstr "المسلسلات - الشائعة"
+
+msgctxt "#50066"
+msgid "TV Shows - Popular Items"
+msgstr "المسلسلات - المشهورة"
+
+msgctxt "#50067"
+msgid "TV Shows - Voted Items"
+msgstr "المسلسلات - اللتى تم التصويت عليها"
+
+msgctxt "#50068"
+msgid "TV Shows - Completed Items"
+msgstr "المسلسلات - المشاهدة"
+
+msgctxt "#50069"
+msgid "TV Shows - Upcoming Items"
+msgstr "المسلسلات - القادمة"
+
+msgctxt "#50070"
+msgid "Search Both"
+msgstr "البحث في في الكل"
+
+msgctxt "#50071"
+msgid "Search Movies"
+msgstr "البحث في الافلام"
+
+msgctxt "#50072"
+msgid "Search TV Shows"
+msgstr "البحث في المسلسلات"
+
+msgctxt "#50073"
+msgid "Multi Select..."
+msgstr "اختبار لاكثر من عنصر"
+
+msgctxt "#50074"
+msgid "Action"
+msgstr "حركة"
+
+msgctxt "#50075"
+msgid "Adventure"
+msgstr "مغامرة"
+
+msgctxt "#50076"
+msgid "Comedy"
+msgstr "كوميديا"
+
+msgctxt "#50077"
+msgid "Drama"
+msgstr "دراما"
+
+msgctxt "#50078"
+msgid "Ecchi"
+msgstr "ايتشي"
+
+msgctxt "#50079"
+msgid "Fantasy"
+msgstr "خيالي"
+
+msgctxt "#50080"
+msgid "Hentai"
+msgstr "رسوم"
+
+msgctxt "#50081"
+msgid "Horror"
+msgstr "رعب"
+
+msgctxt "#50082"
+msgid "Shoujo"
+msgstr "شويو"
+
+msgctxt "#50083"
+msgid "Mecha"
+msgstr "ميتشا"
+
+msgctxt "#50084"
+msgid "Music"
+msgstr "موسيقى"
+
+msgctxt "#50085"
+msgid "Mystery"
+msgstr "غموض"
+
+msgctxt "#50086"
+msgid "Psychological"
+msgstr "سيكولوجي"
+
+msgctxt "#50087"
+msgid "Romance"
+msgstr "حب"
+
+msgctxt "#50088"
+msgid "Sci-Fi"
+msgstr "خيال علمي "
+
+msgctxt "#50089"
+msgid "Slice of Life"
+msgstr "قريب من الواقع"
+
+msgctxt "#50090"
+msgid "Sports"
+msgstr "رياضة"
+
+msgctxt "#50091"
+msgid "Supernatural"
+msgstr "خارق"
+
+msgctxt "#50092"
+msgid "Thriller"
+msgstr "اثارة"
+
+msgctxt "#50093"
+msgid "Genremenu Customize"
+msgstr "تخصيص قائمة التصنيفات"
+
+msgctxt "#50094"
+msgid "Main Menu - Genre Items"
+msgstr "القائمة الرئيسية - التصنيفات"
+
+msgctxt "#50095"
+msgid "Movies - Genre Items"
+msgstr "الافلام - التصنيفات"
+
+msgctxt "#50096"
+msgid "TV Shows - Genre Items"
+msgstr "المسلسلات - التصنيفات"
