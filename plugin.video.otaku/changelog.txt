@@ -37,7 +37,7 @@ Changelog 0.4.51 [20231217]:
 - Fixed Simkl next up url
 
 Changelog 0.4.50 [20231213]:
-- Added Arctic Fuze Next Dialog Theme
+- Added Arctic Fuse Next Dialog Theme
 
 Changelog 0.4.49 [20231202]:
 - Updated Mapping Database
