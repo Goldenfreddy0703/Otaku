@@ -4,8 +4,6 @@
 # Addon Provider: TeamOtaku
 msgid ""
 msgstr ""
-msgid ""
-msgstr ""
 "Last-Translator: Ícaro Maicon\n"
 "Language-Team: \n"
 "Language: pt_BR\n"
