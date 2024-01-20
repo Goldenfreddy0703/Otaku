@@ -637,7 +637,7 @@ msgstr "تخصيص البخث"
 
 msgctxt "#40410"
 msgid "Enable searching mature titles only"
-msgstr ""
+msgstr "تمكين البحث في العناوين المخصصة للبالغين فقط"
 
 msgctxt "#40411"
 msgid "Debrid-Link"
@@ -729,11 +729,11 @@ msgstr ""
 
 msgctxt "#40433"
 msgid "Disable Scraping Screen Fanart"
-msgstr ""
+msgstr "تعطيل كشط الشاشة Fanart"
 
 msgctxt "#40434"
 msgid "Disable Scraping Screen Clearlogo"
-msgstr ""
+msgstr "تعطيل كشط الشاشة Clearlogo"
 
 msgctxt "#40435"
 msgid "Preferred Subtitle Language"
@@ -981,7 +981,7 @@ msgstr "استخدم لغة الترجمة من اعدادت اللغة  لكو�
 
 msgctxt "#40496"
 msgid "Terminate on Cloud Sources"
-msgstr "Terminate on Cloud Sources"
+msgstr "إنهاء عند مصادر السحابة"
 
 msgctxt "#40497"
 msgid "Off"
@@ -993,23 +993,23 @@ msgstr "سرعة النت"
 
 msgctxt "#40499"
 msgid "Hard Limit"
-msgstr "Hard Limit"
+msgstr ""
 
 msgctxt "#40500"
 msgid "Hide BATCH Items"
-msgstr "Hide BATCH Items"
+msgstr ""
 
 msgctxt "#40501"
 msgid "Show Delete from Database in Context Menu"
-msgstr "Show Delete from Database in Context Menu"
+msgstr ""
 
 msgctxt "#40502"
 msgid "Re-Use Language Invoker"
-msgstr "Re-Use Language Invoker"
+msgstr ""
 
 msgctxt "#40503"
 msgid "Toggle Re-Use Language Invoker:    [COLOR red]Faster speeds but some instability![/COLOR]"
-msgstr "Toggle Re-Use Language Invoker:    [COLOR red]Faster speeds but some instability![/COLOR]"
+msgstr ""
 
 msgctxt "#40504"
 msgid "Universal Sub Embeds (Will Be Based By Region)"
@@ -1101,7 +1101,7 @@ msgstr "Arctic Fuse"
 
 msgctxt "#40527"
 msgid "Italian Sub/Dub Embeds"
-msgstr "Incorporações de Sub/Dub Italiano"
+msgstr "تضمينات فرعية/دبلجة إيطالية"
 
 ######MAIN Category DIRECTORY#######
 msgctxt "#50000"
