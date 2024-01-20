@@ -595,42 +595,6 @@ msgctxt "#40399"
 msgid "MUSIC"
 msgstr ""
 
-msgctxt "#40400"
-msgid ""
-msgstr ""
-
-msgctxt "#40401"
-msgid ""
-msgstr ""
-
-msgctxt "#40402"
-msgid ""
-msgstr ""
-
-msgctxt "#40403"
-msgid ""
-msgstr ""
-
-msgctxt "#40404"
-msgid ""
-msgstr ""
-
-msgctxt "#40405"
-msgid ""
-msgstr ""
-
-msgctxt "#40406"
-msgid ""
-msgstr ""
-
-msgctxt "#40407"
-msgid ""
-msgstr ""
-
-msgctxt "#40408"
-msgid ""
-msgstr ""
-
 msgctxt "#40409"
 msgid "Search Filter"
 msgstr ""
