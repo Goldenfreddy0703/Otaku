@@ -60,7 +60,7 @@ class sources(BrowserBase):
             else:
                 items = json.loads(res).get('seasons')
                 season_id = next(
-                    season["id"] for season in sorted(items, key=lambda x: x["episodeStart"])
+                    season["id"] for season in sorted(items, key=lambda x: -x["episodeStart"])
                     if int(episode) >= int(season["episodeStart"])
                 )
                 url = '{0}api/anime/{1}/season/{2}'.format(
