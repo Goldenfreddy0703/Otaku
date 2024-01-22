@@ -1006,7 +1006,7 @@ msgid "Context Menu Customization"
 msgstr "Personalização do menu de contexto"
 
 msgctxt "#40513"
-msgid "Show Marked as Watched [COLOR blue](Watchlist)[/COLOR] in Context Menu"
+msgid "Show 'Marked as Watched [COLOR blue](Watchlist)[/COLOR]' in Context Menu"
 msgstr "Mostrar marcado como assistido (opção para lista assistir)"
 
 msgctxt "#40514"
