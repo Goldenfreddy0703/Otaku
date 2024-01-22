@@ -13,12 +13,10 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "X-Generator: Poedit 3.4.2\n"
 
-######MAIN MENU DIRECTORY#######
 msgctxt "#30000"
 msgid "Last Watched: "
 msgstr "Assistido pela última vez: "
 
-######TOOLS & SEARCH DIRECTORY#######
 msgctxt "#30027"
 msgid "View Changelog"
 msgstr "Visualizar changelog"
@@ -51,7 +49,6 @@ msgctxt "#30026"
 msgid "Rebuild Database"
 msgstr "Reconstruir banco de dados"
 
-######DEBRID DIRECTORY#######
 msgctxt "#30100"
 msgid "Open this link in a browser: {}"
 msgstr "Abra este link em um navegador: {}"
@@ -76,7 +73,6 @@ msgctxt "#30105"
 msgid "Authentication with Real-Debrid has failed, please try again"
 msgstr "A autenticação com Real-Debrid falhou, tente novamente"
 
-######DATABASE.PY######
 msgctxt "#30200"
 msgid "Cache"
 msgstr "Cache"
@@ -101,7 +97,6 @@ msgctxt "#30205"
 msgid "Metadata Database Successfully Cleared"
 msgstr "Banco de dados de metadados limpo com sucesso"
 
-######SKINS DIRECTORY######
 msgctxt "#40100"
 msgid "[B]Open this link in a browser: [COLOR deepskyblue]https://armkai.vercel.app/api/mal[/COLOR][/B]"
 msgstr "[B]Abra este link em um navegador: [COLOR deepskyblue]https://armkai.vercel.app/api/mal[/COLOR][/B]"
@@ -194,7 +189,6 @@ msgctxt "#40238"
 msgid "Info"
 msgstr "Informações"
 
-######SETTINGS.XML VALUES######
 msgctxt "#40300"
 msgid "General"
 msgstr "Geral"
@@ -477,11 +471,11 @@ msgstr "Idioma do título"
 
 msgctxt "#40370"
 msgid "Romaji (Shingeki no Kyojin)"
-msgstr "Romaji (Shingeki no Kyojin)"
+msgstr ""
 
 msgctxt "#40371"
 msgid "English (Attack on Titan)"
-msgstr "Inglês (Attack on Titan)"
+msgstr ""
 
 msgctxt "#40372"
 msgid "Inspect Cloud Files on Scrape"
@@ -1067,7 +1061,6 @@ msgctxt "#40527"
 msgid "Italian Sub/Dub Embeds"
 msgstr "Italiano Sub/Dub embeds"
 
-######MAIN Category DIRECTORY#######
 msgctxt "#50000"
 msgid "Airing Anime Calendar"
 msgstr "Calendário de animes em exibição"
