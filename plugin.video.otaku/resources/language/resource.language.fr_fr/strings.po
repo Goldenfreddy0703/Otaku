@@ -13,10 +13,12 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "X-Generator: Poedit 3.4.2\n"
 
+######MAIN MENU DIRECTORY#######
 msgctxt "#30000"
 msgid "Last Watched: "
 msgstr "Dernier visionnage: "
 
+######TOOLS & SEARCH DIRECTORY#######
 msgctxt "#30027"
 msgid "View Changelog"
 msgstr "Voir l'historique des modifications"
@@ -49,6 +51,7 @@ msgctxt "#30026"
 msgid "Rebuild Database"
 msgstr "Reconstruction de la base de données"
 
+######DEBRID DIRECTORY#######
 msgctxt "#30100"
 msgid "Open this link in a browser: {}"
 msgstr "Ouvrir ce lien dans un navigateur : {}"
@@ -73,6 +76,7 @@ msgctxt "#30105"
 msgid "Authentication with Real-Debrid has failed, please try again"
 msgstr "L'authentification avec Real-Debrid a échoué, veuillez réessayer"
 
+# #####DATABASE.PY######
 msgctxt "#30200"
 msgid "Cache"
 msgstr "Cache"
@@ -97,6 +101,7 @@ msgctxt "#30205"
 msgid "Metadata Database Successfully Cleared"
 msgstr "La base de données des métadonnées a été effacée avec succès"
 
+# #####SKINS DIRECTORY######
 msgctxt "#40100"
 msgid "[B]Open this link in a browser: [COLOR deepskyblue]https://armkai.vercel.app/api/mal[/COLOR][/B]"
 msgstr "[B]Ouvrez ce lien dans un navigateur : [COLOR deepskyblue]https://armkai.vercel.app/api/mal[/COLOR][/B]"
@@ -189,6 +194,7 @@ msgctxt "#40238"
 msgid "Info"
 msgstr "Info"
 
+# #####SETTINGS.XML VALUES######
 msgctxt "#40300"
 msgid "General"
 msgstr "Général"
@@ -1061,6 +1067,7 @@ msgctxt "#40527"
 msgid "Italian Sub/Dub Embeds"
 msgstr "Italien Sub/Dub Intégrés"
 
+######MAIN Category DIRECTORY#######
 msgctxt "#50000"
 msgid "Airing Anime Calendar"
 msgstr "Calendrier de diffusion des films d'animation"
