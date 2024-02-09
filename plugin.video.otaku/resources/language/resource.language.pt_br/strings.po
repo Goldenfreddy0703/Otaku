@@ -82,15 +82,15 @@ msgstr "Solucionador Cloudflare"
 
 msgctxt "#30122"
 msgid "Enable Flaresolverr"
-msgstr "Ativar o solucionador Flare"
+msgstr "Ativar o Flaresolverr"
 
 msgctxt "#30123"
 msgid "Flaresolverr url"
-msgstr "URL do solucionador Flare"
+msgstr "URL do Flaresolverr"
 
 msgctxt "#30124"
 msgid "Flaresolverr Timeout"
-msgstr "Tempo limite do solucionador Flare"
+msgstr "Tempo limite do Flaresolverr"
 
 ######DATABASE.PY######
 msgctxt "#30200"
