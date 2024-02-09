@@ -25,7 +25,7 @@ msgstr "Visualizar changelog"
 
 msgctxt "#30020"
 msgid "Open Settings Menu"
-msgstr "Abrir o menu Configurações"
+msgstr "Abrir o menu de configurações"
 
 msgctxt "#30021"
 msgid "Clear Cache"
@@ -41,7 +41,7 @@ msgstr "Limpar histórico de pesquisa"
 
 msgctxt "#30024"
 msgid "Wipe Addon Data"
-msgstr "Limpe os dados do add-on"
+msgstr "Limpar os dados do add-on"
 
 msgctxt "#30025"
 msgid "This will completely clear your addon settings. Are you sure you want to do this?"
@@ -78,19 +78,19 @@ msgstr "A autenticação com Real-Debrid falhou, tente novamente"
 
 msgctxt "#30121"
 msgid "Cloudflare Solver"
-msgstr ""
+msgstr "Solucionador Cloudflare"
 
 msgctxt "#30122"
 msgid "Enable Flaresolverr"
-msgstr ""
+msgstr "Ativar o solucionador Flare"
 
 msgctxt "#30123"
 msgid "Flaresolverr url"
-msgstr ""
+msgstr "URL do solucionador Flare"
 
 msgctxt "#30124"
 msgid "Flaresolverr Timeout"
-msgstr ""
+msgstr "Tempo limite do solucionador Flare"
 
 ######DATABASE.PY######
 msgctxt "#30200"
@@ -281,7 +281,7 @@ msgstr "Inglês"
 
 msgctxt "#40317"
 msgid "Playing Next Dialog"
-msgstr "Reprodução do próximo diálogo"
+msgstr "Pular a opening"
 
 msgctxt "#40318"
 msgid "Enable Playing Next Dialog"
@@ -321,7 +321,7 @@ msgstr "Ordenar e filtrar"
 
 msgctxt "#40327"
 msgid "Source Filters"
-msgstr "Filtros de fontes"
+msgstr "Filtros de fonte"
 
 msgctxt "#40328"
 msgid "Max Resolution"
@@ -345,7 +345,7 @@ msgstr "Método de ordenar fontes"
 
 msgctxt "#40333"
 msgid "Tertiary Sort Preferences"
-msgstr "Preferências de classificação terciária"
+msgstr "Preferências de classificação de terceiros"
 
 msgctxt "#40334"
 msgid "Accounts"
@@ -393,15 +393,15 @@ msgstr "Priorizar o AllDebrid"
 
 msgctxt "#40345"
 msgid "Watchlist"
-msgstr "Lista assistir"
+msgstr "lista de acompanhamento"
 
 msgctxt "#40346"
 msgid "Update Watchlist"
-msgstr "Atualizar lista assistir"
+msgstr "Atualizar lista de acompanhamento"
 
 msgctxt "#40347"
 msgid "Watchlist to update"
-msgstr "Lista assistir para atualizar"
+msgstr "Lista de acompanhamento para atualizar"
 
 msgctxt "#40348"
 msgid "AniList"
@@ -505,15 +505,15 @@ msgstr "Inspecionar arquivos em nuvem na raspagem"
 
 msgctxt "#40373"
 msgid "Language Invoker Options"
-msgstr "Language Invoker Options"
+msgstr "Opções do language Invoker"
 
 msgctxt "#40374"
 msgid "Re-Use Language Invoker Status"
-msgstr "Re-Use Language Invoker Status"
+msgstr "Reutilizar status do language Invoker "
 
 msgctxt "#40375"
 msgid "Toggle Re-Use Language Invoker"
-msgstr "Toggle Re-Use Language Invoker"
+msgstr "Alternar reutilização do language Invoker"
 
 msgctxt "#40376"
 msgid "Auto close dialog"
@@ -541,7 +541,7 @@ msgstr "Ativar a raspagem de parte da temporada"
 
 msgctxt "#40382"
 msgid "Manual Watchlist Update"
-msgstr "Atualização manual da lista assistir"
+msgstr "Atualização manual da lista de acompanhamento"
 
 msgctxt "#40383"
 msgid "seconds"
@@ -617,7 +617,7 @@ msgstr "Filtro de pesquisa"
 
 msgctxt "#40410"
 msgid "Enable searching mature titles only"
-msgstr "Permitir a busca apenas de títulos para adultos"
+msgstr "Permitir a busca apenas títulos de adultos"
 
 msgctxt "#40411"
 msgid "Debrid-Link"
@@ -697,7 +697,7 @@ msgstr "Filtro"
 
 msgctxt "#40430"
 msgid "Duration of how long the Dialog will appear"
-msgstr "Duração de quanto tempo a caixa de diálogo aparecerá"
+msgstr "Duração do tempo em que a caixa de diálogo será exibida"
 
 msgctxt "#40431"
 msgid "Enable Aniskip [COLOR yellow]BETA[/COLOR]"
@@ -813,7 +813,7 @@ msgstr "AuraMod"
 
 msgctxt "#40459"
 msgid "Preferred Playlist Size"
-msgstr "Tamanho preferido da lista de reprodução"
+msgstr "Preferência de tamanho da lista de reprodução"
 
 msgctxt "#40460"
 msgid "Enable Automatic Outro Skip"
@@ -825,7 +825,7 @@ msgstr "Ativar salto automático da opening"
 
 msgctxt "#40462"
 msgid "Prioritize Dual-Audio Sources"
-msgstr "Priorizar fontes de dual-audio"
+msgstr "Priorizar fontes dual-audio"
 
 msgctxt "#40463"
 msgid "Prioritize Multisubs Sources"
@@ -885,15 +885,15 @@ msgstr "Api"
 
 msgctxt "#40477"
 msgid "Consumet Self-Hosting"
-msgstr "Consumir auto-hospedagem"
+msgstr "Hospedagem própria do consumet"
 
 msgctxt "#40478"
 msgid "Enable Consumet Self-Hosting"
-msgstr "Ativar auto-hospedagem de consumo"
+msgstr "Ativar hospedagem própria do consumet"
 
 msgctxt "#40479"
 msgid "Self-Host Url"
-msgstr "URL de auto-hospedagem"
+msgstr "URL da hospedagem própria"
 
 msgctxt "#40480"
 msgid "Hosting Instructions"
@@ -961,11 +961,11 @@ msgstr "Usar as configurações de idioma preferido do Kodi"
 
 msgctxt "#40496"
 msgid "Terminate on Cloud Sources"
-msgstr "Terminar em fontes da nuvem"
+msgstr "Encerrar em fontes na nuvem"
 
 msgctxt "#40497"
 msgid "Off"
-msgstr "Off"
+msgstr "Desativado"
 
 msgctxt "#40498"
 msgid "Internet Speed"
@@ -985,15 +985,15 @@ msgstr "Mostrar exclusão do banco de dados no menu de contexto"
 
 msgctxt "#40502"
 msgid "Re-Use Language Invoker"
-msgstr "Re-Use Language Invoker"
+msgstr "Reutilizar o language Invoker"
 
 msgctxt "#40503"
 msgid "Toggle Re-Use Language Invoker:    [COLOR red]Faster speeds but some instability![/COLOR]"
-msgstr "Toggle Re-Use Language Invoker:    [COLOR red]Faster speeds but some instability![/COLOR]"
+msgstr "Alternar reutilização do Language Invoker:    [COLOR red]Velocidades mais rápidas, mas com alguma instabilidade![/COLOR]"
 
 msgctxt "#40504"
 msgid "Universal Sub Embeds"
-msgstr "Sub-incorporações universais"
+msgstr "Sub embeds universais"
 
 msgctxt "#40505"
 msgid "English Sub/Dub embeds"
@@ -1029,7 +1029,7 @@ msgstr "Personalização do menu de contexto"
 
 msgctxt "#40513"
 msgid "Show 'Marked as Watched [COLOR blue](Watchlist)[/COLOR]' in Context Menu"
-msgstr "Mostrar marcado como assistido (opção para lista assistir)"
+msgstr "Mostrar marcado como assistido (opção para lista de acompanhamento)"
 
 msgctxt "#40514"
 msgid "Set Percent to Mark as Watched"
@@ -1122,11 +1122,11 @@ msgstr "Lançamentos"
 
 msgctxt "#50009"
 msgid "Top 100 Anime"
-msgstr "100 melhores animes"
+msgstr "Os 100 melhores animes"
 
 msgctxt "#50010"
 msgid "Genres & Tags"
-msgstr "Gêneros"
+msgstr "Gêneros e tags"
 
 msgctxt "#50011"
 msgid "Search"
