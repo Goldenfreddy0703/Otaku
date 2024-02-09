@@ -617,7 +617,7 @@ msgstr "Filtro de pesquisa"
 
 msgctxt "#40410"
 msgid "Enable searching mature titles only"
-msgstr "Permitir a busca apenas títulos de adultos"
+msgstr "Permitir a busca apenas de títulos adultos"
 
 msgctxt "#40411"
 msgid "Debrid-Link"
