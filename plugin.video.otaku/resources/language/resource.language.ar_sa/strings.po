@@ -836,8 +836,8 @@ msgid "Prioritize Batch Sources"
 msgstr "تحديد أولويات مصادر الدفعة"
 
 msgctxt "#40465"
-msgid "Prioritized Source Sorting"
-msgstr "فرز المصدر حسب الأولوية"
+msgid "Prioritized Source Sorting & Filtering"
+msgstr ""
 
 msgctxt "#40466"
 msgid "Set Items Per Page"
@@ -1082,6 +1082,14 @@ msgstr "Arctic Fuse"
 msgctxt "#40527"
 msgid "Italian Sub/Dub Embeds"
 msgstr "تضمينات فرعية/دبلجة إيطالية"
+
+msgctxt "#40528"
+msgid "Providers"
+msgstr ""
+
+msgctxt "#40529"
+msgid "Embeds"
+msgstr ""
 
 ######MAIN Category DIRECTORY#######
 msgctxt "#50000"
