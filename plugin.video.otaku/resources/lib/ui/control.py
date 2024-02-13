@@ -23,6 +23,7 @@ PY3 = sys.version_info[0] == 3
 TRANSLATEPATH = xbmc.translatePath if PY2 else xbmcvfs.translatePath
 LOGINFO = xbmc.LOGNOTICE if PY2 else xbmc.LOGINFO
 INPUT_ALPHANUM = xbmcgui.INPUT_ALPHANUM
+pathExists = xbmcvfs.exists
 dataPath = TRANSLATEPATH(addonInfo('profile'))
 ADDON_PATH = __settings__.getAddonInfo('path')
 mappingPath = TRANSLATEPATH(xbmcaddon.Addon('script.otaku.mappings').getAddonInfo('path'))
@@ -36,11 +37,7 @@ cacheFile = os.path.join(dataPath, 'cache.db')
 cacheFile_lock = threading.Lock()
 
 searchHistoryDB = os.path.join(dataPath, 'search.db')
-searchHistoryMovieDB = os.path.join(dataPath, 'search_movie.db')
-searchHistoryTVDB = os.path.join(dataPath, 'search_tv.db')
 searchHistoryDB_lock = threading.Lock()
-searchHistoryMovieDB_lock = threading.Lock()
-searchHistoryTVDB_lock = threading.Lock()
 anilistSyncDB = os.path.join(dataPath, 'anilistSync.db')
 anilistSyncDB_lock = threading.Lock()
 mappingDB = os.path.join(mappingPath, 'resources', 'data', 'anime_mappings.db')
@@ -63,7 +60,9 @@ OTAKU_FANART_PATH = "%s/fanart.jpg" % ADDON_PATH
 menuItem = xbmcgui.ListItem
 execute = xbmc.executebuiltin
 progressDialog = xbmcgui.DialogProgress()
-
+ALL_EMBEDS = ['doodstream', 'filelions', 'filemoon', 'iga', 'kwik', 'megacloud',
+              'mp4upload', 'mycloud', 'streamtape', 'streamwish', 'vidcdn',
+              'vidplay', 'vidstreaming', 'yourupload', 'zto']
 playList = xbmc.PlayList(xbmc.PLAYLIST_VIDEO)
 player = xbmc.Player
 
@@ -555,6 +554,14 @@ def title_lang(title_key):
 
 def hide_unaired(content_type):
     return getSetting('general.unaired.episodes') == 'true' and content_type == 'episodes'
+
+
+def enabled_embeds():
+    embeds = ALL_EMBEDS
+    for embed in ALL_EMBEDS:
+        if __settings__.getSetting('embed.%s' % embed) == 'false':
+            embeds.remove(embed)
+    return embeds
 
 
 # ### for testing ###

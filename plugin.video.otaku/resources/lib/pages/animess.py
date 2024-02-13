@@ -9,7 +9,7 @@ from resources.lib.ui.BrowserBase import BrowserBase
 
 
 class sources(BrowserBase):
-    _BASE_URL = 'https://otakuanimess.com/'
+    _BASE_URL = 'https://otakuanimess.cc/'
 
     def get_sources(self, anilist_id, episode, get_backup):
         show = database.get_show(anilist_id)

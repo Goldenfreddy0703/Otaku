@@ -115,38 +115,22 @@ class sources(BrowserBase):
         for element in soup.select('.anime_muti_link > ul > li'):
             server = element.get('class')[0]
             link = element.a.get('data-video')
-            type_ = None
-            quality = 'EQ'
 
-            if server == 'vidcdn':
-                type_ = 'embed'
+            if server.lower() in control.enabled_embeds():
                 if link.startswith('//'):
                     link = 'https:' + link
-            elif server == 'streamwish':
-                type_ = 'embed'
-            elif server == 'mp4upload':
-                type_ = 'embed'
-            elif server == 'doodstream':
-                type_ = 'embed'
-            elif server == 'filelions':
-                type_ = 'embed'
-            elif server == 'yourupload':
-                type_ = 'embed'
 
-            if not type_:
-                continue
-
-            source = {
-                'release_title': title,
-                'hash': link,
-                'type': type_,
-                'quality': quality,
-                'debrid_provider': '',
-                'provider': 'gogo',
-                'size': 'NA',
-                'info': source_utils.getInfo(slug) + [server],
-                'lang': source_utils.getAudio_lang(title)
-            }
-            sources.append(source)
+                source = {
+                    'release_title': title,
+                    'hash': link,
+                    'type': 'embed',
+                    'quality': 'EQ',
+                    'debrid_provider': '',
+                    'provider': 'gogo',
+                    'size': 'NA',
+                    'info': source_utils.getInfo(slug) + [server],
+                    'lang': source_utils.getAudio_lang(title)
+                }
+                sources.append(source)
 
         return sources

@@ -1,7 +1,7 @@
-A Long Awaited Feature: TMDB Player Support
+Important: Search Paths have changed. 
 
-Hey everyone, for people that have been asking for tmdb player support, we have finally added it and we are so happy to have it added!!!
+Hey everyone, we recently recoded the search functionality and gave you guys the option to remove a search from your history using the context menu. 
 
-Tmdb Player Support may not give you perfect results all the time but it is way better then are previous Tmdb Players from Kaito in the past. We hope you all enjoy and we hope you all are satisfied.
+For People who are using Otaku Search Paths for there skin. Please use the update paths in the github pinned issues link.
 
-Thank you to everyone who has worked on tmdb player support and huge thank you to @Gujal00 and @CheapCyborg for making this possible!!!
+Sorry for the inconvenience, Thank you 

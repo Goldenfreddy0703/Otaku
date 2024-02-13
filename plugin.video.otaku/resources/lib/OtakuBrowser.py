@@ -11,38 +11,29 @@ from resources.lib.AniListBrowser import AniListBrowser
 
 
 class OtakuBrowser(BrowserBase):
+    stype = 'both'
 
-    @staticmethod
-    def _parse_history_view(res):
+    def _parse_history_view(self, res):
         name = res
-        return utils.allocate_item(name, "search/%s/1" % name, True)
+        return utils.allocate_item(name, 'search/%s/%s/1' % (self.stype, name), True)
 
-    def search_history(self, search_array):
-        result = list(map(self._parse_history_view, search_array))
-        result.insert(0, utils.allocate_item("New Search", "search", True, 'new_search.png'))
-        result.insert(len(result), utils.allocate_item("Clear Search History...", "clear_history", True, 'clear_search_history.png'))
-        return result
+    def search_history(self, stype, search_array):
+        self.stype = stype
+        result = [utils.allocate_item(
+            "New Search",
+            "search?action_args=%7B'stype'%3A'{0}'%7D".format(stype),
+            True,
+            'new_search.png'
+        )]
 
-    @staticmethod
-    def _parse_history_view_movie(res):
-        name = res
-        return utils.allocate_item(name, "search_movie/%s/1" % name, True)
+        result += list(map(self._parse_history_view, search_array))
 
-    def search_history_movie(self, search_array):
-        result = list(map(self._parse_history_view_movie, search_array))
-        result.insert(0, utils.allocate_item("New Search", "search_movie", True, 'new_search.png'))
-        result.insert(len(result), utils.allocate_item("Clear Search History...", "clear_history_movie", True, 'clear_search_history.png'))
-        return result
-
-    @staticmethod
-    def _parse_history_view_tv(res):
-        name = res
-        return utils.allocate_item(name, "search_tv/%s/1" % name, True)
-
-    def search_history_tv(self, search_array):
-        result = list(map(self._parse_history_view_tv, search_array))
-        result.insert(0, utils.allocate_item("New Search", "search_tv", True, 'new_search.png'))
-        result.insert(len(result), utils.allocate_item("Clear Search History...", "clear_history_tv", True, 'clear_search_history.png'))
+        result += [utils.allocate_item(
+            "Clear Search History...",
+            "clear_history?action_args=%7B'stype'%3A'{0}'%7D".format(stype),
+            True,
+            'clear_search_history.png'
+        )]
         return result
 
     def get_backup(self, anilist_id, source):
@@ -116,7 +107,7 @@ class OtakuBrowser(BrowserBase):
         show = database.get_show(anilist_id)
         kodi_meta = pickle.loads(show['kodi_meta'])
         show_meta = database.get_show_meta(anilist_id)
-        if show_meta.get('art'):
+        if show_meta and show_meta.get('art'):
             show_art = pickle.loads(show_meta.get('art'))
         else:
             show_art = {}

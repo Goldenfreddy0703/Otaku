@@ -76,6 +76,7 @@ class SimklWLF(WatchlistFlavorBase):
         sort_types = {
             "Anime Title": "anime_title",
             "Last Updated": "list_updated_at",
+            "Last Added": "last_added",
             "User Rating": "user_rating"
         }
         return sort_types[self._sort]
@@ -134,6 +135,8 @@ class SimklWLF(WatchlistFlavorBase):
             all_results = sorted(all_results, key=lambda x: x['info']['last_watched'] or "0", reverse=True)
         elif sort_pref == 'user_rating':
             all_results = sorted(all_results, key=lambda x: x['info']['user_rating'] or 0, reverse=True)
+        elif sort_pref == 'last_added':  # new sort option
+            all_results.reverse()  # reverse the list to get it in descending order
 
         # all_results += self._handle_paging(results['paging'].get('next'), base_plugin_url, page)
         return all_results

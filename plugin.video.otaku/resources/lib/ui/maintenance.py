@@ -1,6 +1,6 @@
 import time
 
-from resources.lib.ui import control
+from resources.lib.ui import control, database
 
 
 def refresh_apis():
@@ -53,3 +53,6 @@ def run_maintenance():
 
     # Refresh API tokens
     refresh_apis()
+
+    # Setup Search Database
+    database.build_searchdb()

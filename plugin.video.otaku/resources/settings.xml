@@ -60,39 +60,69 @@
 		-->
 	</category>
 
-	<!-- Provider -->
-	<category label="40226">
+	<!-- Providers -->
+	<category label="40528">
 		<!-- Torrents -->
 		<setting type="lsep" label="40221" />
 		<setting type="sep"/>
-		<setting id="provider.nyaa" type="bool" label="Nyaa" default="true" enable="eq(1,false)" />
-		<setting id="provider.nyaaalt" type="bool" label="Nyaa Alt (For Verizon Users)" default="false" enable="eq(-1,false)" />
 		<setting id="provider.animetosho" type="bool" label="Anime Tosho" default="true" />
+		<setting id="provider.nyaa" type="bool" label="Nyaa" default="true" />
+		<setting id="provider.nyaaalt" type="bool" subsetting="true" label="Nyaa Alt (For Verizon Users)" default="false" visible="eq(-1,true)" />
 
 		<!-- Universal Sub Embeds -->
 		<setting type="lsep" label="40504" />
 		<setting type="sep"/>
 		<setting id="provider.aniwatch" type="bool" label="Aniwatch" default="true" />
+		<setting id="provider.aniwatch_region" type="bool" subsetting="true" label="Region Subtitles (Will Override Subtitle Settings)" default="false" visible="eq(-1,true)" />
 
 		<!-- English Sub & Dub Embeds -->
 		<setting type="lsep" label="40505" />
 		<setting type="sep"/>
+		<setting id="provider.aniwave" type="bool" label="Aniwave" default="true" />
 		<setting id="provider.animix" type="bool" label="Animix" default="true" />
 		<setting id="provider.animixalt" type="bool" subsetting="true" label="Animix Alt" default="false" visible="eq(-1,true)"/>
 		<setting id="provider.animepahe" type="bool" label="Animepahe" default="true" />
 		<setting id="provider.gogo" type="bool" label="Gogo" default="true" />
 		<setting id="provider.gogoalt" type="bool" subsetting="true" label="Gogo Alt" default="false" visible="eq(-1,true)"/>
-		<setting id="provider.nineanime" type="bool" label="Aniwave" default="true" />
 
 		<!-- Portugese Sub & Dub Embeds -->
 		<setting type="lsep" label="40506" />
 		<setting type="sep"/>
-		<setting id="provider.animess" type="bool" label="Otaku Animes" default="true" />
+		<setting id="provider.animess" type="bool" label="Otaku Animes" default="false" />
 
 		<!-- Spanish Sub & Dub Embeds -->
 		<setting type="lsep" label="40508" />
 		<setting type="sep"/>
-		<setting id="provider.animelatino" type="bool" label="Anime Latino HD" default="true" />
+		<setting id="provider.animelatino" type="bool" label="Anime Latino HD" default="false" />
+
+		<!-- French Sub & Dub Embeds -->
+		<setting type="lsep" label="40509" />
+		<setting type="sep"/>
+		<setting id="provider.animecat" type="bool" label="Neko-Sama" default="false" />
+
+		<!-- Italian Sub & Dub Embeds -->
+		<setting type="lsep" label="40527" />
+		<setting type="sep"/>
+		<setting id="provider.aniplay" type="bool" label="Aniplay" default="false" />
+	</category>
+
+	<!-- Embeds -->
+	<category label="40529">
+		<setting id="embed.doodstream" type="bool" label="DoodStream" default="true" />
+		<setting id="embed.filelions" type="bool" label="FileLions" default="true" />
+		<setting id="embed.filemoon" type="bool" label="Filemoon" default="true" />
+		<setting id="embed.iga" type="bool" label="IGA" default="true" />
+		<setting id="embed.kwik" type="bool" label="Kwik" default="true" />
+		<setting id="embed.megacloud" type="bool" label="MegaCloud" default="true" />
+		<setting id="embed.mp4upload" type="bool" label="Mp4upload" default="true" />
+		<setting id="embed.mycloud" type="bool" label="MyCloud" default="true" />
+		<setting id="embed.streamtape" type="bool" label="Streamtape" default="true" />
+		<setting id="embed.streamwish" type="bool" label="StreamWish" default="true" />
+		<setting id="embed.vidcdn" type="bool" label="VidCDN" default="true" />
+		<setting id="embed.vidplay" type="bool" label="Vidplay" default="true" />
+		<setting id="embed.vidstreaming" type="bool" label="VidStreaming" default="false" />
+		<setting id="embed.yourupload" type="bool" label="YourUpload" default="true" />
+		<setting id="embed.zto" type="bool" label="ZTO" default="true" />
 	</category>
 
 	<!-- Playback -->
@@ -102,7 +132,7 @@
 		<setting id="general.playstyle.movie" type="enum" label="40308" lvalues="40310|40311" default="0" />
 		<setting id="general.playstyle.episode" type="enum" label="40309" lvalues="40310|40311" default="0" />
 		<setting id="general.autotrynext" type="bool" label="40312" default="true" />
-		<setting id="general.timeout" type="slider" label="40425" option="int" range="1, 60" default="10" />
+		<setting id="general.timeout" type="slider" label="40425" option="int" range="30,30,180" default="30" />
 		<setting id="general.terminate.oncloud" type="bool" label="40496" default="true" />
 
 		<!-- Preferences -->
@@ -120,7 +150,7 @@
 		<setting type="lsep" label="40317" />
 		<setting type="sep" />
 		<setting id="smartplay.playingnextdialog" type="bool" label="40318" default="true" />
-		<setting id="skipoutro.aniskip.enable" type="bool" subsetting="true" label="40431" default="false" visible="eq(-1,true)" />
+		<setting id="skipoutro.aniskip.enable" type="bool" subsetting="true" label="40431" default="true" visible="eq(-1,true)" />
 		<setting id="skipoutro.aniskip.auto" type="bool" subsetting="true" label="40460" default="false" visible="eq(-1,true) + eq(-2,true)" />
 		<setting id="skipoutro.aniskip.offset" type="slider" subsetting="true" label="40432" visible="eq(-2,true) + eq(-3,true)" range="-10,10" default="-3"/>
 		<setting id="playingnext.time" type="slider" subsetting="true" label="40319" option="int" range="10,120" default="90" visible="eq(-4,true)" />
@@ -131,12 +161,12 @@
 		<setting type="lsep" label="40323" />
 		<setting type="sep" />
 		<setting id="smartplay.skipintrodialog" type="bool" label="40324" default="true" />
-		<setting id="skipintro.aniskip.enable" type="bool" subsetting="true" label="40431" default="false" visible="eq(-1,true)" />
+		<setting id="skipintro.aniskip.enable" type="bool" subsetting="true" label="40431" default="true" visible="eq(-1,true)" />
 		<setting id="skipintro.aniskip.auto" type="bool" subsetting="true" label="40461" default="false" visible="eq(-1,true) + eq(-2,true)" />
 		<setting id="skipintro.aniskip.offset" type="slider" subsetting="true" label="40432" visible="eq(-2,true) + eq(-3,true)" range="-10,10" default="-3"/>
 		<setting id="skipintro.time" type="slider" subsetting="true" label="40325" option="int" range="10,100" default="86" visible="eq(-4,true)" />
 		<setting id="skipintro.delay" type="slider" subsetting="true" label="40424" option="int" range="1,100" default="2" visible="eq(-5,true)" />
-		<setting id="skipintro.duration" type="slider" subsetting="true" label="40430" option="int" range="0,5" visible="eq(-6,true)" />
+		<setting id="skipintro.duration" type="slider" subsetting="true" label="40430" option="int" range="0,5" default="3" visible="eq(-6,true)" />
 	</category>
 
 	<!-- Sort & Filter -->
@@ -260,7 +290,7 @@
 		<setting id="simkl.enabled" label="40511" type="bool" default="false"/>
 		<setting id="simkl.username" type="text" subsetting="true" label="40350" default="" enable="false" visible="eq(-1,true)"/>
 		<setting id="simkl.login" type="action" subsetting="true" label="40352" option="close" action="RunPlugin(plugin://plugin.video.otaku/watchlist_login/simkl)" visible="eq(-2,true)"/>
-		<setting id="simkl.sort" type="labelenum" subsetting="true" label="40354" values="Last Updated|Anime Title|User Rating" default="Last Updated" visible="eq(-3,true)"/>
+		<setting id="simkl.sort" type="labelenum" subsetting="true" label="40354" values="Last Updated|Last Added|Anime Title|User Rating" default="Last Added" visible="eq(-3,true)"/>
 	</category>
 
 	<!-- Main Menu Customization -->
@@ -294,7 +324,7 @@
 		<setting id="upcoming_movie" label="50008" type="bool" default="true"/>
 		<setting id="anilist_top_100_anime_movie" label="50009" type="bool" default="true"/>
 		<setting id="genres_movie" label="50010" type="bool" default="true" visible="false"/>
-		<setting id="search_history_movie" label="50011" type="bool" default="true" visible="false"/>
+		<setting id="search_history/movie" label="50011" type="bool" default="true" visible="false"/>
 
 		<!-- TV Show Menu Items -->
 		<setting type="lsep" label="50053"/>
@@ -308,7 +338,7 @@
 		<setting id="upcoming_tv" label="50008" type="bool" default="true"/>
 		<setting id="anilist_top_100_anime_tv" label="50009" type="bool" default="true"/>
 		<setting id="genres_tv" label="50010" type="bool" default="true" visible="false"/>
-		<setting id="search_history_tv" label="50011" type="bool" default="true" visible="false"/>
+		<setting id="search_history/show" label="50011" type="bool" default="true" visible="false"/>
 	</category>
 
 	<!-- Submenu Customization -->
@@ -548,7 +578,13 @@
 		<setting id="sep"/>
 		<setting id="reuselanguageinvoker.status" label="Re-Use Language Invoker Status: " type="text" default="Disabled" enable="false" />
 		<setting id="reuselanguageinvoker.toggle" label="40503" type="action" option="close" action="RunPlugin(plugin://plugin.video.otaku/toggleLanguageInvoker)"/>
-		
+
+		<!-- Cloudflare Solver -->
+		<setting type="lsep" label="30121" />
+		<setting id="fs_enable" type="bool" label="30122" default="false" />
+		<setting id="fs_url" visible="eq(-1,true)" enable="eq(-1,true)" type="text" label="30123" default="http://localhost:8191/v1" />
+		<setting id="fs_timeout" visible="eq(-2,true)" enable="eq(-2,true)" type="slider" label="30124" default="60" range="30,30,180" option="int" />
+
 		<!-- Overrides -->
 		<!-- <setting type="lsep" label="40474"/> -->
 		<!-- <setting id="sep"/> -->

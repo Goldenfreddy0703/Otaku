@@ -3,8 +3,7 @@
 import sys
 
 from kodi_six import xbmc
-from resources.lib.debrid import (all_debrid, debrid_link, premiumize,
-                                  real_debrid)
+from resources.lib.debrid import all_debrid, debrid_link, premiumize, real_debrid
 from resources.lib.ui import control, source_utils
 from resources.lib.windows.base_window import BaseWindow
 
@@ -31,10 +30,11 @@ class Resolver(BaseWindow):
         self.silent = False
 
         self.pack_select = None
-        self.resolvers = {'all_debrid': all_debrid.AllDebrid,
-                          'debrid_link': debrid_link.DebridLink,
-                          'premiumize': premiumize.Premiumize,
-                          'real_debrid': real_debrid.RealDebrid
+        self.resolvers = {
+            'all_debrid': all_debrid.AllDebrid,
+            'debrid_link': debrid_link.DebridLink,
+            'premiumize': premiumize.Premiumize,
+            'real_debrid': real_debrid.RealDebrid
         }
         self.source_select = source_select
 
@@ -47,7 +47,10 @@ class Resolver(BaseWindow):
         if len(sources) > 1 and not self.source_select:
             last_played = control.getSetting('last_played_source')
             for index, source in enumerate(sources):
-                if str(source['release_title']) == last_played:
+                if source['type'] == 'embed' and str(source['provider']) + " ".join(map(str, source['info'])) == last_played:
+                    sources.insert(0, sources.pop(index))
+                    break
+                elif str(source['release_title']) == last_played:
                     sources.insert(0, sources.pop(index))
                     break
         try:
@@ -61,9 +64,9 @@ class Resolver(BaseWindow):
 
                     self.setProperty('release_title', str(i['release_title']))
                     self.setProperty('debrid_provider', debrid_provider)
-                    self.setProperty('source_provider', i['provider'])
+                    self.setProperty('source_provider', str(i['provider']))
                     self.setProperty('source_resolution', i['quality'])
-                    self.setProperty('source_info', " ".join(i['info']))
+                    self.setProperty('source_info', " ".join(map(str, i['info'])))
                     self.setProperty('source_type', i['type'])
 
                     if i['type'] == 'torrent':
@@ -97,8 +100,12 @@ class Resolver(BaseWindow):
                             continue
                         else:
                             self.return_data = stream_link
-                            if i.get('subs'):
-                                self.return_data = (stream_link, i.get('subs'))
+                            if i.get('subs') or i.get('skip'):
+                                self.return_data = {'url': stream_link}
+                                if i.get('subs'):
+                                    self.return_data.update({'subs': i.get('subs')})
+                                if i.get('skip'):
+                                    self.return_data.update({'skip': i.get('skip')})
                             self.close()
                             return
 
@@ -110,6 +117,12 @@ class Resolver(BaseWindow):
                             continue
                         else:
                             self.return_data = stream_link
+                            if i.get('subs') or i.get('skip'):
+                                self.return_data = {'url': stream_link}
+                                if i.get('subs'):
+                                    self.return_data.update({'subs': i.get('subs')})
+                                if i.get('skip'):
+                                    self.return_data.update({'skip': i.get('skip')})
                             self.close()
                             return
 
@@ -156,9 +169,9 @@ class Resolver(BaseWindow):
         self.pack_select = pack_select
         self.setProperty('release_title', str(self.sources[0]['release_title']))
         self.setProperty('debrid_provider', self.sources[0].get('debrid_provider', 'None').replace('_', ' '))
-        self.setProperty('source_provider', self.sources[0]['provider'])
+        self.setProperty('source_provider', str(self.sources[0]['provider']))
         self.setProperty('source_resolution', self.sources[0]['quality'])
-        self.setProperty('source_info', " ".join(self.sources[0]['info']))
+        self.setProperty('source_info', " ".join(map(str, self.sources[0]['info'])))
         self.setProperty('source_type', self.sources[0]['type'])
         self.setProperty('source_size', self.sources[0]['size'])
 
@@ -170,7 +183,11 @@ class Resolver(BaseWindow):
         else:
             self.resolve(sources, args, pack_select)
 
-        control.setSetting('last_played_source', str(self.sources[0]['release_title']))
+        if self.sources[0]['type'] == 'embed':
+            control.setSetting('last_played_source', str(self.sources[0]['provider']) + " ".join(map(str, self.sources[0]['info'])))
+        else:
+            control.setSetting('last_played_source', str(self.sources[0]['release_title']))
+
         if not self.canceled:
             return self.return_data
 

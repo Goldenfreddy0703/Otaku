@@ -164,6 +164,15 @@ def request(
             if isinstance(cookie, dict):
                 cookie = '; '.join(['{0}={1}'.format(x, y) for x, y in six.iteritems(cookie)])
             _headers['Cookie'] = cookie
+        else:
+            cpath = urllib_parse.urlparse(url).netloc
+            if control.pathExists(control.dataPath + cpath + '.txt'):
+                ccookie = retrieve(cpath + '.txt')
+                if ccookie:
+                    _headers['Cookie'] = ccookie
+            elif control.pathExists(control.dataPath + cpath + '.json'):
+                cfhdrs = json.loads(retrieve(cpath + '.json'))
+                _headers.update(cfhdrs)
 
         if 'Accept-Encoding' in _headers:
             pass
@@ -186,6 +195,11 @@ def request(
             opener = urllib_request.build_opener(NoRedirectHandler())
             urllib_request.install_opener(opener)
 
+            try:
+                del _headers['Referer']
+            except BaseException:
+                pass
+
         url = byteify(url.replace(' ', '%20'))
         req = urllib_request.Request(url)
 
@@ -206,7 +220,7 @@ def request(
                     req.get_method = lambda: 'POST'
                     req.has_header = lambda header_name: (
                         header_name == 'Content-type'
-                        # or urllib_request.Request.has_header(request, header_name)
+                        or urllib_request.Request.has_header(req, header_name)
                     )
 
         if limit == '0':
@@ -218,26 +232,54 @@ def request(
         _add_request_header(req, _headers)
 
         try:
-            response = urllib_request.urlopen(req, timeout=timeout)
+            response = urllib_request.urlopen(req, timeout=int(timeout))
         except urllib_error.HTTPError as e:
-            response = e
-            server = response.info().getheader('Server') if six.PY2 else response.info().get('Server')
-            if server and response.code == 403 and "cloudflare" in server.lower():
-                import ssl
-                ctx = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2 if six.PY3 else ssl.PROTOCOL_TLSv1_1)
-                ctx.set_alpn_protocols(['http/1.1'])
-                handle = [urllib_request.HTTPSHandler(context=ctx)]
-                opener = urllib_request.build_opener(*handle)
-                try:
-                    response = opener.open(req, timeout=30)
-                except BaseException:
-                    if 'return' in error:
-                        # Give up
-                        control.log('Request-HTTPError (%s): %s' % (response.code, url))
-                        return ''
-                    else:
-                        if not error:
+            if error is True:
+                response = e
+            server = e.info().getheader('Server') if six.PY2 else e.info().get('Server')
+            if server and 'cloudflare' in server.lower():
+                if e.info().get('Content-Encoding', '').lower() == 'gzip':
+                    buf = six.BytesIO(e.read())
+                    f = gzip.GzipFile(fileobj=buf)
+                    result = f.read()
+                    f.close()
+                else:
+                    result = e.read()
+                result = result.decode('latin-1', errors='ignore') if six.PY3 else result.encode('utf-8')
+                error_code = e.code
+                if error_code == 403 and 'cf-alert-error' in result:
+                    import ssl
+                    ctx = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2 if six.PY3 else ssl.PROTOCOL_TLSv1_1)
+                    ctx.set_alpn_protocols(['http/1.0', 'http/1.1'])
+                    handle = [urllib_request.HTTPSHandler(context=ctx)]
+                    opener = urllib_request.build_opener(*handle)
+                    try:
+                        response = opener.open(req, timeout=30)
+                    except:
+                        if 'return' in error:
+                            # Give up
                             return ''
+                        else:
+                            if not error:
+                                return ''
+                elif any(x == error_code for x in [403, 429, 503]) and any(x in result for x in ['__cf_chl_f_tk', '__cf_chl_jschl_tk__=', '/cdn-cgi/challenge-platform/']):
+                    url_parsed = urllib_parse.urlparse(url)
+                    netloc = '%s://%s/' % (url_parsed.scheme, url_parsed.netloc)
+                    if control.getSetting('fs_enable') == 'true':
+                        cf_cookie, cf_ua = cfcookie().get(netloc, timeout)
+                        if cf_cookie is None:
+                            control.log('%s has an unsolvable Cloudflare challenge.' % (netloc))
+                            if not error:
+                                return '{}'
+                        _headers['Cookie'] = cf_cookie
+                        _headers['User-Agent'] = cf_ua
+                        req = urllib_request.Request(url, data=post)
+                        _add_request_header(req, _headers)
+                        response = urllib_request.urlopen(req, timeout=int(timeout))
+                    else:
+                        control.log('%s has a Cloudflare challenge.' % (netloc))
+                        if not error:
+                            return '{}'
             elif output == '':
                 control.log('Request-HTTPError (%s): %s' % (response.code, url))
                 if not error:
@@ -246,7 +288,8 @@ def request(
             response = e
             if output == '':
                 control.log('Request-Error (%s): %s' % (e.reason, url))
-                return ''
+                if not error:
+                    return ''
 
         if output == 'cookie':
             try:
@@ -276,6 +319,12 @@ def request(
                 response.close()
             return result
 
+        elif output == 'status_code':
+            result = response.code
+            if close:
+                response.close()
+            return result
+
         elif output == 'chunk':
             try:
                 content = int(response.headers['Content-Length'])
@@ -296,7 +345,7 @@ def request(
             response.close()
             return content
 
-        if limit == '0':
+        if limit == '0' or limit == 0:
             result = response.read(1 * 1024)
         elif limit is not None:
             result = response.read(int(limit) * 1024)
@@ -312,6 +361,7 @@ def request(
         content_type = response.headers.get('content-type', '').lower()
 
         text_content = any(x in content_type for x in ['text', 'json', 'xml', 'mpegurl'])
+
         if 'charset=' in content_type:
             encoding = content_type.split('charset=')[-1]
 
@@ -367,12 +417,30 @@ def request(
         return
 
 
-def _basic_request(url, headers={}, post=None, timeout=30, limit=None):
+def _basic_request(url, headers=None, post=None, timeout=60, jpost=False, limit=None):
     try:
+        request = urllib_request.Request(url)
         if post is not None:
-            post = post if six.PY2 else post.encode()
-        request = urllib_request.Request(url, data=post)
-        _add_request_header(request, headers)
+            if jpost:
+                post = json.dumps(post)
+                post = post.encode('utf8') if six.PY3 else post
+                request = urllib_request.Request(url, post)
+                request.add_header('Content-Type', 'application/json')
+            else:
+                if isinstance(post, dict):
+                    post = byteify(post)
+                    post = urllib_parse.urlencode(post)
+                if len(post) > 0:
+                    post = post.encode('utf8') if six.PY3 else post
+                    request = urllib_request.Request(url, data=post)
+                else:
+                    request.get_method = lambda: 'POST'
+                    request.has_header = lambda header_name: (
+                        header_name == 'Content-type'
+                        or urllib_request.Request.has_header(request, header_name)
+                    )
+        if headers is not None:
+            _add_request_header(request, headers)
         response = urllib_request.urlopen(request, timeout=timeout)
         return _get_result(response, limit)
     except BaseException:
@@ -395,8 +463,6 @@ def _add_request_header(_request, headers):
         for key in headers:
             _request.add_header(key, headers[key])
     except BaseException:
-        # import traceback
-        # traceback.print_exc()
         return
 
 
@@ -420,31 +486,103 @@ def _get_result(response, limit=None):
 
 def randomagent():
     _agents = [
-        # 'Mozilla/5.0 (Windows NT 10.0; WOW64; Trident/7.0; rv:11.0) like Gecko',
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.113 Safari/537.36',
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/52.0.2743.116 Safari/537.36 Edge/15.15063',
-        'Mozilla/5.0 (Windows NT 10.0; WOW64; rv:56.0) Gecko/20100101 Firefox/56.0',
-        'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/56.0.2924.87 Safari/537.36 OPR/43.0.2442.991',
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_2) AppleWebKit/604.4.7 (KHTML, like Gecko) Version/11.0.2 Safari/604.4.7',
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/61.0.3163.100 Safari/537.36',
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.12; rv:54.0) Gecko/20100101 Firefox/54.0',
-        'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/44.0.2403.157 Safari/537.36',
-        'Mozilla/5.0 (X11; Linux x86_64; rv:52.0) Gecko/20100101 Firefox/52.0']
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/117.0',
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.8464.47 Safari/537.36 OPR/117.0.8464.47',
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36 Edg/116.0.1938.62',
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 17.1.2) AppleWebKit/800.6.25 (KHTML, like Gecko) Version/17.2 Safari/605.1.15',
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:109.0) Gecko/20100101 Firefox/117.0',
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 13_5_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36 Vivaldi/6.2.3105.48',
+        'Mozilla/5.0 (MacBook Air; M1 Mac OS X 11_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.1 Safari/604.1',
+        'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/117.0',
+        'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.21 (KHTML, like Gecko) konqueror/4.14.26 Safari/537.21'
+    ]
     return random.choice(_agents)
 
 
 def randommobileagent():
     _mobagents = [
-        'Mozilla/5.0 (Linux; Android 7.1; vivo 1716 Build/N2G47H) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/61.0.3163.98 Mobile Safari/537.36',
-        'Mozilla/5.0 (Linux; U; Android 6.0.1; zh-CN; F5121 Build/34.0.A.1.247) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/40.0.2214.89 UCBrowser/11.5.1.944 Mobile Safari/537.36',
-        'Mozilla/5.0 (Linux; Android 7.0; SAMSUNG SM-N920C Build/NRD90M) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/6.2 Chrome/56.0.2924.87 Mobile Safari/537.36',
-        'Mozilla/5.0 (iPhone; CPU iPhone OS 11_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/11.0 Mobile/15E148 Safari/604.1',
-        'Mozilla/5.0 (iPad; CPU OS 10_2_1 like Mac OS X) AppleWebKit/602.4.6 (KHTML, like Gecko) Version/10.0 Mobile/14D27 Safari/602.1']
+        'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+        'Mozilla/5.0 (iPad; CPU OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.4 Mobile/15E148 Safari/604.1',
+        'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/116.0.5845.177 Mobile/15E148 Safari/604.1',
+        'Mozilla/5.0 (Linux; Android 12; motorola edge (2022)) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/99.0.4844.88 Mobile Safari/537.36',
+        'Mozilla/5.0 (Linux; Android 13; SAMSUNG SM-A546B) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/22.0 Chrome/111.0.5563.116 Mobile Safari/537.3',
+        'Mozilla/5.0 (Linux; Android 13; V2302A; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/87.0.4280.141 Mobile Safari/537.36 VivoBrowser/14.5.10.2'
+    ]
     return random.choice(_mobagents)
 
 
 def agent():
-    return 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/63.0.3239.132 Safari/537.36'
+    return 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36'
+
+
+def store(ftext, fname):
+    fpath = control.dataPath + fname
+    if six.PY2:
+        with open(fpath, 'w') as f:
+            f.write(ftext)
+    else:
+        with open(fpath, 'w', encoding='utf-8') as f:
+            f.write(ftext)
+
+
+def retrieve(fname):
+    fpath = control.dataPath + fname
+    if control.pathExists(fpath):
+        if six.PY2:
+            with open(fpath) as f:
+                ftext = f.readlines()
+        else:
+            with open(fpath, encoding='utf-8') as f:
+                ftext = f.readlines()
+        return '\n'.join(ftext)
+    else:
+        return None
+
+
+class cfcookie:
+    def __init__(self):
+        self.cookie = None
+        self.ua = None
+
+    def get(self, netloc, timeout):
+        try:
+            self.netloc = netloc
+            self.timeout = timeout
+            self._get_cookie(netloc, timeout)
+            if self.cookie is not None:
+                cfdata = json.dumps({'Cookie': self.cookie, 'User-Agent': self.ua})
+                store(cfdata, urllib_parse.urlparse(netloc).netloc + '.json')
+            return (self.cookie, self.ua)
+        except Exception as e:
+            control.log('%s returned an error. Could not collect tokens - Error: %s.' % (netloc, str(e)))
+            return (self.cookie, self.ua)
+
+    def _get_cookie(self, netloc, timeout):
+        fs_url = control.getSetting('fs_url')
+        fs_timeout = int(control.getSetting('fs_timeout'))
+        if not fs_url.startswith('http'):
+            control.log('Sorry, malformed flaresolverr url')
+            return
+        post = {'cmd': 'request.get',
+                'url': netloc,
+                'returnOnlyCookies': True,
+                'maxTimeout': fs_timeout * 1000}
+        resp = _basic_request(fs_url, post=post, jpost=True)
+        if resp:
+            resp = json.loads(resp)
+            soln = resp.get('solution')
+            if soln.get('status') < 300:
+                cookie = '; '.join(['%s=%s' % (i.get('name'), i.get('value')) for i in soln.get('cookies')])
+                if 'cf_clearance' in cookie:
+                    self.cookie = cookie
+                    self.ua = soln.get('userAgent')
+                else:
+                    control.log('%s returned %s. Could not collect tokens.' % (netloc, repr(resp)))
+        else:
+            control.log('%s returned %s.' % (netloc, repr(resp)))
 
 
 def byteify(data, ignore_dicts=False):

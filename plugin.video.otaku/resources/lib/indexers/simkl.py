@@ -40,8 +40,10 @@ class SIMKLAPI:
             title = "Episode %s" % res["episode"]
 
         image = self.imagePath % res['img'] if res.get('img') else poster
+        show_art = {}
         show_meta = database.get_show_meta(anilist_id)
-        show_art = pickle.loads(show_meta.get('art')) if show_meta.get('art') else {}
+        if show_meta and show_meta.get('art'):
+            show_art = pickle.loads(show_meta.get('art'))
         clearart = clearlogo = landscape = banner = None
         cast = []
         if show_art:

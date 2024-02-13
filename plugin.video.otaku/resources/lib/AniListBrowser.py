@@ -1221,7 +1221,7 @@ class AniListBrowser():
         genre_thriller = database.get(self.get_genre_res, 4, variables, page)
         return self._process_anilist_view(genre_thriller, "anilist_genre_thriller/%d", page)
 
-    def get_search(self, query, page=1):
+    def get_search(self, stype, query, page=1):
         variables = {
             'page': page,
             'search': query,
@@ -1229,9 +1229,13 @@ class AniListBrowser():
             'type': "ANIME",
             'isAdult': control.getSetting('search.adult') == "true"
         }
+        if stype == 'show':
+            variables.update({'format': 'TV'})
+        elif stype == 'movie':
+            variables.update({'format': 'MOVIE'})
 
         search = database.get(self.get_search_res, 4, variables, page)
-        return self._process_anilist_view(search, "search/%s/%%d" % query, page)
+        return self._process_anilist_view(search, "search/%s/%s/%%d" % (stype, query), page)
 
     def get_airing_calendar_movie(self, page=1, format_in=''):
         dbargs = {"otaku_reload": control.getGlobalProp("calendarRefresh")}
@@ -2416,19 +2420,6 @@ class AniListBrowser():
         genre_thriller_movie = database.get(self.get_genre_res, 4, variables, page)
         return self._process_anilist_view(genre_thriller_movie, "anilist_genre_thriller_movie/%d", page)
 
-    def get_search_movie(self, query, page=1):
-        variables = {
-            'page': page,
-            'search': query,
-            'sort': "SEARCH_MATCH",
-            'type': "ANIME",
-            'isAdult': control.getSetting('search.adult') == "true",
-            'format': "MOVIE"
-        }
-
-        search = database.get(self.get_search_res, 4, variables, page)
-        return self._process_anilist_view(search, "search_movie/%s/%%d" % query, page)
-
     def get_airing_calendar_tv(self, page=1, format_in=''):
         dbargs = {"otaku_reload": control.getGlobalProp("calendarRefresh")}
         control.setGlobalProp("calendarRefresh", False)
@@ -3611,19 +3602,6 @@ class AniListBrowser():
 
         genre_thriller_tv = database.get(self.get_genre_res, 4, variables, page)
         return self._process_anilist_view(genre_thriller_tv, "anilist_genre_thriller_tv/%d", page)
-
-    def get_search_tv(self, query, page=1):
-        variables = {
-            'page': page,
-            'search': query,
-            'sort': "SEARCH_MATCH",
-            'type': "ANIME",
-            'isAdult': control.getSetting('search.adult') == "true",
-            'format': "TV"
-        }
-
-        search = database.get(self.get_search_res, 4, variables, page)
-        return self._process_anilist_view(search, "search_tv/%s/%%d" % query, page)
 
     def get_recommendations(self, anilist_id, page=1):
         variables = {

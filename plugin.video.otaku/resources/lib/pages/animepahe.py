@@ -25,7 +25,10 @@ class sources(BrowserBase):
             headers=headers,
             XHR=True
         )
-        items = json.loads(r).get('data')
+        try:
+            items = json.loads(r).get('data')
+        except json.JSONDecodeError:
+            return []
 
         if not items and ':' in title:
             title = title.split(':')[0]

@@ -60,7 +60,6 @@ class SourceSelect(BaseWindow):
                     self.setProperty('item.info.rating', str(kodi_meta.get('rating')))
 
     def onInit(self):
-
         self.display_list = self.getControl(1000)
         menu_items = []
         for idx, i in enumerate(self.sources):
@@ -70,7 +69,7 @@ class SourceSelect(BaseWindow):
             for info in list(i.keys()):
                 try:
                     value = i[info]
-                    if type(value) == list:
+                    if isinstance(value, list):
                         value = [str(k) for k in value]
                         value = ' '.join(sorted(value))
                     # if info == 'size':

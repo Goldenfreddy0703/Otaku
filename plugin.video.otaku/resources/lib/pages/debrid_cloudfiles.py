@@ -86,7 +86,6 @@ class sources(BrowserBase):
                     }
                 )
 
-
     def premiumize_cloud_inspection(self, query, episode):
         cloud_items = premiumize.Premiumize().list_folder('')
 

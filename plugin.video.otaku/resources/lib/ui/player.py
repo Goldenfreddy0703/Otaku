@@ -48,8 +48,6 @@ class watchlistPlayer(xbmc.Player):
         self.updated = False
         self.media_type = None
         self.update_percent = int(control.getSetting('watchlist.update.percent'))
-        # self.AVStarted = False
-
         self.total_time = None
         self.skipintro_delay_time = int(control.getSetting('skipintro.delay'))
         self.skipintro_aniskip_enable = control.getSetting('skipintro.aniskip.enable') == 'true'
@@ -63,36 +61,42 @@ class watchlistPlayer(xbmc.Player):
         self.skipintro_aniskip_offset = int(control.getSetting('skipintro.aniskip.offset'))
         self.skipoutro_aniskip_offset = int(control.getSetting('skipoutro.aniskip.offset'))
 
-    def handle_player(self, anilist_id, watchlist_update, build_playlist, episode, filter_lang):
+    def handle_player(self, anilist_id, watchlist_update, build_playlist, episode, filter_lang, skip=None):
         self._anilist_id = anilist_id
         self._watchlist_update = watchlist_update
         self._build_playlist = build_playlist
         self._episode = episode
         self._filter_lang = filter_lang
 
-        if self.skipintro_aniskip_enable:
-            try:
-                mal_id = database.get_show(anilist_id)['mal_id']
-            except TypeError:
-                mal_id = ''
-            skipintro_aniskip_res = aniskip.get_skip_times(mal_id, episode, 'op')
+        if skip:
+            self.skipintro_start_skip_time = skip.get('intro', {}).get('start', 0)
+            self.skipintro_end_skip_time = skip.get('intro', {}).get('end', 9999)
+            self.skipoutro_start_skip_time = skip.get('outro', {}).get('start', 0)
+            self.skipoutro_end_skip_time = skip.get('outro', {}).get('end', 9999)
+        else:
+            if self.skipintro_aniskip_enable:
+                try:
+                    mal_id = database.get_show(anilist_id)['mal_id']
+                except TypeError:
+                    mal_id = ''
+                skipintro_aniskip_res = aniskip.get_skip_times(mal_id, episode, 'op')
 
-            if skipintro_aniskip_res:
-                skip_times = skipintro_aniskip_res['results'][0]['interval']
-                self.skipintro_start_skip_time = int(skip_times['startTime']) + int(self.skipintro_aniskip_offset)
-                self.skipintro_end_skip_time = int(skip_times['endTime']) + int(self.skipintro_aniskip_offset)
+                if skipintro_aniskip_res:
+                    skip_times = skipintro_aniskip_res['results'][0]['interval']
+                    self.skipintro_start_skip_time = int(skip_times['startTime']) + int(self.skipintro_aniskip_offset)
+                    self.skipintro_end_skip_time = int(skip_times['endTime']) + int(self.skipintro_aniskip_offset)
 
-        if self.skipoutro_aniskip_enable:
-            try:
-                mal_id = database.get_show(anilist_id)['mal_id']
-            except TypeError:
-                mal_id = ''
-            skipoutro_aniskip_res = aniskip.get_skip_times(mal_id, episode, 'ed')
+            if self.skipoutro_aniskip_enable:
+                try:
+                    mal_id = database.get_show(anilist_id)['mal_id']
+                except TypeError:
+                    mal_id = ''
+                skipoutro_aniskip_res = aniskip.get_skip_times(mal_id, episode, 'ed')
 
-            if skipoutro_aniskip_res:
-                skip_times = skipoutro_aniskip_res['results'][0]['interval']
-                self.skipoutro_start_skip_time = int(skip_times['startTime']) + int(self.skipoutro_aniskip_offset)
-                self.skipoutro_end_skip_time = int(skip_times['endTime']) + int(self.skipoutro_aniskip_offset)
+                if skipoutro_aniskip_res:
+                    skip_times = skipoutro_aniskip_res['results'][0]['interval']
+                    self.skipoutro_start_skip_time = int(skip_times['startTime']) + int(self.skipoutro_aniskip_offset)
+                    self.skipoutro_end_skip_time = int(skip_times['endTime']) + int(self.skipoutro_aniskip_offset)
 
         control.setSetting('skipintro.start.skip.time', str(self.skipintro_start_skip_time))
         control.setSetting('skipintro.end.skip.time', str(self.skipintro_end_skip_time))
@@ -113,17 +117,8 @@ class watchlistPlayer(xbmc.Player):
             self.media_type = ''
         control.setSetting('addon.last_watched', self._anilist_id)
 
-    # def onAVStarted(self):
-    #     self.AVStarted = True
-
-    # def onAVChange(self):
-    #     self.AVStarted = True
-
     def onPlayBackStopped(self):
         playList.clear()
-
-    # def onPlayBackEnded(self):
-    #     pass
 
     def onPlayBackError(self):
         playList.clear()
@@ -154,10 +149,6 @@ class watchlistPlayer(xbmc.Player):
                 break
             xbmc.sleep(250)
 
-        # for i in range(0, 480):
-        #     if self.AVStarted:
-        #         break
-
         control.closeAllDialogs()
 
         if control.getSetting('general.kodi_language') == 'false':
@@ -171,17 +162,16 @@ class watchlistPlayer(xbmc.Player):
             ]
             preferred_subtitle_setting = int(control.getSetting('general.subtitles'))
 
-            # Ensure preferred_subtitle_setting is within valid index range
             if 0 <= preferred_subtitle_setting < len(subtitles):
                 preferred_subtitle = subtitles[preferred_subtitle_setting]
             else:
-                preferred_subtitle = "eng"  # Default to "eng" if setting is out of range
+                preferred_subtitle = "eng"
 
             try:
                 subtitle_int = subtitle_lang.index(preferred_subtitle)
                 self.setSubtitleStream(subtitle_int)
             except ValueError:
-                subtitle_int = 0  # Set to first available subtitle stream
+                subtitle_int = 0
                 self.setSubtitleStream(subtitle_int)
 
             # Audio Preferences
@@ -189,7 +179,6 @@ class watchlistPlayer(xbmc.Player):
             audios = ['jpn', 'eng']
             preferred_audio_setting = int(control.getSetting('general.audio'))
 
-            # Ensure preferred_audio_setting is within valid index range
             if 0 <= preferred_audio_setting < len(audios):
                 preferred_audio = audios[preferred_audio_setting]
 
@@ -197,10 +186,9 @@ class watchlistPlayer(xbmc.Player):
                 audio_int = audio_lang.index(preferred_audio)
                 self.setAudioStream(audio_int)
             except ValueError:
-                audio_int = 0  # Set to first available audio stream
+                audio_int = 0
                 self.setAudioStream(audio_int)
 
-            # Check if there is only one audio stream
             if len(audio_lang) == 1:
                 if "jpn" not in audio_lang:
                     if control.getSetting('general.dubsubtitles') == 'true':
@@ -217,7 +205,6 @@ class watchlistPlayer(xbmc.Player):
                     else:
                         self.showSubtitles(True)
 
-            # Check if there is more than one audio stream
             if len(audio_lang) > 1:
                 if preferred_audio == "eng":
                     if control.getSetting('general.dubsubtitles') == 'true':
@@ -244,22 +231,16 @@ class watchlistPlayer(xbmc.Player):
                 if self.skipintro_start_skip_time == 0:
                     break
                 elif self.skipintro_auto_aniskip:
-                    # Add a delay of 5 seconds before checking for the skipoutro condition
                     xbmc.sleep(3000)
                     try:
-                        # Get the current playback time
                         current_time = self.player.getTime()
                     except RuntimeError:
-                        # Handle the error gracefully, for example:
                         current_time = 0
 
-                    # Check if we're still in the intro
                     if current_time < self.skipintro_start_skip_time:
-                        # If we're before the start skip time, wait and check again
                         xbmc.sleep(250)
                         continue
                     elif current_time < self.skipintro_end_skip_time:
-                        # If we're in the intro, seek to the end of the intro
                         self.player.seekTime(self.skipintro_end_skip_time)
                         break
                 elif self.skipintro_end_skip_time == 9999:
@@ -272,10 +253,8 @@ class watchlistPlayer(xbmc.Player):
                 xbmc.sleep(250)
 
         if control.getSetting('skipintro.aniskip.enable') == 'true':
-            # do not execute the code block
             pass
         else:
-            # execute the code block
             if control.getSetting('smartplay.skipintrodialog') == 'true':
                 endpoint = int(control.getSetting('skipintro.time'))
             else:
@@ -491,8 +470,11 @@ def _prefetch_play_link(link):
 
 def play_source(link, anilist_id=None, watchlist_update=None, build_playlist=None, episode=None, filter_lang=None, rescrape=False, source_select=False, subs=None):
     try:
-        if isinstance(link, tuple):
-            link, subs = link
+        skip = None
+        if isinstance(link, dict):
+            subs = link.get('subs')
+            skip = link.get('skip')
+            link = link.get('url')
         linkInfo = _prefetch_play_link(link)
         if not linkInfo:
             cancelPlayback()
@@ -509,7 +491,17 @@ def play_source(link, anilist_id=None, watchlist_update=None, build_playlist=Non
     if subs:
         utils.del_subs()
         subtitles = []
-        language = xbmc.getLanguage(xbmc.ENGLISH_NAME).split(' ')[0].lower()
+        if control.getSetting('provider.aniwatch_region') == 'false':
+            languages = [
+                "none", "english", "japanese", "spanish", "french", "german",
+                "italian", "dutch", "russian", "portuguese", "korean", "chinese",
+                "arabic", "hindi", "turkish", "polish", "swedish", "norwegian",
+                "danish", "finnish"
+            ]
+            preferred_language_setting = int(control.getSetting('general.subtitles'))
+            language = languages[preferred_language_setting].split(' ')[0].lower()
+        else:
+            language = xbmc.getLanguage(xbmc.ENGLISH_NAME).split(' ')[0].lower()
         subtitles = [utils.get_sub(x.get('url'), x.get('lang')) for x in subs if language in x.get('lang').lower()]
         if not subtitles:
             subtitles = [utils.get_sub(x.get('url'), x.get('lang')) for x in subs if 'english' in x.get('lang').lower()]
@@ -527,15 +519,16 @@ def play_source(link, anilist_id=None, watchlist_update=None, build_playlist=Non
         control.update_listitem(item, episode_info['info'])
         item.setArt(episode_info['image'])
         xbmc.Player().play(playList, item)
-        watchlistPlayer().handle_player(anilist_id, watchlist_update, None, episode, filter_lang)
+        watchlistPlayer().handle_player(anilist_id, watchlist_update, None, episode, filter_lang, skip)
         return
 
     xbmcplugin.setResolvedUrl(control.HANDLE, True, item)
-    watchlistPlayer().handle_player(anilist_id, watchlist_update, build_playlist, episode, filter_lang)
+    watchlistPlayer().handle_player(anilist_id, watchlist_update, build_playlist, episode, filter_lang, skip)
 
 
 @hook_mimetype('application/dash+xml')
 def _DASH_HOOK(item):
+    stream_url = item.getPath()
     import inputstreamhelper
     is_helper = inputstreamhelper.Helper('mpd')
     if is_helper.check_inputstream():
@@ -543,7 +536,13 @@ def _DASH_HOOK(item):
             item.setProperty('inputstreamaddon', is_helper.inputstream_addon)
         else:
             item.setProperty('inputstream', is_helper.inputstream_addon)
-        item.setProperty('inputstream.adaptive.manifest_type', 'mpd')
+        if control._kodiver < 20.9:
+            item.setProperty('inputstream.adaptive.manifest_type', 'mpd')
+        if '|' in stream_url:
+            stream_url, headers = stream_url.split('|')
+            item.setProperty('inputstream.adaptive.stream_headers', headers)
+            if control._kodiver > 19.8:
+                item.setProperty('inputstream.adaptive.manifest_headers', headers)
         item.setContentLookup(False)
     else:
         raise Exception("InputStream Adaptive is not supported.")
@@ -556,12 +555,18 @@ def _HLS_HOOK(item):
     stream_url = item.getPath()
     import inputstreamhelper
     is_helper = inputstreamhelper.Helper('hls')
-    if '|' not in stream_url and is_helper.check_inputstream():
+    if is_helper.check_inputstream():
         if control._kodiver < 19:
             item.setProperty('inputstreamaddon', is_helper.inputstream_addon)
         else:
             item.setProperty('inputstream', is_helper.inputstream_addon)
-        item.setProperty('inputstream.adaptive.manifest_type', 'hls')
+        if control._kodiver < 20.9:
+            item.setProperty('inputstream.adaptive.manifest_type', 'hls')
+        if '|' in stream_url:
+            stream_url, headers = stream_url.split('|')
+            item.setProperty('inputstream.adaptive.stream_headers', headers)
+            if control._kodiver > 19.8:
+                item.setProperty('inputstream.adaptive.manifest_headers', headers)
     item.setProperty('MimeType', 'application/vnd.apple.mpegurl')
     item.setMimeType('application/vnd.apple.mpegstream_url')
     item.setContentLookup(False)

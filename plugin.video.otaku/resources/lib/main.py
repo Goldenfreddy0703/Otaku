@@ -67,7 +67,7 @@ def MOVIES_MENU(payload, params):
         (control.lang(50008), "upcoming_movie", 'upcoming.png'),
         (control.lang(50009), "anilist_top_100_anime_movie", 'top_100_anime.png'),
         (control.lang(50010), "genres_movie", 'genres_&_tags.png'),
-        (control.lang(50011), "search_history_movie", 'search.png'),
+        (control.lang(50011), "search_history/movie", 'search.png'),
     ]
 
     MOVIES_ITEMS_SETTINGS = MOVIES_ITEMS[:]
@@ -94,7 +94,7 @@ def TV_SHOWS_MENU(payload, params):
         (control.lang(50008), "upcoming_tv", 'upcoming.png'),
         (control.lang(50009), "anilist_top_100_anime_tv", 'top_100_anime.png'),
         (control.lang(50010), "genres_tv", 'genres_&_tags.png'),
-        (control.lang(50011), "search_history_tv", 'search.png'),
+        (control.lang(50011), "search_history/show", 'search.png'),
     ]
 
     TV_SHOWS_ITEMS_SETTINGS = TV_SHOWS_ITEMS[:]
@@ -553,12 +553,10 @@ def GENRES_TV_MENU(payload, params):
 @route('anilist_search')
 def SEARCH_MENU(payload, params):
     SEARCH_ITEMS = [
-        (control.lang(50070), "search_history", 'search.png'),
-        (control.lang(50071), "search_history_movie", 'search.png'),
-        (control.lang(50072), "search_history_tv", 'search.png'),
+        (control.lang(50070), "search_history/both", 'search.png'),
+        (control.lang(50071), "search_history/movie", 'search.png'),
+        (control.lang(50072), "search_history/show", 'search.png'),
     ]
-
-    # SEARCH_ITEMS_SETTINGS = SEARCH_ITEMS[:]
 
     return control.draw_items(
         [utils.allocate_item(name, url, True, image) for name, url, image in SEARCH_ITEMS],
@@ -1757,52 +1755,72 @@ def ANILIST_GENRE_THRILLER_PAGES(payload, params):
     return control.draw_items(_ANILIST_BROWSER.get_genre_thriller(int(payload)))
 
 
-@route('search_history')
-def SEARCH_HISTORY(payload, params):
-    history = database.getSearchHistory('show')
-    if "Yes" in control.getSetting('general.searchhistory'):
-        return control.draw_items(_BROWSER.search_history(history), contentType="addons", draw_cm=False)
-    else:
-        return SEARCH(payload, params)
+@route('remove_search_item/*')
+def REMOVE_SEARCH_ITEM(payload, params):
+    payload = payload.split('/')
+    database.remove_search(table=payload[1], value=payload[2])
 
 
 @route('clear_history')
 def CLEAR_HISTORY(payload, params):
-    database.clearSearchHistory()
+    stype = 'both'
+    action_args = params.get('action_args')
+    if action_args:
+        if isinstance(action_args, six.string_types):
+            import ast
+            action_args = ast.literal_eval(action_args)
+        stype = action_args.get('stype', stype)
+
+    database.clearSearchHistory(stype)
+
+
+@route('search_history/*')
+def SEARCH_HISTORY(payload, params):
+    stype = payload.split('/')[-1]
+    if "Yes" in control.getSetting('general.searchhistory'):
+        history = database.getSearchHistory(stype)
+        return control.draw_items(
+            _BROWSER.search_history(stype, history),
+            contentType="addons",
+            draw_cm=[('Remove from History', 'remove_search_item')]
+        )
+    else:
+        return SEARCH(payload, {'action_args': {'stype': stype}})
 
 
 @route('search')
 def SEARCH(payload, params):
     action_args = params.get('action_args')
-    if isinstance(action_args, dict):
+    stype = 'both'
+    query = None
+    if action_args:
+        if isinstance(action_args, six.string_types):
+            import ast
+            action_args = ast.literal_eval(action_args)
         query = action_args.get('query')
-    else:
+        stype = action_args.get('stype', stype)
+    if query is None:
         query = control.keyboard(control.lang(50011))
     if not query:
         return False
 
-    # TODO: Better logic here, maybe move functionatly into router?
     if "Yes" in control.getSetting('general.searchhistory'):
-        database.addSearchHistory(query, 'show')
-        # history = database.getSearchHistory('show')
+        database.addSearchHistory(stype, query)
 
     if isinstance(action_args, dict):
-        control.draw_items(_ANILIST_BROWSER.get_search(query, (int(action_args.get('page', '1')))))
+        control.draw_items(_ANILIST_BROWSER.get_search(stype, query, (int(action_args.get('page', '1')))))
     else:
-        control.draw_items(_ANILIST_BROWSER.get_search(query))
+        control.draw_items(_ANILIST_BROWSER.get_search(stype, query))
 
 
 @route('search/*')
 def SEARCH_PAGES(payload, params):
-    query, page = payload.rsplit("/", 1)
-    return control.draw_items(_ANILIST_BROWSER.get_search(query, int(page)))
-
-
-@route('search_results/*')
-def SEARCH_RESULTS(payload, params):
-    query = params.get('query')
-    items = _ANILIST_BROWSER.get_search(query, 1)
-    return control.draw_items(items)
+    page = 1
+    if len(payload.split("/")) == 3:
+        stype, query, page = payload.split("/")
+    else:
+        stype, query = payload.split("/")
+    return control.draw_items(_ANILIST_BROWSER.get_search(stype, query, int(page)))
 
 
 # <!-- Movie Menu Items -->
@@ -2031,57 +2049,6 @@ def ANILIST_GENRE_THRILLER_MOVIE_PAGES(payload, params):
     return control.draw_items(_ANILIST_BROWSER.get_genre_thriller_movie(int(payload)))
 
 
-@route('search_history_movie')
-def SEARCH_HISTORY_MOVIE(payload, params):
-    history = database.getSearchHistoryMovie('show')
-    if "Yes" in control.getSetting('general.searchhistory'):
-        return control.draw_items(_BROWSER.search_history_movie(history), contentType="addons", draw_cm=False)
-    else:
-        return SEARCH_MOVIE(payload, params)
-
-
-@route('clear_history_movie')
-def CLEAR_HISTORY_MOVIE(payload, params):
-    database.clearSearchHistoryMovie()
-    return
-
-
-@route('search_movie')
-def SEARCH_MOVIE(payload, params):
-    action_args = params.get('action_args')
-    if isinstance(action_args, dict):
-        query = action_args.get('query')
-    else:
-        query = control.keyboard(control.lang(50011))
-    if not query:
-        return False
-
-    # TODO: Better logic here, maybe move functionatly into router?
-    if "Yes" in control.getSetting('general.searchhistory'):
-        database.addSearchHistoryMovie(query, 'show')
-        # history = database.getSearchHistoryMovie('show')
-
-    if isinstance(action_args, dict):
-        control.draw_items(_ANILIST_BROWSER.get_search_movie(query, (int(action_args.get('page', '1')))))
-    else:
-        control.draw_items(_ANILIST_BROWSER.get_search_movie(query))
-
-    return
-
-
-@route('search_movie/*')
-def SEARCH_MOVIE_PAGES(payload, params):
-    query, page = payload.rsplit("/", 1)
-    return control.draw_items(_ANILIST_BROWSER.get_search_movie(query, int(page)))
-
-
-@route('search_results_movie/*')
-def SEARCH_RESULTS_MOVIE(payload, params):
-    query = params.get('query')
-    items = _ANILIST_BROWSER.get_search_movie(query, 1)
-    return control.draw_items(items)
-
-
 # <!-- TV Show Menu Items -->
 @route('anilist_airing_calendar_tv')
 def ANILIST_AIRING_CALENDAR_TV(payload, params):
@@ -2307,54 +2274,6 @@ def ANILIST_GENRE_THRILLER_TV(payload, params):
 @route('anilist_genre_thriller_tv/*')
 def ANILIST_GENRE_THRILLER_TV_PAGES(payload, params):
     return control.draw_items(_ANILIST_BROWSER.get_genre_thriller_tv(int(payload)))
-
-
-@route('search_history_tv')
-def SEARCH_HISTORY_TV(payload, params):
-    history = database.getSearchHistoryTV('show')
-    if "Yes" in control.getSetting('general.searchhistory'):
-        return control.draw_items(_BROWSER.search_history_tv(history), contentType="addons", draw_cm=False)
-    else:
-        return SEARCH_TV(payload, params)
-
-
-@route('clear_history_tv')
-def CLEAR_HISTORY_TV(payload, params):
-    database.clearSearchHistoryTV()
-
-
-@route('search_tv')
-def SEARCH_TV(payload, params):
-    action_args = params.get('action_args')
-    if isinstance(action_args, dict):
-        query = action_args.get('query')
-    else:
-        query = control.keyboard(control.lang(50011))
-    if not query:
-        return False
-
-    # TODO: Better logic here, maybe move functionatly into router?
-    if "Yes" in control.getSetting('general.searchhistory'):
-        database.addSearchHistoryTV(query, 'show')
-        # history = database.getSearchHistoryTV('show')
-
-    if isinstance(action_args, dict):
-        control.draw_items(_ANILIST_BROWSER.get_search_tv(query, (int(action_args.get('page', '1')))))
-    else:
-        control.draw_items(_ANILIST_BROWSER.get_search_tv(query))
-
-
-@route('search_tv/*')
-def SEARCH_TV_PAGES(payload, params):
-    query, page = payload.rsplit("/", 1)
-    return control.draw_items(_ANILIST_BROWSER.get_search_tv(query, int(page)))
-
-
-@route('search_results_tv/*')
-def SEARCH_RESULTS_TV(payload, params):
-    query = params.get('query')
-    items = _ANILIST_BROWSER.get_search_tv(query, 1)
-    return control.draw_items(items)
 
 
 @route('play/*')

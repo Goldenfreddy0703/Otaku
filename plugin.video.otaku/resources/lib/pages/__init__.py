@@ -2,7 +2,7 @@ import threading
 import time
 
 from resources.lib.pages import nyaa, animetosho, animixplay, debrid_cloudfiles, \
-    nineanime, gogoanime, animepahe, aniwatch, animess, animelatino
+    aniwave, gogoanime, animepahe, aniwatch, animess, animelatino, animecat, aniplay
 from resources.lib.ui import control
 from resources.lib.windows.get_sources_window import GetSources as DisplayWindow
 
@@ -42,8 +42,9 @@ class Sources(DisplayWindow):
         self.hosterSources = []
         self.cloud_files = []
         self.remainingProviders = [
-            'nyaa', 'animetosho', 'Aniwave', 'gogo', 'animix',
-            'animepahe', 'aniwatch', 'otakuanimes', 'animelatino'
+            'nyaa', 'animetosho', 'aniwave', 'gogo', 'animix',
+            'animepahe', 'aniwatch', 'otakuanimes', 'animelatino',
+            'nekosama', 'aniplay'
         ]
         self.allTorrents = {}
         self.allTorrents_len = 0
@@ -72,12 +73,14 @@ class Sources(DisplayWindow):
         self.nyaaSources = []
         self.animetoshoSources = []
         self.gogoSources = []
-        self.nineSources = []
+        self.aniwaveSources = []
         self.animixplaySources = []
         self.animepaheSources = []
         self.aniwatchSources = []
         self.animessSources = []
         self.animelatinoSources = []
+        self.animecatSources = []
+        self.aniplaySources = []
         self.threads = []
         self.usercloudSources = []
         self.terminate_on_cloud = control.getSetting('general.terminate.oncloud') == 'true'
@@ -95,7 +98,7 @@ class Sources(DisplayWindow):
         duration = args['duration']
 
         if control.real_debrid_enabled() or control.all_debrid_enabled() or control.debrid_link_enabled() or control.premiumize_enabled():
-            if control.getSetting('provider.nyaa') == 'true' or control.getSetting('provider.nyaaalt') == 'true':
+            if control.getSetting('provider.nyaa') == 'true':
                 self.threads.append(
                     threading.Thread(target=self.nyaa_worker, args=(query, anilist_id, episode, status, media_type, rescrape)))
             else:
@@ -117,11 +120,11 @@ class Sources(DisplayWindow):
         else:
             self.remainingProviders.remove('gogo')
 
-        if control.getSetting('provider.nineanime') == 'true':
+        if control.getSetting('provider.aniwave') == 'true':
             self.threads.append(
-                threading.Thread(target=self.nine_worker, args=(anilist_id, episode, get_backup, rescrape)))
+                threading.Thread(target=self.aniwave_worker, args=(anilist_id, episode, get_backup, rescrape)))
         else:
-            self.remainingProviders.remove('Aniwave')
+            self.remainingProviders.remove('aniwave')
 
         if control.getSetting('provider.animix') == 'true':
             self.threads.append(
@@ -152,6 +155,21 @@ class Sources(DisplayWindow):
                 threading.Thread(target=self.animelatino_worker, args=(anilist_id, episode, get_backup, rescrape,)))
         else:
             self.remainingProviders.remove('animelatino')
+
+        if control.getSetting('provider.animecat') == 'true':
+            self.threads.append(
+                threading.Thread(target=self.animecat_worker, args=(anilist_id, episode, get_backup, rescrape,)))
+        else:
+            self.remainingProviders.remove('nekosama')
+
+        if control.getSetting('provider.aniplay') == 'true':
+            self.threads.append(
+                threading.Thread(target=self.aniplay_worker, args=(anilist_id, episode, get_backup, rescrape,)))
+        else:
+            self.remainingProviders.remove('aniplay')
+
+        self.threads.append(
+            threading.Thread(target=self.user_cloud_inspection, args=(query, anilist_id, episode, media_type, rescrape)))
 
         cloud_thread = threading.Thread(target=self.user_cloud_inspection, args=(query, anilist_id, episode, media_type, rescrape))
 
@@ -204,6 +222,7 @@ class Sources(DisplayWindow):
         self.return_data = sourcesList
         self.close()
         # control.log('Sorted sources :\n {0}'.format(sourcesList), 'info')
+        return
 
     def nyaa_worker(self, query, anilist_id, episode, status, media_type, rescrape):
         self.nyaaSources = nyaa.sources().get_sources(query, anilist_id, episode, status, media_type, rescrape)
@@ -221,11 +240,11 @@ class Sources(DisplayWindow):
             self.embedSources += self.gogoSources
         self.remainingProviders.remove('gogo')
 
-    def nine_worker(self, anilist_id, episode, get_backup, rescrape):
+    def aniwave_worker(self, anilist_id, episode, get_backup, rescrape):
         if not rescrape:
-            self.nineSources = nineanime.sources().get_sources(anilist_id, episode, get_backup)
-            self.embedSources += self.nineSources
-        self.remainingProviders.remove('Aniwave')
+            self.aniwaveSources = aniwave.sources().get_sources(anilist_id, episode, get_backup)
+            self.embedSources += self.aniwaveSources
+        self.remainingProviders.remove('aniwave')
 
     def animixplay_worker(self, anilist_id, episode, get_backup, rescrape):
         if not rescrape:
@@ -254,6 +273,16 @@ class Sources(DisplayWindow):
         self.animelatinoSources = animelatino.sources().get_sources(anilist_id, episode, get_backup)
         self.embedSources += self.animelatinoSources
         self.remainingProviders.remove('animelatino')
+
+    def animecat_worker(self, anilist_id, episode, get_backup, rescrape):
+        self.animecatSources = animecat.sources().get_sources(anilist_id, episode, get_backup)
+        self.embedSources += self.animecatSources
+        self.remainingProviders.remove('nekosama')
+
+    def aniplay_worker(self, anilist_id, episode, get_backup, rescrape):
+        self.aniplaySources = aniplay.sources().get_sources(anilist_id, episode, get_backup)
+        self.embedSources += self.aniplaySources
+        self.remainingProviders.remove('aniplay')
 
     def user_cloud_inspection(self, query, anilist_id, episode, media_type, rescrape):
         self.remainingProviders.append('Cloud Inspection')

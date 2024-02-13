@@ -4,9 +4,9 @@ import random
 import re
 import string
 import time
-
 import six
-from resources.lib.ui import client, control, jsunpack
+
+from resources.lib.ui import client, control, database, jsunpack
 from resources.lib.ui.pyaes import AESModeOfOperationCBC, Decrypter, Encrypter
 from six.moves import urllib_error, urllib_parse
 
@@ -126,6 +126,67 @@ def __extract_mp4upload(url, page_content, referer=None):
     return
 
 
+def __extract_vidplay(url, page_content, referer=None):
+    def dex(key, data, encode=True):
+        x = 0
+        ct = ''
+        y = list(range(256))
+        for r in range(256):
+            u = key[r % len(key)]
+            x = (x + y[r] + (u if isinstance(u, int) else ord(u))) % 256
+            y[r], y[x] = y[x], y[r]
+
+        s = 0
+        x = 0
+        for r in range(len(data)):
+            s = (s + 1) % 256
+            x = (x + y[s]) % 256
+            y[s], y[x] = y[x], y[s]
+            ct += chr((data[r] if isinstance(data[r], int) else ord(data[r])) ^ y[(y[s] + y[x]) % 256])
+
+        if encode:
+            ct = six.ensure_str(base64.b64encode(six.b(ct))).replace('/', '_').replace('+', '-')
+
+        return ct
+
+    def cache_duration():
+        from datetime import datetime
+        cmin = datetime.now().minute
+        duration = round((60 - 59 if cmin == 0 else cmin) / 60, 2)
+        return duration
+
+    def encode_id(id_):
+        # kurl = 'https://raw.githubusercontent.com/Claudemirovsky/worstsource-keys/keys/keys.json'
+        kurl = 'https://raw.githubusercontent.com/Ciarands/vidsrc-keys/main/keys.json'
+        # kurl = 'https://raw.githubusercontent.com/rawgimaster/worstsource-keys/keys/keys.json'
+        keys = database.get(
+            client.request, cache_duration(),
+            kurl
+        )
+        k1, k2 = json.loads(keys)
+        v = dex(k1, id_, False)
+        v = dex(k2, v)
+        return v
+
+    headers = {'User-Agent': _EDGE_UA}
+    turl = urllib_parse.urljoin(url, '/futoken')
+    r = six.ensure_str(client.request(turl, referer=url, headers=headers))
+    k = re.search(r"var\s*k='([^']+)", r)
+    if k:
+        v = encode_id(url.split('?')[0].split('/')[-1])
+        k = k.group(1)
+        a = [k]
+        for i in range(len(v)):
+            a.append(str(ord(k[i % len(k)]) + ord(v[i])))
+        murl = urllib_parse.urljoin(url, '/mediainfo/' + ','.join(a) + '?' + url.split('?')[-1])
+        s = json.loads(client.request(murl, referer=url, XHR=True, headers=headers))
+        if isinstance(s.get('result'), dict):
+            uri = s.get('result').get('sources')[0].get('file')
+            rurl = urllib_parse.urljoin(murl, '/')
+            uri += '|Referer={0}&Origin={1}&User-Agent=iPad'.format(rurl, rurl[:-1])
+            return uri
+
+
 def __extract_kwik(url, page_content, referer=None):
     page_content += __get_packed_data(page_content)
     r = re.search(r"const\s*source\s*=\s*'([^']+)", page_content)
@@ -182,6 +243,21 @@ def __extract_embedrise(url, page_content, referer=None):
         headers = {'User-Agent': _EDGE_UA,
                    'Referer': url}
         return surl + __append_headers(headers)
+    return
+
+
+def __extract_fusevideo(url, page_content, referer=None):
+    r = re.findall(r'<script\s*src="([^"]+)', page_content)
+    if r:
+        jurl = r[-1]
+        js = client.request(jurl, referer=url)
+        match = re.search(r'n\s*=\s*atob\("([^"]+)', js)
+        if match:
+            jd = base64.b64decode(match.group(1)).decode('utf-8')
+            surl = re.search(r'":"(http[^"]+)', jd)
+            if surl:
+                headers = {'User-Agent': _EDGE_UA, 'Referer': url, 'Accept-Language': 'en'}
+                return surl.group(1).replace('\\/', '/') + __append_headers(headers)
     return
 
 
@@ -313,6 +389,10 @@ __register_extractor(["https://www.mp4upload.com/",
                       "https://mp4upload.com/"],
                      __extract_mp4upload)
 
+__register_extractor(["https://vidplay.online/",
+                      "https://mcloud.bz/"],
+                     __extract_vidplay)
+
 __register_extractor(["https://kwik.cx/"],
                      __extract_kwik)
 
@@ -402,3 +482,7 @@ __register_extractor(["https://streamwish.com",
                       "https://dlions.pro",
                       "https://mlions.pro"],
                      __extract_streamwish)
+
+__register_extractor(["https://fusevideo.net/e/",
+                      "https://fusevideo.io/e/"],
+                     __extract_fusevideo)

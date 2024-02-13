@@ -606,16 +606,24 @@ def remove_episodes(anilist_id):
         control.try_release_lock(control.anilistSyncDB_lock)
 
 
-def getSearchHistory(media_type='show'):
+def build_searchdb():
+    control.searchHistoryDB_lock.acquire()
+    cursor = _get_connection_cursor(control.searchHistoryDB)
+    cursor.execute('CREATE TABLE IF NOT EXISTS show (value TEXT)')
+    cursor.execute('CREATE TABLE IF NOT EXISTS movie (value TEXT)')
+    cursor.execute('CREATE TABLE IF NOT EXISTS both (value TEXT)')
+    cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS ix_show ON show (value)")
+    cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS ix_movie ON movie (value)")
+    cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS ix_both ON both (value)")
+    cursor.connection.commit()
+    cursor.close()
+
+
+def getSearchHistory(table):
     try:
         control.searchHistoryDB_lock.acquire()
         cursor = _get_connection_cursor(control.searchHistoryDB)
-        cursor.execute('CREATE TABLE IF NOT EXISTS show (value TEXT)')
-        cursor.execute('CREATE TABLE IF NOT EXISTS movie (value TEXT)')
-        cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS ix_history ON movie (value)")
-        cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS ix_history ON show (value)")
-
-        cursor.execute("SELECT * FROM %s" % media_type)
+        cursor.execute("SELECT * FROM %s" % table)
         history = cursor.fetchall()
         cursor.close()
         history.reverse()
@@ -626,6 +634,90 @@ def getSearchHistory(media_type='show'):
                 filter.append(i['value'])
 
         return filter
+    except:
+        try:
+            cursor.close()
+        except:
+            pass
+        return []
+    finally:
+        control.try_release_lock(control.searchHistoryDB_lock)
+
+
+def addSearchHistory(table, search_string):
+    try:
+        control.searchHistoryDB_lock.acquire()
+        cursor = _get_connection_cursor(control.searchHistoryDB)
+        cursor.execute(
+            "REPLACE INTO %s Values (?)"
+            % table, (search_string,)
+        )
+        cursor.connection.commit()
+        cursor.close()
+    except:
+        try:
+            cursor.close()
+        except:
+            pass
+        return []
+    finally:
+        control.try_release_lock(control.searchHistoryDB_lock)
+
+
+def clearAllSearchHistory():
+    try:
+        control.searchHistoryDB_lock.acquire()
+        confirmation = control.yesno_dialog(control.ADDON_NAME, "Clear search history?")
+        if not confirmation:
+            return
+
+        # Clear search history database
+        cursor = _get_connection_cursor(control.searchHistoryDB)
+        cursor.execute("DROP TABLE IF EXISTS movie")
+        cursor.execute("DROP TABLE IF EXISTS show")
+        cursor.execute("DROP TABLE IF EXISTS both")
+        try:
+            cursor.execute("VACUUM")
+        except:
+            pass
+        cursor.connection.commit()
+
+        # initialise search history database
+        cursor.execute('CREATE TABLE IF NOT EXISTS show (value TEXT)')
+        cursor.execute('CREATE TABLE IF NOT EXISTS movie (value TEXT)')
+        cursor.execute('CREATE TABLE IF NOT EXISTS both (value TEXT)')
+        cursor.connection.commit()
+        cursor.close()
+        control.refresh()
+        control.showDialog.notification(control.ADDON_NAME, "Search History has been cleared", time=5000)
+
+    except:
+        import traceback
+        traceback.print_exc()
+        return []
+
+    finally:
+        control.try_release_lock(control.searchHistoryDB_lock)
+
+
+def clearSearchHistory(media_type):
+    try:
+        control.searchHistoryDB_lock.acquire()
+        confirmation = control.yesno_dialog(control.ADDON_NAME, "Clear search history?")
+        if not confirmation:
+            return
+        cursor = _get_connection_cursor(control.searchHistoryDB)
+        cursor.execute("DROP TABLE IF EXISTS %s" % media_type)
+        try:
+            cursor.execute("VACCUM")
+        except:
+            pass
+        cursor.connection.commit()
+        cursor.execute('CREATE TABLE IF NOT EXISTS %s (value TEXT)' % media_type)
+        cursor.connection.commit()
+        cursor.close()
+        control.refresh()
+        control.showDialog.notification(control.ADDON_NAME, "Search History has been cleared", '', 5000, False)
     except:
         try:
             cursor.close()
@@ -638,152 +730,21 @@ def getSearchHistory(media_type='show'):
         control.try_release_lock(control.searchHistoryDB_lock)
 
 
-def getSearchHistoryMovie(media_type='show'):
-    try:
-        control.searchHistoryMovieDB_lock.acquire()
-        cursor = _get_connection_cursor(control.searchHistoryMovieDB)
-        cursor.execute('CREATE TABLE IF NOT EXISTS show (value TEXT)')
-        cursor.execute('CREATE TABLE IF NOT EXISTS movie (value TEXT)')
-        cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS ix_history ON movie (value)")
-        cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS ix_history ON show (value)")
-
-        cursor.execute("SELECT * FROM %s" % media_type)
-        history = cursor.fetchall()
-        cursor.close()
-        history.reverse()
-        history = history[:50]
-        filter = []
-        for i in history:
-            if i['value'] not in filter:
-                filter.append(i['value'])
-
-        return filter
-    except:
-        try:
-            cursor.close()
-        except:
-            pass
-        import traceback
-        traceback.print_exc()
-        return []
-    finally:
-        control.try_release_lock(control.searchHistoryMovieDB_lock)
-
-
-def getSearchHistoryTV(media_type='show'):
-    try:
-        control.searchHistoryTVDB_lock.acquire()
-        cursor = _get_connection_cursor(control.searchHistoryTVDB)
-        cursor.execute('CREATE TABLE IF NOT EXISTS show (value TEXT)')
-        cursor.execute('CREATE TABLE IF NOT EXISTS movie (value TEXT)')
-        cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS ix_history ON movie (value)")
-        cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS ix_history ON show (value)")
-
-        cursor.execute("SELECT * FROM %s" % media_type)
-        history = cursor.fetchall()
-        cursor.close()
-        history.reverse()
-        history = history[:50]
-        filter = []
-        for i in history:
-            if i['value'] not in filter:
-                filter.append(i['value'])
-
-        return filter
-    except:
-        try:
-            cursor.close()
-        except:
-            pass
-        import traceback
-        traceback.print_exc()
-        return []
-    finally:
-        control.try_release_lock(control.searchHistoryTVDB_lock)
-
-
-def addSearchHistory(search_string, media_type):
+def remove_search(table, value):
     try:
         control.searchHistoryDB_lock.acquire()
         cursor = _get_connection_cursor(control.searchHistoryDB)
-        cursor.execute('CREATE TABLE IF NOT EXISTS show (value TEXT)')
-        cursor.execute('CREATE TABLE IF NOT EXISTS movie (value TEXT)')
-        cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS ix_history ON movie (value)")
-        cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS ix_history ON show (value)")
-
-        cursor.execute(
-            "REPLACE INTO %s Values (?)"
-            % media_type, (search_string,)
-        )
-
+        cursor.execute('DELETE from {0} where value="{1}"'.format(table, value))
         cursor.connection.commit()
         cursor.close()
+        control.refresh()
     except:
         try:
             cursor.close()
         except:
             pass
-        import traceback
-        traceback.print_exc()
-        return []
     finally:
         control.try_release_lock(control.searchHistoryDB_lock)
-
-
-def addSearchHistoryMovie(search_string, media_type):
-    try:
-        control.searchHistoryMovieDB_lock.acquire()
-        cursor = _get_connection_cursor(control.searchHistoryMovieDB)
-        cursor.execute('CREATE TABLE IF NOT EXISTS show (value TEXT)')
-        cursor.execute('CREATE TABLE IF NOT EXISTS movie (value TEXT)')
-        cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS ix_history ON movie (value)")
-        cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS ix_history ON show (value)")
-
-        cursor.execute(
-            "REPLACE INTO %s Values (?)"
-            % media_type, (search_string,)
-        )
-
-        cursor.connection.commit()
-        cursor.close()
-    except:
-        try:
-            cursor.close()
-        except:
-            pass
-        import traceback
-        traceback.print_exc()
-        return []
-    finally:
-        control.try_release_lock(control.searchHistoryMovieDB_lock)
-
-
-def addSearchHistoryTV(search_string, media_type):
-    try:
-        control.searchHistoryTVDB_lock.acquire()
-        cursor = _get_connection_cursor(control.searchHistoryTVDB)
-        cursor.execute('CREATE TABLE IF NOT EXISTS show (value TEXT)')
-        cursor.execute('CREATE TABLE IF NOT EXISTS movie (value TEXT)')
-        cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS ix_history ON movie (value)")
-        cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS ix_history ON show (value)")
-
-        cursor.execute(
-            "REPLACE INTO %s Values (?)"
-            % media_type, (search_string,)
-        )
-
-        cursor.connection.commit()
-        cursor.close()
-    except:
-        try:
-            cursor.close()
-        except:
-            pass
-        import traceback
-        traceback.print_exc()
-        return []
-    finally:
-        control.try_release_lock(control.searchHistoryTVDB_lock)
 
 
 def getTorrentList(anilist_id):
@@ -908,150 +869,6 @@ def torrent_cache_clear():
         control.try_release_lock(control.torrentScrapeCacheFile_lock)
 
     control.showDialog.notification('{}: {}'.format(control.ADDON_NAME, control.lang(30200)), control.lang(30202), time=5000, sound=False)
-
-
-def clearAllSearchHistory():
-    try:
-        control.searchHistoryDB_lock.acquire()
-        control.searchHistoryMovieDB_lock.acquire()
-        control.searchHistoryTVDB_lock.acquire()
-
-        confirmation = control.yesno_dialog(control.ADDON_NAME, "Clear search history?")
-        if not confirmation:
-            return
-
-        # Clear general search history database
-        cursor = _get_connection_cursor(control.searchHistoryDB)
-        cursor.execute("DROP TABLE IF EXISTS movie")
-        cursor.execute("DROP TABLE IF EXISTS show")
-        try:
-            cursor.execute("VACUUM")
-        except:
-            pass
-        cursor.connection.commit()
-        cursor.close()
-
-        # Clear movie search history database
-        cursor = _get_connection_cursor(control.searchHistoryMovieDB)
-        cursor.execute("DROP TABLE IF EXISTS movie")
-        cursor.execute("DROP TABLE IF EXISTS show")
-        try:
-            cursor.execute("VACUUM")
-        except:
-            pass
-        cursor.connection.commit()
-        cursor.close()
-
-        # Clear TV search history database
-        cursor = _get_connection_cursor(control.searchHistoryTVDB)
-        cursor.execute("DROP TABLE IF EXISTS movie")
-        cursor.execute("DROP TABLE IF EXISTS show")
-        try:
-            cursor.execute("VACUUM")
-        except:
-            pass
-        cursor.connection.commit()
-        cursor.close()
-
-        control.refresh()
-        control.showDialog.notification(control.ADDON_NAME, "Search History has been cleared", time=5000)
-
-    except:
-        import traceback
-        traceback.print_exc()
-        return []
-
-    finally:
-        control.try_release_lock(control.searchHistoryDB_lock)
-        control.try_release_lock(control.searchHistoryMovieDB_lock)
-        control.try_release_lock(control.searchHistoryTVDB_lock)
-
-
-def clearSearchHistory():
-    try:
-        control.searchHistoryDB_lock.acquire()
-        confirmation = control.yesno_dialog(control.ADDON_NAME, "Clear search history?")
-        if not confirmation:
-            return
-        cursor = _get_connection_cursor(control.searchHistoryDB)
-        cursor.execute("DROP TABLE IF EXISTS movie")
-        cursor.execute("DROP TABLE IF EXISTS show")
-        try:
-            cursor.execute("VACCUM")
-        except:
-            pass
-        cursor.connection.commit()
-        cursor.close()
-        control.refresh()
-        control.showDialog.notification(control.ADDON_NAME, "Search History has been cleared", time=5000)
-    except:
-        try:
-            cursor.close()
-        except:
-            pass
-        import traceback
-        traceback.print_exc()
-        return []
-    finally:
-        control.try_release_lock(control.searchHistoryDB_lock)
-
-
-def clearSearchHistoryMovie():
-    try:
-        control.searchHistoryMovieDB_lock.acquire()
-        confirmation = control.yesno_dialog(control.ADDON_NAME, "Clear search history?")
-        if not confirmation:
-            return
-        cursor = _get_connection_cursor(control.searchHistoryMovieDB)
-        cursor.execute("DROP TABLE IF EXISTS movie")
-        cursor.execute("DROP TABLE IF EXISTS show")
-        try:
-            cursor.execute("VACCUM")
-        except:
-            pass
-        cursor.connection.commit()
-        cursor.close()
-        control.refresh()
-        control.showDialog.notification(control.ADDON_NAME, "Search History has been cleared", time=5000)
-    except:
-        try:
-            cursor.close()
-        except:
-            pass
-        import traceback
-        traceback.print_exc()
-        return []
-    finally:
-        control.try_release_lock(control.searchHistoryMovieDB_lock)
-
-
-def clearSearchHistoryTV():
-    try:
-        control.searchHistoryTVDB_lock.acquire()
-        confirmation = control.yesno_dialog(control.ADDON_NAME, "Clear search history?")
-        if not confirmation:
-            return
-        cursor = _get_connection_cursor(control.searchHistoryTVDB)
-        cursor.execute("DROP TABLE IF EXISTS movie")
-        cursor.execute("DROP TABLE IF EXISTS show")
-        try:
-            cursor.execute("VACCUM")
-        except:
-            pass
-        cursor.connection.commit()
-        cursor.close()
-        control.refresh()
-        control.showDialog.notification(control.ADDON_NAME, "Search History has been cleared", time=5000)
-    except:
-        try:
-            cursor.close()
-        except:
-            pass
-        import traceback
-        traceback.print_exc()
-        return []
-    finally:
-        control.try_release_lock(control.searchHistoryTVDB_lock)
 
 
 def _dict_factory(cursor, row):

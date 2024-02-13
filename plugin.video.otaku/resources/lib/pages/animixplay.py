@@ -86,7 +86,7 @@ class sources(BrowserBase):
             mdiv = BeautifulSoup(s, "html.parser", parse_only=mlink)
             mitems = mdiv.find_all('li')
             for mitem in mitems:
-                if not any(x in mitem.text for x in ['FSD', 'YTB', 'EGA']):
+                if any(x in mitem.text.lower() for x in control.enabled_embeds()):
                     type_ = 'direct'
                     server = mitem.a.get('data-name')
                     qual = mitem.a.get('title')

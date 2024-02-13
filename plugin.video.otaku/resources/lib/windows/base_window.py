@@ -48,9 +48,9 @@ class BaseWindow(control.xmlWindow):
         if not actionArgs.get('playnext') and not fanart:
             fanart = control.OTAKU_FANART_PATH
 
-        if isinstance(fanart, list):
+        if isinstance(fanart, list) and len(fanart) > 0:
             fanart = control.OTAKU_FANART_PATH if control.getSetting('scraping.fanart') == 'true' else random.choice(fanart)
-        if isinstance(clearlogo, list):
+        if isinstance(clearlogo, list) and len(clearlogo) > 0:
             clearlogo = control.OTAKU_LOGO2_PATH if control.getSetting('scraping.clearlogo') == 'true' else random.choice(clearlogo)
 
         self.setProperty('item.art.thumb', thumb if thumb else fanart)

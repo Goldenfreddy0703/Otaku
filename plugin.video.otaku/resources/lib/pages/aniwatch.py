@@ -12,8 +12,7 @@ from resources.lib.indexers.malsync import MALSYNC
 
 class sources(BrowserBase):
     _BASE_URL = 'https://aniwatch.to/'
-    keyurl = 'https://raw.githubusercontent.com/Claudemirovsky/keys/e1/key'
-    keyhints = [[106, 7], [109, 6], [137, 7], [147, 7]]
+    js_file = 'https://megacloud.tv/js/player/a/prod/e1-player.min.js'
 
     def get_sources(self, anilist_id, episode, get_backup):
         show = database.get_show(anilist_id)
@@ -105,8 +104,7 @@ class sources(BrowserBase):
                 for src in srcs:
                     edata_id = src.get('data-id')
                     edata_name = src.text.strip().lower()
-                    eserver_id = src.get('data-server-id')
-                    if edata_name in ['megacloud', 'vidstreaming', 'streamtape']:
+                    if edata_name.lower() in control.enabled_embeds():
                         params = {'id': edata_id}
                         r = self._get_request(
                             self._BASE_URL + 'ajax/v2/episode/sources',
@@ -146,6 +144,11 @@ class sources(BrowserBase):
                             subs = res.get('tracks')
                             if subs:
                                 subs = [{'url': x.get('file'), 'lang': x.get('label')} for x in subs if x.get('kind') == 'captions']
+                            skip = {}
+                            if res.get('intro'):
+                                skip.update({'intro': res.get('intro')})
+                            if res.get('outro'):
+                                skip.update({'outro': res.get('outro')})
                             if res.get('encrypted'):
                                 slink = self._process_link(res.get('sources'))
                             else:
@@ -174,20 +177,37 @@ class sources(BrowserBase):
                                     'debrid_provider': '',
                                     'provider': 'aniwatch',
                                     'size': 'NA',
-                                    'info': ['DUB' if lang == 'dub' else 'SUB', 'Server ' + eserver_id],
+                                    'info': ['DUB' if lang == 'dub' else 'SUB', edata_name],
                                     'lang': 2 if lang == 'dub' else 0,
-                                    'subs': subs
+                                    'subs': subs,
+                                    'skip': skip
                                 }
                                 sources.append(source)
         return sources
 
+    def get_keyhints(self):
+        def to_int(num):
+            if num.startswith('0x'):
+                return int(num, 16)
+            return int(num)
+
+        def chunked(varlist, count):
+            return [varlist[i:i + count] for i in range(0, len(varlist), count)]
+
+        js = self._get_request(self.js_file)
+        cases = re.findall(r'switch\(\w+\){([^}]+?)partKey', js)[0]
+        vars = re.findall(r"\w+=(\w+)", cases)
+        consts = re.findall(r"((?:[,;\s]\w+=0x\w{1,2}){%s,})" % len(vars), js)[0]
+        indexes = []
+        for var in vars:
+            var_value = re.search(r',{0}=(\w+)'.format(var), consts)
+            if var_value:
+                indexes.append(to_int(var_value.group(1)))
+
+        return chunked(indexes, 2)
+
     def _process_link(self, sources):
-        r = database.get(
-            self._get_request,
-            0.2,
-            self.keyurl
-        )
-        keyhints = json.loads(r) or self.keyhints
+        keyhints = database.get(self.get_keyhints, 0.2)
         try:
             key = ''
             orig_src = sources
@@ -201,9 +221,6 @@ class sources(BrowserBase):
             sources = json.loads(jscrypto.decode(sources, key))
             return sources[0].get('file')
         except:
-            database.remove(
-                self._get_request,
-                self.keyurl
-            )
+            database.remove(self.get_keyhints)
             control.log('decryption key not working')
             return ''

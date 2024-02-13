@@ -1,3 +1,105 @@
+Changelog 0.4.79[20240212]:
+- fix resolver error due to empty meta
+
+Changelog 0.4.78[20240211]:
+- Added Embeds Category
+- Added options to disable specific embeds
+- Small Setting Label Changes
+- Changed Animess Domain
+
+Changelog 0.4.77[20240210]:
+- Fixed AF Dialog Theme Bugs
+
+Changelog 0.4.76[20240210]:
+- Fix RD Auth
+- Updated Translations
+
+Changelog 0.4.75[20240209]:
+- Small Bug Fixes
+
+Changelog 0.4.74[20240208]:
+- Added FlareSolverr Support
+
+Changelog 0.4.73[20240203]:
+- Block VidStream on Aniwatch
+- Made Animepahe fail gracefully
+- Changed a few labels with Aniwave
+
+Changelog 0.4.72[20240202]:
+- Fix Small Database Error with Search
+
+Changelog 0.4.71[20240201]:
+- Updated Database
+- Set all embeds off by default except English
+
+Changelog 0.4.70[20240130]:
+- hls embeds play on ISA
+- Fixed filemoon frame skipping
+- Fixed seeking in other embeds
+
+Changelog 0.4.69[20240129]:
+- Added Remove from History Context Menu
+- Recoded the Search Functionality
+- New skin Search Paths
+
+Changelog 0.4.68[20240123]:
+- Updated Embed Extractor 
+- Update strings.po for all languages
+
+Changelog 0.4.67[20240121]:
+- Added New Sort Order for Simkl Watchlist
+- Last Added is default Sort Method for Simkl
+
+Changelog 0.4.66[20240121]:
+- Added New Embed Setting for Aniwatch
+- Made Aniwatch Region Based Optional
+
+Changelog 0.4.65[20240120]:
+- Small Fix for Aniplay Provider
+- linting Changes
+- Finished Arabic Translations 
+
+Changelog 0.4.64[20240120]:
+- Added Italian Sub/Dub Embeds Category
+- Added Aniplay Provider
+- Fixed Extractor
+
+Changelog 0.4.63[20240119]:
+- Updated embed extractor 
+
+Changelog 0.4.62[20240119]:
+- New languages added 
+- Brazilian portuguese 
+- French from France 
+- Arabic from Saudi Arabia
+
+Changelog 0.4.61[20240108]:
+- Fixed meta for Simkl
+- Set Skip Intro Default to 3
+- Set Aniskip Defaults to True
+
+Changelog 0.4.60[20240108]:
+- Fixed Extractor
+
+Changelog 0.4.59[20240105]:
+- Added Autoplay Last Selected Source for Embed Sources
+
+Changelog 0.4.58[20240105]:
+- Added skiptimes from providers 
+
+Changelog 0.4.57[20240103]:
+- Added French Sub/Dub Embeds Category
+- Added Neko-Sama Provider
+
+Changelog 0.4.56[20231228]:
+- Small Fix with Skip Intro for AF
+
+Changelog 0.4.55[20231225]:
+- Fixes for Xbox
+
+Changelog 0.4.54 [20231225]:
+- Embed extractor updated
+
 Changelog 0.4.53 [20231222]:
 - Added new patterns for gogo and dood embeds
 
@@ -10,7 +112,7 @@ Changelog 0.4.51 [20231217]:
 - Fixed Simkl next up url
 
 Changelog 0.4.50 [20231213]:
-- Added Arctic Fuze Next Dialog Theme
+- Added Arctic Fuse Next Dialog Theme
 
 Changelog 0.4.49 [20231202]:
 - Updated Mapping Database
