@@ -258,10 +258,10 @@ def request(
                     except:
                         if 'return' in error:
                             # Give up
-                            return ''
+                            return '{}'
                         else:
                             if not error:
-                                return ''
+                                return '{}'
                 elif any(x == error_code for x in [403, 429, 503]) and any(x in result for x in ['__cf_chl_f_tk', '__cf_chl_jschl_tk__=', '/cdn-cgi/challenge-platform/']):
                     url_parsed = urllib_parse.urlparse(url)
                     netloc = '%s://%s/' % (url_parsed.scheme, url_parsed.netloc)
@@ -280,16 +280,39 @@ def request(
                         control.log('%s has a Cloudflare challenge.' % (netloc))
                         if not error:
                             return '{}'
+                else:
+                    if error is True:
+                        return result
+                    else:
+                        return '{}'
+            elif server and 'ddos-guard' in server.lower() and e.code == 403:
+                url_parsed = urllib_parse.urlparse(url)
+                netloc = '%s://%s/' % (url_parsed.scheme, url_parsed.netloc)
+                if control.getSetting('fs_enable') == 'true':
+                    ddg_cookie, ddg_ua = ddgcookie().get(netloc, timeout)
+                    if ddg_cookie is None:
+                        control.log('%s has an unsolvable DDos-Guard challenge.' % (netloc))
+                        if not error:
+                            return '{}'
+                    _headers['Cookie'] = ddg_cookie
+                    _headers['User-Agent'] = ddg_ua
+                    req = urllib_request.Request(url, data=post)
+                    _add_request_header(req, _headers)
+                    response = urllib_request.urlopen(req, timeout=int(timeout))
+                else:
+                    control.log('%s has a DDoS-Guard challenge.' % (netloc))
+                    if not error:
+                        return '{}'
             elif output == '':
                 control.log('Request-HTTPError (%s): %s' % (response.code, url))
                 if not error:
-                    return ''
+                    return '{}'
         except urllib_error.URLError as e:
             response = e
             if output == '':
                 control.log('Request-Error (%s): %s' % (e.reason, url))
                 if not error:
-                    return ''
+                    return '{}'
 
         if output == 'cookie':
             try:
@@ -577,6 +600,49 @@ class cfcookie:
             if soln.get('status') < 300:
                 cookie = '; '.join(['%s=%s' % (i.get('name'), i.get('value')) for i in soln.get('cookies')])
                 if 'cf_clearance' in cookie:
+                    self.cookie = cookie
+                    self.ua = soln.get('userAgent')
+                else:
+                    control.log('%s returned %s. Could not collect tokens.' % (netloc, repr(resp)))
+        else:
+            control.log('%s returned %s.' % (netloc, repr(resp)))
+
+
+class ddgcookie:
+    def __init__(self):
+        self.cookie = None
+        self.ua = None
+
+    def get(self, netloc, timeout):
+        try:
+            self.netloc = netloc
+            self.timeout = timeout
+            self._get_cookie(netloc, timeout)
+            if self.cookie is not None:
+                cfdata = json.dumps({'Cookie': self.cookie, 'User-Agent': self.ua})
+                store(cfdata, urllib_parse.urlparse(netloc).netloc + '.json')
+            return (self.cookie, self.ua)
+        except Exception as e:
+            control.log('%s returned an error. Could not collect tokens - Error: %s.' % (netloc, str(e)))
+            return (self.cookie, self.ua)
+
+    def _get_cookie(self, netloc, timeout):
+        fs_url = control.getSetting('fs_url')
+        fs_timeout = int(control.getSetting('fs_timeout'))
+        if not fs_url.startswith('http'):
+            control.log('Sorry, malformed flaresolverr url')
+            return
+        post = {'cmd': 'request.get',
+                'url': netloc,
+                'returnOnlyCookies': True,
+                'maxTimeout': fs_timeout * 1000}
+        resp = _basic_request(fs_url, post=post, jpost=True)
+        if resp:
+            resp = json.loads(resp)
+            soln = resp.get('solution')
+            if soln.get('status') < 300:
+                cookie = '; '.join(['%s=%s' % (i.get('name'), i.get('value')) for i in soln.get('cookies') if 'ddg' in i.get('name')])
+                if '__ddg2_' in cookie:
                     self.cookie = cookie
                     self.ua = soln.get('userAgent')
                 else:

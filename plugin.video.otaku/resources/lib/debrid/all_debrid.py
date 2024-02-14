@@ -48,11 +48,9 @@ class AllDebrid:
             + control.lang(30102)
         )
 
-        # Seems the All Debrid servers need some time do something with the pin before polling
-        # Polling too early will cause an invalid pin error
-        control.sleep(5 * 1000)
         control.progressDialog.update(100)
         while not auth_complete and not expiry <= 0 and not control.progressDialog.iscanceled():
+            control.sleep(5 * 1000)
             auth_complete, expiry = self.poll_auth(check=resp['check'], pin=resp['pin'])
             progress_percent = 100 - int((float(pin_ttl - expiry) / pin_ttl) * 100)
             control.progressDialog.update(progress_percent)
@@ -62,9 +60,8 @@ class AllDebrid:
         except:
             pass
 
-        self.store_user_info()
-
         if auth_complete:
+            self.store_user_info()
             control.ok_dialog(control.ADDON_NAME, 'AllDebrid {}'.format(control.lang(30103)))
         else:
             return

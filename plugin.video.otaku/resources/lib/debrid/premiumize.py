@@ -21,6 +21,7 @@ class Premiumize:
         token = json.loads(token)
         expiry = token['expires_in']
         token_ttl = token['expires_in']
+        token_interval = token['interval']
         poll_again = True
         success = False
         control.copy2clip(token['user_code'])
@@ -33,11 +34,11 @@ class Premiumize:
         control.progressDialog.update(0)
 
         while poll_again and not token_ttl <= 0 and not control.progressDialog.iscanceled():
+            time.sleep(token_interval)
+            token_ttl -= int(token_interval)
             poll_again, success = self.poll_token(token['device_code'])
             progress_percent = 100 - int((float((expiry - token_ttl) / expiry) * 100))
             control.progressDialog.update(progress_percent)
-            time.sleep(token['interval'])
-            token_ttl -= int(token['interval'])
 
         control.progressDialog.close()
 
@@ -47,6 +48,7 @@ class Premiumize:
     def poll_token(self, device_code):
         data = {'client_id': self.client_id, 'code': device_code, 'grant_type': 'device_code'}
         token = client.request('https://www.premiumize.me/token', post=data, error=True)
+        control.log('token is %s' % repr(token), level='info')
         token = json.loads(token)
 
         if 'error' in token:

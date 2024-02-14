@@ -28,6 +28,7 @@ class RealDebrid:
     def auth_loop(self):
         if control.progressDialog.iscanceled():
             control.progressDialog.close()
+            self.OauthTimeout = 0
             return
         time.sleep(self.OauthTimeStep)
         url = "client_id=%s&code=%s" % (self.ClientID, self.DeviceCode)
@@ -65,14 +66,16 @@ class RealDebrid:
         self.OauthTimeStep = int(response['interval'])
         self.DeviceCode = response['device_code']
 
-        while self.ClientSecret == '':
+        while self.ClientSecret == '' and self.OauthTimeout > 0:
+            control.sleep(self.OauthTimeStep * 1000)
+            self.OauthTimeout -= self.OauthTimeStep
             self.auth_loop()
 
-        self.token_request()
-
-        user_information = self.get_url('https://api.real-debrid.com/rest/1.0/user')
-        if user_information['type'] != 'premium':
-            control.ok_dialog(control.ADDON_NAME, control.lang(30104))
+        if self.ClientSecret:
+            self.token_request()
+            user_information = self.get_url('https://api.real-debrid.com/rest/1.0/user')
+            if user_information['type'] != 'premium':
+                control.ok_dialog(control.ADDON_NAME, control.lang(30104))
 
     def token_request(self):
         if self.ClientSecret == '':

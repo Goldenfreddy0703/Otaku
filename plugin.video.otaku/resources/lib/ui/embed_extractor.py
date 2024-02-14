@@ -393,7 +393,8 @@ __register_extractor(["https://vidplay.online/",
                       "https://mcloud.bz/"],
                      __extract_vidplay)
 
-__register_extractor(["https://kwik.cx/"],
+__register_extractor(["https://kwik.cx/",
+                      "https://kwik.si/"],
                      __extract_kwik)
 
 __register_extractor(["https://www.yourupload.com/"],

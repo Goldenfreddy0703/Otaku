@@ -2,7 +2,7 @@ import json
 import pickle
 
 from bs4 import BeautifulSoup, SoupStrainer
-from resources.lib.ui import database, source_utils
+from resources.lib.ui import control, database, source_utils
 from resources.lib.ui.BrowserBase import BrowserBase
 
 
@@ -14,6 +14,8 @@ class sources(BrowserBase):
         kodi_meta = pickle.loads(show.get('kodi_meta'))
         title = kodi_meta.get('name')
         title = self._clean_title(title)
+        etitle = kodi_meta.get('ename')
+        etitle = self._clean_title(etitle)
         headers = {'Referer': self._BASE_URL}
         params = {'m': 'search',
                   'q': title}
@@ -26,11 +28,11 @@ class sources(BrowserBase):
             XHR=True
         )
         try:
-            items = json.loads(r).get('data')
+            sitems = json.loads(r).get('data')
         except json.JSONDecodeError:
             return []
 
-        if not items and ':' in title:
+        if not sitems and ':' in title:
             title = title.split(':')[0]
             params.update({'q': title})
             r = database.get(
@@ -41,14 +43,19 @@ class sources(BrowserBase):
                 headers=headers,
                 XHR=True
             )
-            items = json.loads(r).get('data')
+            sitems = json.loads(r).get('data')
 
         all_results = []
-        if items:
+        if sitems:
             if title[-1].isdigit():
-                items = [x for x in items if title.lower() in x.get('title').lower()]
+                items = [x for x in sitems if title.lower() in x.get('title').lower()]
             else:
-                items = [x for x in items if (title.lower() + '  ') in (x.get('title').lower() + '  ')]
+                items = [x for x in sitems if (title.lower() + '  ') in (x.get('title').lower() + '  ')]
+            if not items:
+                if etitle[-1].isdigit():
+                    items = [x for x in sitems if etitle.lower() in x.get('title').lower()]
+                else:
+                    items = [x for x in sitems if (etitle.lower() + '  ') in (x.get('title').lower() + '  ')]
             if items:
                 slug = items[0].get('session')
                 all_results = self._process_ap(slug, title=title, episode=episode)
@@ -93,26 +100,27 @@ class sources(BrowserBase):
             items = mdiv.find_all('button')
 
             for item in items:
-                qual = int(item.get('data-resolution'))
-                if qual < 577:
-                    quality = 'NA'
-                elif qual < 721:
-                    quality = '720p'
-                elif qual < 1081:
-                    quality = '1080p'
-                else:
-                    quality = '4K'
-                source = {
-                    'release_title': '{0} - Ep {1}'.format(title, episode),
-                    'hash': item.get('data-src'),
-                    'type': 'embed',
-                    'quality': quality,
-                    'debrid_provider': '',
-                    'provider': 'animepahe',
-                    'size': 'NA',
-                    'info': [source_utils.get_embedhost(item.get('data-src')), 'DUB' if item.get('data-audio') == 'eng' else 'SUB'],
-                    'lang': 2 if item.get('data-audio') == 'eng' else 0
-                }
-                sources.append(source)
+                if any(x in item.get('data-src').lower() for x in control.enabled_embeds()):
+                    qual = int(item.get('data-resolution'))
+                    if qual < 577:
+                        quality = 'NA'
+                    elif qual < 721:
+                        quality = '720p'
+                    elif qual < 1081:
+                        quality = '1080p'
+                    else:
+                        quality = '4K'
+                    source = {
+                        'release_title': '{0} - Ep {1}'.format(title, episode),
+                        'hash': item.get('data-src'),
+                        'type': 'embed',
+                        'quality': quality,
+                        'debrid_provider': '',
+                        'provider': 'animepahe',
+                        'size': 'NA',
+                        'info': [source_utils.get_embedhost(item.get('data-src')), 'DUB' if item.get('data-audio') == 'eng' else 'SUB'],
+                        'lang': 2 if item.get('data-audio') == 'eng' else 0
+                    }
+                    sources.append(source)
 
         return sources
