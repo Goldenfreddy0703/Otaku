@@ -77,20 +77,20 @@ msgid "Authentication with Real-Debrid has failed, please try again"
 msgstr "A autenticação com Real-Debrid falhou, tente novamente"
 
 msgctxt "#30121"
-msgid "Cloudflare Solver"
-msgstr "Solucionador Cloudflare"
+msgid "Cloudflare & DDoS-GUARD Solver"
+msgstr "Solucionador Cloudflare & DDoS-GUARD"
 
 msgctxt "#30122"
-msgid "Enable Flaresolverr"
-msgstr "Ativar o Flaresolverr"
+msgid "Enable FlareSolverr"
+msgstr "Ativar o FlareSolverr"
 
 msgctxt "#30123"
-msgid "Flaresolverr url"
-msgstr "URL do Flaresolverr"
+msgid "FlareSolverr url"
+msgstr "URL do FlareSolverr"
 
 msgctxt "#30124"
-msgid "Flaresolverr Timeout"
-msgstr "Tempo limite do Flaresolverr"
+msgid "FlareSolverr Timeout"
+msgstr "Tempo limite do FlareSolverr"
 
 ######DATABASE.PY######
 msgctxt "#30200"
@@ -836,8 +836,8 @@ msgid "Prioritize Batch Sources"
 msgstr "Priorizar fontes de lote"
 
 msgctxt "#40465"
-msgid "Prioritized Source Sorting"
-msgstr "Priorizar seleção de fontes"
+msgid "Prioritized Source Sorting & Filtering"
+msgstr "Priorizar seleção de fontes e filtragem"
 
 msgctxt "#40466"
 msgid "Set Items Per Page"
@@ -1082,6 +1082,14 @@ msgstr "Arctic Fuse"
 msgctxt "#40527"
 msgid "Italian Sub/Dub Embeds"
 msgstr "Italiano Sub/Dub embeds"
+
+msgctxt "#40528"
+msgid "Providers"
+msgstr "Provedores"
+
+msgctxt "#40529"
+msgid "Embeds"
+msgstr "Embeds"
 
 ######MAIN Category DIRECTORY#######
 msgctxt "#50000"

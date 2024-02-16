@@ -77,19 +77,19 @@ msgid "Authentication with Real-Debrid has failed, please try again"
 msgstr ""
 
 msgctxt "#30121"
-msgid "Cloudflare Solver"
+msgid "Cloudflare & DDoS-GUARD Solver"
 msgstr ""
 
 msgctxt "#30122"
-msgid "Enable Flaresolverr"
+msgid "Enable FlareSolverr"
 msgstr ""
 
 msgctxt "#30123"
-msgid "Flaresolverr url"
+msgid "FlareSolverr url"
 msgstr ""
 
 msgctxt "#30124"
-msgid "Flaresolverr Timeout"
+msgid "FlareSolverr Timeout"
 msgstr ""
 
 ######DATABASE.PY######

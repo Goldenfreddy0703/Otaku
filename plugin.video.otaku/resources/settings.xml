@@ -579,11 +579,12 @@
 		<setting id="reuselanguageinvoker.status" label="Re-Use Language Invoker Status: " type="text" default="Disabled" enable="false" />
 		<setting id="reuselanguageinvoker.toggle" label="40503" type="action" option="close" action="RunPlugin(plugin://plugin.video.otaku/toggleLanguageInvoker)"/>
 
-		<!-- Cloudflare Solver -->
+		<!-- Cloudflare & DDoS-GUARD Solver -->
 		<setting type="lsep" label="30121" />
 		<setting id="fs_enable" type="bool" label="30122" default="false" />
-		<setting id="fs_url" visible="eq(-1,true)" enable="eq(-1,true)" type="text" label="30123" default="http://localhost:8191/v1" />
-		<setting id="fs_timeout" visible="eq(-2,true)" enable="eq(-2,true)" type="slider" label="30124" default="60" range="30,30,180" option="int" />
+		<setting id="fs_instructions" visible="eq(-1,true)" enable="eq(-1,true)" type="action" label="40480" subsetting="true" action="RunPlugin(plugin://plugin.video.otaku/fs_inst)" />
+		<setting id="fs_url" visible="eq(-2,true)" enable="eq(-2,true)" type="text" label="30123" subsetting="true" default="http://localhost:8191/v1" />
+		<setting id="fs_timeout" visible="eq(-3,true)" enable="eq(-3,true)" type="slider" label="30124" subsetting="true" default="60" range="30,30,180" option="int" />
 
 		<!-- Overrides -->
 		<!-- <setting type="lsep" label="40474"/> -->

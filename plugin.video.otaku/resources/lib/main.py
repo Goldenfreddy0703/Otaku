@@ -718,6 +718,12 @@ def CHANGE_LOG(payload, params):
 #     return control.getInstructions()
 
 
+@route('fs_inst')
+def FS_INST(payload, params):
+    from resources.lib.ui import control
+    return control.getInstructions()
+
+
 @route('animes/*')
 def ANIMES_PAGE(payload, params):
     payload_list = payload.rsplit("/")

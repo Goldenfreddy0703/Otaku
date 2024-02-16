@@ -1,3 +1,16 @@
+Changelog 0.4.81[20240214]:
+- Added Hosting Instructions for FlareSolverr
+- Fix some Labeling
+
+Changelog 0.4.80[20240214]:
+- Fix RD Auth not gracefully closing
+- Fix AD Auth erroring when cancelled
+- Fix PM Auth not working
+- Use FlareSolverr for DDos-Guard
+- Fix Animepahe search to look for both romaji and english title
+- Add new kwik domain to embed_extractor
+- Update strings.po all languages
+
 Changelog 0.4.79[20240212]:
 - fix resolver error due to empty meta
 
