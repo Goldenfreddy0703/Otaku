@@ -1085,11 +1085,15 @@ msgstr "Italien Sub/Dub Intégrés"
 
 msgctxt "#40528"
 msgid "Providers"
-msgstr ""
+msgstr "Fournisseurs"
 
 msgctxt "#40529"
 msgid "Embeds"
-msgstr ""
+msgstr "Intégrations"
+
+msgctxt "#40530"
+msgid "Disable connection error notifications?"
+msgstr "Désactiver les notifications d'erreur de connexion?"
 
 ######MAIN Category DIRECTORY#######
 msgctxt "#50000"

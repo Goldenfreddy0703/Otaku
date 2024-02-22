@@ -276,8 +276,9 @@
 		<setting id="mal.enabled" label="40362" type="bool" default="false"/>
     	<setting id="mal.username" type="text" subsetting="true" label="40350" default="" enable="false" visible="eq(-1,true)"/>
 		<setting id="mal.login" type="action" subsetting="true" label="40352" option="close" action="RunPlugin(plugin://plugin.video.otaku/watchlist_login/mal?auth_dialog=true)" visible="eq(-2,true)"/>
-		<setting id="mal.listsettings" type="action" label="40353" option="close" visible="eq(-3,true)"/>
-		<setting id="mal.sort" type="labelenum" subsetting="true" label="40354" values="List Score|Last Updated|Anime Start Date|Anime Title" default="Last Updated" visible="eq(-4,true)"/>
+		<setting id="mal.hidenotif" type="bool" subsetting="true" label="40530" default="false" visible="eq(-3,true)"/>
+		<setting id="mal.listsettings" type="action" label="40353" option="close" visible="eq(-4,true)"/>
+		<setting id="mal.sort" type="labelenum" subsetting="true" label="40354" values="List Score|Last Updated|Anime Start Date|Anime Title" default="Last Updated" visible="eq(-5,true)"/>
 		<setting id="mal.userid" type="text"  default="" visible="false"/>
 		<setting id="mal.authvar" type="text"  default="" visible="false"/>
 		<setting id="mal.token" type="text"  default="" visible="false"/>

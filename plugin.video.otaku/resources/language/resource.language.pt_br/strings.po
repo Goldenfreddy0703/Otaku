@@ -1089,7 +1089,11 @@ msgstr "Provedores"
 
 msgctxt "#40529"
 msgid "Embeds"
-msgstr "Embeds"
+msgstr "Incorporações"
+
+msgctxt "#40530"
+msgid "Disable connection error notifications?"
+msgstr "Desativar notificações de erro de conexão?"
 
 ######MAIN Category DIRECTORY#######
 msgctxt "#50000"

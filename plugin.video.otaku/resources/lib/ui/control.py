@@ -557,10 +557,7 @@ def hide_unaired(content_type):
 
 
 def enabled_embeds():
-    embeds = ALL_EMBEDS
-    for embed in ALL_EMBEDS:
-        if __settings__.getSetting('embed.%s' % embed) == 'false':
-            embeds.remove(embed)
+    embeds = [embed for embed in ALL_EMBEDS if __settings__.getSetting('embed.%s' % embed) == 'true']
     return embeds
 
 

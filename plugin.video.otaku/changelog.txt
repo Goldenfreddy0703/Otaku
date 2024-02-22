@@ -1,3 +1,10 @@
+Changelog 0.4.83[20240221]:
+- Added Setting to disabled Mal Connection Errors
+- Finished recent Translations using Copilot
+
+Changelog 0.4.82[20240218]:
+- Fix Small Android Bug with disabled Embeds displaying
+
 Changelog 0.4.81[20240214]:
 - Added Hosting Instructions for FlareSolverr
 - Fix some Labeling

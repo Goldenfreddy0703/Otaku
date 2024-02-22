@@ -1085,11 +1085,15 @@ msgstr "تضمينات فرعية/دبلجة إيطالية"
 
 msgctxt "#40528"
 msgid "Providers"
-msgstr ""
+msgstr "مقدمي الخدمة"
 
 msgctxt "#40529"
 msgid "Embeds"
-msgstr ""
+msgstr "التضمينات"
+
+msgctxt "#40530"
+msgid "Disable connection error notifications?"
+msgstr "تعطيل إشعارات أخطاء الاتصال؟"
 
 ######MAIN Category DIRECTORY#######
 msgctxt "#50000"

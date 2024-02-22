@@ -147,8 +147,9 @@ class MyAnimeListWLF(WatchlistFlavorBase):
         if r:
             results = json.loads(r)
         else:
-            control.ok_dialog(control.ADDON_NAME, "Can't connect MyAnimeList 'API'")
-            return []
+            if control.getSetting('mal.hidenotif') == 'false':
+                control.ok_dialog(control.ADDON_NAME, "Can't connect MyAnimeList 'API'")
+                return []
 
         if next_up:
             all_results = filter(lambda x: True if x else False, map(self._base_next_up_view, results['data']))
