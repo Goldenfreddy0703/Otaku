@@ -244,10 +244,10 @@
 		<setting type="lsep" label="40300"/>
 		<setting id="sep"/>
 		<setting id="watchlist.update.enabled" label="40346" type="bool" default="false"/>
-		<setting id="watchlist.update.flavor" type="bool" subsetting="true" label="40347" values="MAL" default="false" visible="eq(-1,true)"/>
-		<setting id="watchlist.update.flavor" type="bool" subsetting="true" label="40513" values="Kitsu" default="false" visible="eq(-2,true)"/>
-		<setting id="watchlist.update.flavor" type="bool" subsetting="true" label="60000" values="AniList" default="false" visible="eq(-3,true)"/>
-        <setting id="watchlist.update.flavor" type="bool" subsetting="true" label="60001" values="Simkl" default="false" visible="eq(-4,true)"/>
+		<setting id="watchlist.update.flavor.myanimelist.enabled" type="bool" subsetting="true" label="40347" values="MAL" default="false" visible="eq(-1,true)"/>
+		<setting id="watchlist.update.flavor.kitsu.enabled" type="bool" subsetting="true" label="60002" values="Kitsu" default="false" visible="eq(-2,true)"/>
+		<setting id="watchlist.update.flavor.anilist.enabled" type="bool" subsetting="true" label="60000" values="AniList" default="false" visible="eq(-3,true)"/>
+        <setting id="watchlist.update.flavor.simkl.enabled" type="bool" subsetting="true" label="60001" values="Simkl" default="false" visible="eq(-4,true)"/>
 		<setting id="watchlist.update.percent" type="slider" subsetting="true" label="40514" default="80" range="70,90" option="int" visible="eq(-5,true)"/>
 		<setting type="text" label="40515" visible="eq(-6,true)"/>
 

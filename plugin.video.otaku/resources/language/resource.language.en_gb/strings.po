@@ -400,7 +400,19 @@ msgid "Update Watchlist"
 msgstr ""
 
 msgctxt "#40347"
-msgid "Watchlist to update"
+msgid "MAL"
+msgstr ""
+
+msgctxt "#60002"
+msgid "Kitsu"
+msgstr ""
+
+msgctxt "#60000"
+msgid "AniList"
+msgstr ""
+
+msgctxt "#60001"
+msgid "Simkl"
 msgstr ""
 
 msgctxt "#40348"

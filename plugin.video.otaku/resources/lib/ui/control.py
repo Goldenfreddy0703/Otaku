@@ -120,15 +120,14 @@ def simkl_enabled():
 
 
 def watchlist_to_update():
-    if getSetting('watchlist.update.enabled') == 'true':
-        flavor = getSetting('watchlist.update.flavor').lower()
-        if getSetting('%s.enabled' % flavor) == 'true':
-            return flavor
+    flavor = getSetting('watchlist.update.flavor.anilist.enabled', 'watchlist.update.flavor.mal.enabled', 'watchlist.update.flavor.kitsu.enabled', 'watchlist.update.flavor.simkl.enabled').lower()
+    if getSetting('%s.enabled' % flavor) == 'true':
+        return flavor
 
 
 def watchlist_enabled():
     if getSetting('watchlist.update.enabled') == 'true':
-        flavor = getSetting('watchlist.update.flavor').lower()
+        flavor = getSetting('watchlist.update.flavor.anilist.enabled', 'watchlist.update.flavor.mal.enabled', 'watchlist.update.flavor.kitsu.enabled', 'watchlist.update.flavor.simkl.enabled').lower()
         if getSetting('%s.enabled' % flavor) == 'true':
             return True
     return False
