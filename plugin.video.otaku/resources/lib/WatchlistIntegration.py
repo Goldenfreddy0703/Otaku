@@ -88,7 +88,7 @@ def CONTEXT_MENU(payload, params):
         control.ok_dialog(heading, 'Please toggle the "Update Watchlist" setting before using the Watchlist Manager')
         return
 
-    flavor = control.getSetting('watchlist.update.flavor.anilist.enabled', 'watchlist.update.flavor.mal.enabled', 'watchlist.update.flavor.kitsu.enabled', 'watchlist.update.flavor.simkl.enabled')
+    flavor = control.getSetting('watchlist.update.flavor')
     if flavor not in flavor_settings:
         heading = "%s Watchlist: Not Supported" % flavor
         control.ok_dialog(heading, 'Your "Watchlist to Update" is set to %s but this watchlist is not supported by the Watchlist Manager' % flavor)

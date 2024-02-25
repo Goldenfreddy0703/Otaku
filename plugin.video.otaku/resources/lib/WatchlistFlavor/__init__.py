@@ -29,11 +29,6 @@ class WatchlistFlavor:
     @staticmethod
     def get_update_flavor():
         selected = control.watchlist_to_update()
-        if not selected:
-            return None
-        if not WatchlistFlavor.__SELECTED:
-            WatchlistFlavor.__SELECTED = WatchlistFlavor.__instance_flavor(selected)
-        return WatchlistFlavor.__SELECTED
 
     @staticmethod
     def watchlist_request(name):

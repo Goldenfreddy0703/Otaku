@@ -400,19 +400,7 @@ msgid "Update Watchlist"
 msgstr ""
 
 msgctxt "#40347"
-msgid "MAL"
-msgstr ""
-
-msgctxt "#60002"
-msgid "Kitsu"
-msgstr ""
-
-msgctxt "#60000"
-msgid "AniList"
-msgstr ""
-
-msgctxt "#60001"
-msgid "Simkl"
+msgid "Sync them automatically"
 msgstr ""
 
 msgctxt "#40348"
