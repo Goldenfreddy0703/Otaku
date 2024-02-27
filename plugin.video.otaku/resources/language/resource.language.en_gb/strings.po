@@ -400,7 +400,7 @@ msgid "Update Watchlist"
 msgstr ""
 
 msgctxt "#40347"
-msgid "Sync them automatically"
+msgid "Watchlist to Update"
 msgstr ""
 
 msgctxt "#40348"
