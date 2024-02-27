@@ -67,13 +67,16 @@ class sources(BrowserBase):
                 epurls = soup.find_all('a', {'class': 'playbutton'})
                 ep_not_found = True
                 for epurl in epurls:
-                    if int(epurl.text) == int(episode):
-                        ep_not_found = False
-                        epi_url = epurl.get('href')
-                        resp = database.get(client.request, 8, epi_url, referer=eurl, output='extended')
-                        cookie = resp[4]
-                        s = resp[0]
-                        break
+                    try:
+                        if int(epurl.text) == int(episode):
+                            ep_not_found = False
+                            epi_url = epurl.get('href')
+                            resp = database.get(client.request, 8, epi_url, referer=eurl, output='extended')
+                            cookie = resp[4]
+                            s = resp[0]
+                            break
+                    except:
+                        continue
                 if ep_not_found:
                     return sources
 
