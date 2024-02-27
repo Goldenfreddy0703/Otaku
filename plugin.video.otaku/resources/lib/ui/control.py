@@ -120,7 +120,8 @@ def simkl_enabled():
 
 
 def watchlist_to_update():
-    flavor = getSetting('watchlist.update.flavor').lower()
+    if getSetting('watchlist.update.enabled') == 'true':
+        flavor = getSetting('watchlist.update.flavor').lower()
     if getSetting('%s.enabled' % flavor) == 'true':
         return flavor
 
