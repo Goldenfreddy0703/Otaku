@@ -1,3 +1,6 @@
+Changelog 0.4.84[20240225]:
+- Fixed Animix to ignore special episodes
+
 Changelog 0.4.83[20240221]:
 - Added Setting to disabled Mal Connection Errors
 - Finished recent Translations using Copilot
