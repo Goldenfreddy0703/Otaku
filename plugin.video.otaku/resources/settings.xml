@@ -244,7 +244,7 @@
 		<setting type="lsep" label="40300"/>
 		<setting id="sep"/>
 		<setting id="watchlist.update.enabled" label="40346" type="bool" default="false"/>
-		<setting id="watchlist.update.flavor" type="select" subsetting="true" label="40347" values="MAL|Kitsu|AniList|Simkl" multiselect="True" visible="eq(-1,true)"></setting>
+		<setting id="watchlist.update.flavor" type="select" subsetting="true" label="40347" values="MAL|Kitsu|AniList|Simkl" multiselect="True" visible="eq(-1,true)"/>
 		<setting id="watchlist.update.percent" type="slider" subsetting="true" label="40514" default="80" range="70,90" option="int" visible="eq(-2,true)"/>
 		<setting type="text" label="40515" visible="eq(-6,true)"/>
 
