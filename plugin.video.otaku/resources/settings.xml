@@ -183,6 +183,15 @@
     	<setting id="general.movie.minGB" type="slider" subsetting="true" label="40492" option="int" default="0" range="0,100" visible="eq(-3, 2)" />
     	<setting id="general.episode.maxGB" type="slider" subsetting="true" label="40493" option="int" default="10" range="0,100" visible="eq(-4, 2)" />
     	<setting id="general.episode.minGB" type="slider" subsetting="true" label="40494" option="int" default="0" range="0,100" visible="eq(-5, 2)" />
+		<setting id="general.release_title_filter.enabled" type="bool" label="40531" default="false" />
+		<setting id="general.release_title_filter.selection" type="enum" subsetting="true" label="40532" lvalues="40533|40534|40535|40536|40537" default="0" visible="eq(-1,true)" />
+		<setting id="general.release_title_filter.logic" type="enum" subsetting="true" label="40538" lvalues="40539|40540" default="0" visible="eq(-2,true)" />
+		<setting id="general.release_title_filter.value1" type="text" subsetting="true" label="40533" default="" visible="eq(-2,0) + eq(-3,true)" />
+		<setting id="general.release_title_filter.value2" type="text" subsetting="true" label="40534" default="" visible="eq(-3,1) + eq(-4,true)" />
+		<setting id="general.release_title_filter.value3" type="text" subsetting="true" label="40535" default="" visible="eq(-4,2) + eq(-5,true)" />
+		<setting id="general.release_title_filter.value4" type="text" subsetting="true" label="40536" default="" visible="eq(-5,3) + eq(-6,true)" />
+		<setting id="general.release_title_filter.value5" type="text" subsetting="true" label="40537" default="" visible="eq(-6,4) + eq(-7,true)" />
+
 		<setting type="sep" />
 		<!-- Manual File Selection -->
 		<setting type="lsep" label="40481"/>

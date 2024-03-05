@@ -379,6 +379,21 @@ class Sources(DisplayWindow):
 
             torrent_list = [i for i in _torrent_list if i['size'] != 'NA' and min_GB <= float(i['size'][:-3]) <= max_GB]
 
+        if control.getSetting('general.release_title_filter.enabled') == 'true':
+            release_title_filter1 = control.getSetting('general.release_title_filter.value1')
+            release_title_filter2 = control.getSetting('general.release_title_filter.value2')
+            release_title_filter3 = control.getSetting('general.release_title_filter.value3')
+            release_title_filter4 = control.getSetting('general.release_title_filter.value4')
+            release_title_filter5 = control.getSetting('general.release_title_filter.value5')
+            _torrent_list = torrent_list
+            release_title_logic = control.getSetting('general.release_title_filter.logic')
+            if release_title_logic == '0':
+                # AND filter
+                torrent_list = [i for i in _torrent_list if release_title_filter1 in i['release_title'] and release_title_filter2 in i['release_title'] and release_title_filter3 in i['release_title'] and release_title_filter4 in i['release_title'] and release_title_filter5 in i['release_title']]
+            if release_title_logic == '1':
+                # OR filter
+                torrent_list = [i for i in _torrent_list if (release_title_filter1 != "" and release_title_filter1 in i['release_title']) or (release_title_filter2 != "" and release_title_filter2 in i['release_title']) or (release_title_filter3 != "" and release_title_filter3 in i['release_title']) or (release_title_filter4 != "" and release_title_filter4 in i['release_title']) or (release_title_filter5 != "" and release_title_filter5 in i['release_title'])]
+
         # Get the value of the 'sourcesort.menu' setting
         sort_option = control.getSetting('general.sourcesort')
 
