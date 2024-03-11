@@ -1,0 +1,1481 @@
+# Kodi Media Center language file
+# Addon Name: otaku
+# Addon id: plugin.video.otaku
+# Addon Provider: TeamOtaku
+#
+msgid ""
+msgstr ""
+"Last-Translator: Goldenfreddy0703\n"
+"Language-Team: \n"
+"Language: tr_TR\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Generator: Poedit 3.4.2\n"
+
+######MAIN MENU DIRECTORY#######
+msgctxt "#30000"
+msgid "Last Watched: "
+msgstr "Son İzlenen:"
+
+######TOOLS & SEARCH DIRECTORY#######
+msgctxt "#30027"
+msgid "View Changelog"
+msgstr "Değişiklikleri Görüntüle"
+
+msgctxt "#30020"
+msgid "Open Settings Menu"
+msgstr "Ayarlar Menüsünü Aç"
+
+msgctxt "#30021"
+msgid "Clear Cache"
+msgstr "Önbelleği Temizle"
+
+msgctxt "#30022"
+msgid "Clear Local Torrent Cache"
+msgstr "Yerel Torrent Önbelleğini Temizle"
+
+msgctxt "#30023"
+msgid "Clear Search History"
+msgstr "Arama Geçmişini Temizle"
+
+msgctxt "#30024"
+msgid "Wipe Addon Data"
+msgstr "Eklenti Verilerini Sil"
+
+msgctxt "#30025"
+msgid "This will completely clear your addon settings. Are you sure you want to do this?"
+msgstr "Bu, eklenti ayarlarınızı tamamen silecektir. Bunu yapmak istediğinizden emin misiniz?"
+
+msgctxt "#30026"
+msgid "Rebuild Database"
+msgstr "Veritabanını Yeniden Oluştur"
+
+######DEBRID DIRECTORY#######
+msgctxt "#30100"
+msgid "Open this link in a browser: {}"
+msgstr "Bu bağlantıyı bir tarayıcıda açın: {}"
+
+msgctxt "#30101"
+msgid "Enter the code: {}"
+msgstr "Kodu girin: {}"
+
+msgctxt "#30102"
+msgid "This code has been copied to your clipboard"
+msgstr "Bu kod panonuza kopyalandı"
+
+msgctxt "#30103"
+msgid "Authentication is completed"
+msgstr "Kimlik doğrulama tamamlandı"
+
+msgctxt "#30104"
+msgid "Please Note\nYou appear to have authorized a non-premium account and will not be able to play items using this account"
+msgstr "Lütfen Dikkat\nGörünüşe göre premium olmayan bir hesabı yetkilendirdiniz ve bu hesapla öğeleri oynatamayacaksınız"
+
+msgctxt "#30105"
+msgid "Authentication with Real-Debrid has failed, please try again"
+msgstr "Real-Debrid ile kimlik doğrulama başarısız oldu, lütfen tekrar deneyin"
+
+msgctxt "#30121"
+msgid "Cloudflare & DDoS-GUARD Solver"
+msgstr "Cloudflare ve DDoS-GUARD Çözücüsü"
+
+msgctxt "#30122"
+msgid "Enable FlareSolverr"
+msgstr "FlareSolverr'ı Etkinleştir"
+
+msgctxt "#30123"
+msgid "FlareSolverr url"
+msgstr "FlareSolverr URL'si"
+
+msgctxt "#30124"
+msgid "FlareSolverr Timeout"
+msgstr "FlareSolverr Zaman Aşımı"
+
+######DATABASE.PY######
+msgctxt "#30200"
+msgid "Cache"
+msgstr "Önbellek"
+
+msgctxt "#30201"
+msgid "All Cache Successfully Cleared"
+msgstr "Tüm Önbellek Başarıyla Temizlendi"
+
+msgctxt "#30202"
+msgid "Local Result Cache Successfully Cleared"
+msgstr "Yerel Sonuç Önbelleği Başarıyla Temizlendi"
+
+msgctxt "#30203"
+msgid "[COLOR red]WARNING[/COLOR]\nThis will reset all meta information, are you sure?"
+msgstr "[COLOR red]UYARI[/COLOR]\nBu, tüm meta bilgilerini sıfırlayacak, emin misiniz?"
+
+msgctxt "#30204"
+msgid "Database"
+msgstr "Veritabanı"
+
+msgctxt "#30205"
+msgid "Metadata Database Successfully Cleared"
+msgstr "Meta Veritabanı Başarıyla Temizlendi"
+
+######SKINS DIRECTORY######
+msgctxt "#40100"
+msgid "[B]Open this link in a browser: [COLOR deepskyblue]https://armkai.vercel.app/api/mal[/COLOR][/B]"
+msgstr "[B]Bu bağlantıyı bir tarayıcıda açın: [COLOR deepskyblue]https://armkai.vercel.app/api/mal[/COLOR][/B]"
+
+msgctxt "#40101"
+msgid "[B]After authorizing, MAL will redirect to its homepage. Copy & paste the redirect url (e.g. url [COLOR deepskyblue]https://myanimelist.net/?code=...[/COLOR]) below.[/B]"
+msgstr "[B]Yetkilendirme işleminden sonra, MAL ana sayfasına yönlendirilecektir. Yönlendirme URL'sini (ör. [COLOR deepskyblue]https://myanimelist.net/?code=...[/COLOR]) aşağıya kopyalayın ve yapıştırın.[/B]"
+
+msgctxt "#40105"
+msgid "[B]Open this link in a browser: [COLOR deepskyblue]https://armkai.vercel.app/api/anilist[/COLOR][/B]"
+msgstr "[B]Bu bağlantıyı bir tarayıcıda açın: [COLOR deepskyblue]https://armkai.vercel.app/api/anilist[/COLOR][/B]"
+
+msgctxt "#40106"
+msgid "[B]After authorizing, copy & paste the token below.[/B]"
+msgstr "[B]Yetkilendirme işleminden sonra, belirtilen belirteci kopyalayın ve yapıştırın.[/B]"
+
+msgctxt "#40110"
+msgid "[B]*Note: If using addon on Amazon Fire TV Stick/Android TV Box, you can copy & paste text using a Kodi remote app like [COLOR limegreen]Kore[/COLOR] or [COLOR limegreen]Yatse[/COLOR][/B]"
+msgstr "[B]*Not: Amazon Fire TV Stick/Android TV Box üzerinde eklentiyi kullanıyorsanız, [COLOR limegreen]Kore[/COLOR] veya [COLOR limegreen]Yatse[/COLOR] gibi bir Kodi uzaktan kumanda uygulaması kullanarak metin kopyalayabilir ve yapıştırabilirsiniz.[/B]"
+
+msgctxt "#40221"
+msgid "Torrents"
+msgstr "Torrentler"
+
+msgctxt "#40222"
+msgid "Cached"
+msgstr "Önbelleğe Alınmış"
+
+msgctxt "#40223"
+msgid "Embeds"
+msgstr "Gömülü"
+
+msgctxt "#40224"
+msgid "Cloudfiles"
+msgstr "Bulut Dosyaları"
+
+msgctxt "#40225"
+msgid "Remaining providers"
+msgstr "Kalan sağlayıcılar"
+
+msgctxt "#40226"
+msgid "Provider"
+msgstr "Sağlayıcı"
+
+msgctxt "#40227"
+msgid "Source"
+msgstr "Kaynak"
+
+msgctxt "#40228"
+msgid "Resolution"
+msgstr "Çözünürlük"
+
+msgctxt "#40229"
+msgid "Info"
+msgstr "Bilgi"
+
+msgctxt "#40230"
+msgid "Year"
+msgstr "Yıl"
+
+msgctxt "#40231"
+msgid "Rating"
+msgstr "Değerlendirme"
+
+msgctxt "#40232"
+msgid "Aired"
+msgstr "Yayınlanma Tarihi"
+
+msgctxt "#40233"
+msgid "Debrid"
+msgstr "Debrid"
+
+msgctxt "#40234"
+msgid "Size"
+msgstr "Boyut"
+
+msgctxt "#40235"
+msgid "Provider"
+msgstr "Sağlayıcı"
+
+msgctxt "#40236"
+msgid "Source type"
+msgstr "Kaynak türü"
+
+msgctxt "#40237"
+msgid "Resolution"
+msgstr "Çözünürlük"
+
+msgctxt "#40238"
+msgid "Info"
+msgstr ""
+
+######SETTINGS.XML VALUES######
+msgctxt "#40300"
+msgid "General"
+msgstr "Genel"
+
+msgctxt "#40301"
+msgid "Enable search history"
+msgstr "Arama geçmişini etkinleştir"
+
+msgctxt "#40302"
+msgid "Content Customization"
+msgstr "İçerik Özelleştirme"
+
+msgctxt "#40303"
+msgid "Set view types"
+msgstr "Görünüm türlerini ayarla"
+
+msgctxt "#40304"
+msgid "Menu view type"
+msgstr "Menü görünüm türü"
+
+msgctxt "#40305"
+msgid "addons"
+msgstr "eklentiler"
+
+msgctxt "#40306"
+msgid "tvshows"
+msgstr "tv şovları"
+
+msgctxt "#40307"
+msgid "Playback"
+msgstr "Oynatma"
+
+msgctxt "#40308"
+msgid "Movie Play Style"
+msgstr "Film Oynatma Stili"
+
+msgctxt "#40309"
+msgid "Episode Play Style"
+msgstr "Bölüm Oynatma Stili"
+
+msgctxt "#40310"
+msgid "Auto Play"
+msgstr "Otomatik Oynat"
+
+msgctxt "#40311"
+msgid "Source Select"
+msgstr "Kaynak Seç"
+
+msgctxt "#40312"
+msgid "Auto try next link on resolve failure (Source Select)"
+msgstr "Çözünme hatası durumunda otomatik olarak bir sonraki bağlantıyı dene (Kaynak Seç)"
+
+msgctxt "#40313"
+msgid "Preferences"
+msgstr "Tercihler"
+
+msgctxt "#40314"
+msgid "Preferred Audio Playback (Dual Audio)"
+msgstr "Tercih Edilen Ses Oynatma (Çift Ses)"
+
+msgctxt "#40315"
+msgid "Japanese"
+msgstr "Japonca"
+
+msgctxt "#40316"
+msgid "English"
+msgstr "İngilizce"
+
+msgctxt "#40317"
+msgid "Playing Next Dialog"
+msgstr "Sonraki Oynatma İletisi"
+
+msgctxt "#40318"
+msgid "Enable Playing Next Dialog"
+msgstr "Sonraki Oynatma İletisini Etkinleştir"
+
+msgctxt "#40319"
+msgid "Minimum Seconds Left Before Showing Dialog"
+msgstr "İletiyi Göstermeden Önce Minimum Saniye"
+
+msgctxt "#40320"
+msgid "Default Action if Nothing Selected"
+msgstr "Hiçbir Şey Seçilmediğinde Varsayılan Eylem"
+
+msgctxt "#40321"
+msgid "Play"
+msgstr "Oynat"
+
+msgctxt "#40322"
+msgid "Pause"
+msgstr "Duraklat"
+
+msgctxt "#40323"
+msgid "Skip Intro Dialog"
+msgstr "Giriş İletisini Atla"
+
+msgctxt "#40324"
+msgid "Enable Skip Intro Dialog"
+msgstr "Giriş İletisini Atlamayı Etkinleştir"
+
+msgctxt "#40325"
+msgid "Seconds to skip"
+msgstr "Atlamak için Saniyeler"
+
+msgctxt "#40326"
+msgid "Sort & Filter"
+msgstr "Sırala ve Filtrele"
+
+msgctxt "#40327"
+msgid "Source Filters"
+msgstr "Kaynak Filtreleri"
+
+msgctxt "#40328"
+msgid "Max Resolution"
+msgstr "Maksimum Çözünürlük"
+
+msgctxt "#40329"
+msgid "Hide HEVC Items"
+msgstr "HEVC Öğelerini Gizle"
+
+msgctxt "#40330"
+msgid "Preferred Source Type"
+msgstr "Tercih Edilen Kaynak Türü"
+
+msgctxt "#40331"
+msgid "Sort Sourcing"
+msgstr "Kaynakları Sırala"
+
+msgctxt "#40332"
+msgid "Sort Sources Method"
+msgstr "Kaynakları Sıralama Yöntemi"
+
+msgctxt "#40333"
+msgid "Teritary Sort Preferences"
+msgstr "Üçüncül Sıralama Tercihleri"
+
+msgctxt "#40334"
+msgid "Accounts"
+msgstr "Hesaplar"
+
+msgctxt "#40335"
+msgid "Real-Debrid"
+msgstr "Real-Debrid"
+
+msgctxt "#40336"
+msgid "Enable Real-Debrid..."
+msgstr "Real-Debrid'i Etkinleştir..."
+
+msgctxt "#40337"
+msgid "Real-Debrid Username"
+msgstr "Real-Debrid Kullanıcı Adı"
+
+msgctxt "#40338"
+msgid "Authorize Real-Debrid..."
+msgstr "Real-Debrid Yetkilendir..."
+
+msgctxt "#40339"
+msgid "Real-Debrid Priority"
+msgstr "Real-Debrid Önceliği"
+
+msgctxt "#40340"
+msgid "AllDebrid"
+msgstr "AllDebrid"
+
+msgctxt "#40341"
+msgid "Enable AllDebrid..."
+msgstr "AllDebrid'i Etkinleştir..."
+
+msgctxt "#40342"
+msgid "AllDebrid Username"
+msgstr "AllDebrid Kullanıcı Adı"
+
+msgctxt "#40343"
+msgid "Authorize AllDebrid..."
+msgstr "AllDebrid Yetkilendir..."
+
+msgctxt "#40344"
+msgid "All-Debrid Priority"
+msgstr "All-Debrid Önceliği"
+
+msgctxt "#40345"
+msgid "Watchlist"
+msgstr "İzleme Listesi"
+
+msgctxt "#40346"
+msgid "Update Watchlist"
+msgstr "İzleme Listesini Güncelle"
+
+msgctxt "#40347"
+msgid "Watchlist to update"
+msgstr "Güncellenecek İzleme Listesi"
+
+msgctxt "#40348"
+msgid "AniList"
+msgstr "AniList"
+
+msgctxt "#40349"
+msgid "Enable AniList"
+msgstr "AniList'i Etkinleştir"
+
+msgctxt "#40350"
+msgid "Username:"
+msgstr "Kullanıcı adı:"
+
+msgctxt "#40351"
+msgid "Token:"
+msgstr "Token:"
+
+msgctxt "#40352"
+msgid "Click to Authorize..."
+msgstr "Yetkilendirmek için tıklayın..."
+
+msgctxt "#40353"
+msgid "List settings..."
+msgstr "Liste ayarları..."
+
+msgctxt "#40354"
+msgid "Sort by:"
+msgstr "Sırala:"
+
+msgctxt "#40355"
+msgid "Kitsu"
+msgstr "Kitsu"
+
+msgctxt "#40356"
+msgid "Enable Kitsu"
+msgstr "Kitsu'yu Etkinleştir"
+
+msgctxt "#40357"
+msgid "Email:"
+msgstr "E-posta:"
+
+msgctxt "#40358"
+msgid "Password:"
+msgstr "Parola:"
+
+msgctxt "#40359"
+msgid "Click to Login..."
+msgstr "Giriş yapmak için tıklayın..."
+
+msgctxt "#40360"
+msgid "How titles will be displayed:"
+msgstr "Başlıklar nasıl görüntülenecek:"
+
+msgctxt "#40361"
+msgid "MyAnimeList"
+msgstr "MyAnimeList"
+
+msgctxt "#40362"
+msgid "Enable MyAnimeList"
+msgstr "MyAnimeList'i Etkinleştir"
+
+msgctxt "#40363"
+msgid "Premiumize"
+msgstr "Premiumize"
+
+msgctxt "#40364"
+msgid "Enable Premiumize..."
+msgstr "Premiumize'ı Etkinleştir..."
+
+msgctxt "#40365"
+msgid "Premiumize Username"
+msgstr "Premiumize Kullanıcı Adı"
+
+msgctxt "#40366"
+msgid "Authorize Premiumize..."
+msgstr "Premiumize Yetkilendir..."
+
+msgctxt "#40367"
+msgid "Premiumize Priority"
+msgstr "Premiumize Önceliği"
+
+msgctxt "#40368"
+msgid "episodes"
+msgstr "bölümler"
+
+msgctxt "#40369"
+msgid "Title Language"
+msgstr "Başlık Dili"
+
+msgctxt "#40370"
+msgid "Romaji (Shingeki no Kyojin)"
+msgstr "Romaji (Shingeki no Kyojin)"
+
+msgctxt "#40371"
+msgid "English (Attack on Titan)"
+msgstr "İngilizce (Attack on Titan)"
+
+msgctxt "#40372"
+msgid "Inspect Cloud Files on Scrape"
+msgstr "Kazıma sırasında Bulut Dosyalarını İncele"
+
+msgctxt "#40373"
+msgid "Language Invoker Options"
+msgstr "Dil İndükleme Seçenekleri"
+
+msgctxt "#40374"
+msgid "Re-Use Language Invoker Status"
+msgstr "Dil İndükleme Durumunu Tekrar Kullan"
+
+msgctxt "#40375"
+msgid "Toggle Re-Use Language Invoker"
+msgstr "Dil İndükleme Durumunu Değiştir"
+
+msgctxt "#40376"
+msgid "Auto close dialog"
+msgstr "Otomatik iletişim kutusunu kapat"
+
+msgctxt "#40377"
+msgid "Seconds before closing"
+msgstr "Kapatmadan önce saniyeler"
+
+msgctxt "#40378"
+msgid "Enable Gogo Scraping"
+msgstr "Gogo Kazımasını Etkinleştir"
+
+msgctxt "#40379"
+msgid "Enable Source Scraping"
+msgstr "Kaynak Kazımasını Etkinleştir"
+
+msgctxt "#40380"
+msgid "Enable Season Parsing (Disable if Performance Issues)"
+msgstr "Sezon Ayrıştırmasını Etkinleştir (Performans Sorunları Varsa Devre Dışı Bırakın)"
+
+msgctxt "#40381"
+msgid "Enable Season Part Scraping"
+msgstr "Sezon Parça Kazımasını Etkinleştir"
+
+msgctxt "#40382"
+msgid "Manual Watchlist Update"
+msgstr "Elle İzleme Listesi Güncellemesi"
+
+msgctxt "#40383"
+msgid "seconds"
+msgstr "saniyeler"
+
+msgctxt "#40384"
+msgid "Playing in"
+msgstr "Oynatılıyor"
+
+msgctxt "#40385"
+msgid "Next Up"
+msgstr "Sonraki"
+
+msgctxt "#40386"
+msgid "Play now"
+msgstr "Şimdi oyna"
+
+msgctxt "#40387"
+msgid "Search Subs For Language Other Than English"
+msgstr "İngilizce Dışında Dil İçin Altyazı Ara"
+
+msgctxt "#40388"
+msgid "Icon Theme"
+msgstr "Simge Teması"
+
+msgctxt "#40389"
+msgid "Coloured"
+msgstr "Renkli"
+
+msgctxt "#40390"
+msgid "White"
+msgstr "Beyaz"
+
+msgctxt "#40391"
+msgid "Set Content Format"
+msgstr "İçerik Formatını Ayarla"
+
+msgctxt "#40392"
+msgid "Format"
+msgstr "Biçim"
+
+msgctxt "#40393"
+msgid "TV"
+msgstr "TV"
+
+msgctxt "#40394"
+msgid "MOVIE"
+msgstr "FİLM"
+
+msgctxt "#40395"
+msgid "TV_SHORT"
+msgstr "TV_KISA"
+
+msgctxt "#40396"
+msgid "SPECIAL"
+msgstr "ÖZEL"
+
+msgctxt "#40397"
+msgid "OVA"
+msgstr "OVA"
+
+msgctxt "#40398"
+msgid "ONA"
+msgstr "ONA"
+
+msgctxt "#40399"
+msgid "MUSIC"
+msgstr "MÜZİK"
+
+msgctxt "#40409"
+msgid "Search Filter"
+msgstr "Arama Filtresi"
+
+msgctxt "#40410"
+msgid "Enable searching mature titles only"
+msgstr "Sadece yetişkin içerikli başlıkları aramayı etkinleştir"
+
+msgctxt "#40411"
+msgid "Debrid-Link"
+msgstr "Debrid-Link"
+
+msgctxt "#40412"
+msgid "Enable Debrid-Link..."
+msgstr "Debrid-Link'i Etkinleştir..."
+
+msgctxt "#40413"
+msgid "Debrid-Link Username"
+msgstr "Debrid-Link Kullanıcı Adı"
+
+msgctxt "#40414"
+msgid "Authorize Debrid-Link..."
+msgstr "Debrid-Link Yetkilendir..."
+
+msgctxt "#40415"
+msgid "Debrid-Link Priority"
+msgstr "Debrid-Link Önceliği"
+
+msgctxt "#40416"
+msgid "Maintenance"
+msgstr "Bakım"
+
+msgctxt "#40417"
+msgid "Hide Sub Sources"
+msgstr "Altyazı Kaynaklarını Gizle"
+
+msgctxt "#40418"
+msgid "Set Country Of Origin"
+msgstr "Menşe Ülkesini Ayarla"
+
+msgctxt "#40419"
+msgid "Country"
+msgstr "Ülke"
+
+msgctxt "#40420"
+msgid "Japan"
+msgstr "Japonya"
+
+msgctxt "#40421"
+msgid "South Korea"
+msgstr "Güney Kore"
+
+msgctxt "#40422"
+msgid "China"
+msgstr "Çin"
+
+msgctxt "#40423"
+msgid "Taiwan"
+msgstr "Tayvan"
+
+msgctxt "#40424"
+msgid "Set Delay in Seconds Before Showing Dialog"
+msgstr "İletiyi Göstermeden Önce Gecikmeyi Ayarla (saniye)"
+
+msgctxt "#40425"
+msgid "Timeout for finding sources (seconds)"
+msgstr "Kaynakları Bulma Süresi (saniye)"
+
+msgctxt "#40426"
+msgid "Show Changelog every update"
+msgstr "Her güncellemede değişiklik günlüğünü göster"
+
+msgctxt "#40427"
+msgid "Enable Automatic Subtitles for Dub Streams"
+msgstr "Dub Akışları için Otomatik Altyazıyı Etkinleştir"
+
+msgctxt "#40428"
+msgid "Set Anime Filter"
+msgstr "Anime Filtresini Ayarla"
+
+msgctxt "#40429"
+msgid "Filter"
+msgstr "Filtre"
+
+msgctxt "#40430"
+msgid "Duration of how long the Dialog will appear"
+msgstr "İletinin Ne Kadar Süreyle Görüneceği"
+
+msgctxt "#40431"
+msgid "Enable Aniskip [COLOR yellow]BETA[/COLOR]"
+msgstr "Aniskip'i Etkinleştir [COLOR yellow]BETA[/COLOR]"
+
+msgctxt "#40432"
+msgid "Offset for Aniskip (seconds)"
+msgstr "Aniskip için Ofset (saniye)"
+
+msgctxt "#40433"
+msgid "Disable Scraping Screen Fanart"
+msgstr "Ekran Fanartını Devre Dışı Bırak"
+
+msgctxt "#40434"
+msgid "Disable Scraping Screen Clearlogo"
+msgstr "Ekran Clearlogo'sunu Devre Dışı Bırak"
+
+msgctxt "#40435"
+msgid "Preferred Subtitle Language"
+msgstr "Tercih Edilen Altyazı Dili"
+
+msgctxt "#40436"
+msgid "English"
+msgstr "İngilizce"
+
+msgctxt "#40437"
+msgid "Japanese"
+msgstr "Japonca"
+
+msgctxt "#40438"
+msgid "Spanish"
+msgstr "İspanyolca"
+
+msgctxt "#40439"
+msgid "French"
+msgstr "Fransızca"
+
+msgctxt "#40440"
+msgid "German"
+msgstr "Almanca"
+
+msgctxt "#40441"
+msgid "Italian"
+msgstr "İtalyanca"
+
+msgctxt "#40442"
+msgid "Dutch"
+msgstr "Hollandaca"
+
+msgctxt "#40443"
+msgid "Russian"
+msgstr "Rusça"
+
+msgctxt "#40444"
+msgid "Portuguese"
+msgstr "Portekizce"
+
+msgctxt "#40445"
+msgid "Korean"
+msgstr "Korece"
+
+msgctxt "#40446"
+msgid "Chinese"
+msgstr "Çince"
+
+msgctxt "#40447"
+msgid "Arabic"
+msgstr "Arapça"
+
+msgctxt "#40448"
+msgid "Hindi"
+msgstr "Hintçe"
+
+msgctxt "#40449"
+msgid "Turkish"
+msgstr "Türkçe"
+
+msgctxt "#40450"
+msgid "Polish"
+msgstr "Lehçe"
+
+msgctxt "#40451"
+msgid "Swedish"
+msgstr "İsveççe"
+
+msgctxt "#40452"
+msgid "Norwegian"
+msgstr "Norveççe"
+
+msgctxt "#40453"
+msgid "Danish"
+msgstr "Danca"
+
+msgctxt "#40454"
+msgid "Finnish"
+msgstr "Fince"
+
+msgctxt "#40455"
+msgid "Dialog Theme (Use only if you're on the skin)"
+msgstr "İleti Teması (Sadece ciltteyseniz kullanın)"
+
+msgctxt "#40456"
+msgid "Default"
+msgstr "Varsayılan"
+
+msgctxt "#40457"
+msgid "Arctic Horizon 2"
+msgstr "Arctic Horizon 2"
+
+msgctxt "#40458"
+msgid "AuraMod"
+msgstr "AuraMod"
+
+msgctxt "#40459"
+msgid "Preferred Playlist Size"
+msgstr "Tercih Edilen Oynatma Listesi Boyutu"
+
+msgctxt "#40460"
+msgid "Enable Automatic Outro Skip"
+msgstr "Otomatik Outro Atlamayı Etkinleştir"
+
+msgctxt "#40461"
+msgid "Enable Automatic Intro Skip"
+msgstr "Otomatik Intro Atlamayı Etkinleştir"
+
+msgctxt "#40462"
+msgid "Prioritize Dual-Audio Sources"
+msgstr "Çift Sesli Kaynakları Önceliklendir"
+
+msgctxt "#40463"
+msgid "Prioritize Multisubs Sources"
+msgstr "Çoklu Altyazı Kaynaklarını Önceliklendir"
+
+msgctxt "#40464"
+msgid "Prioritize Batch Sources"
+msgstr "Toplu Kaynakları Önceliklendir"
+
+msgctxt "#40465"
+msgid "Prioritized Source Sorting & Filtering"
+msgstr "Öncelikli Kaynak Sıralama ve Filtreleme"
+
+msgctxt "#40466"
+msgid "Set Items Per Page"
+msgstr "Sayfa Başına Öğe Sayısını Ayarla"
+
+msgctxt "#40467"
+msgid "Items"
+msgstr "Öğeler"
+
+msgctxt "#40468"
+msgid "Prioritize By Season"
+msgstr "Sezona Göre Önceliklendir"
+
+msgctxt "#40469"
+msgid "Season Number"
+msgstr "Sezon Numarası"
+
+msgctxt "#40470"
+msgid "Prioritize By Part"
+msgstr "Bölüme Göre Önceliklendir"
+
+msgctxt "#40471"
+msgid "Part Number"
+msgstr "Bölüm Numarası"
+
+msgctxt "#40472"
+msgid "Set Streaming Site"
+msgstr "Akış Sitesini Ayarla"
+
+msgctxt "#40473"
+msgid "Site"
+msgstr "Site"
+
+msgctxt "#40474"
+msgid "Advanced"
+msgstr "Gelişmiş"
+
+msgctxt "#40475"
+msgid "Manual Episode Meta Api Override"
+msgstr "Elle Bölüm Meta Api Geçersiz Kılma"
+
+msgctxt "#40476"
+msgid "Api"
+msgstr "Api"
+
+msgctxt "#40477"
+msgid "Consumet Self-Hosting"
+msgstr "Kendi Barındırma Kullan"
+
+msgctxt "#40478"
+msgid "Enable Consumet Self-Hosting"
+msgstr "Kendi Barındırmayı Etkinleştir"
+
+msgctxt "#40479"
+msgid "Self-Host Url"
+msgstr "Kendi Barındırma URL'si"
+
+msgctxt "#40480"
+msgid "Hosting Instructions"
+msgstr "Barındırma Talimatları"
+
+msgctxt "#40481"
+msgid "Manual File Selection"
+msgstr "Elle Dosya Seçimi"
+
+msgctxt "#40482"
+msgid "Enable Manual File Selection for Batch Torrents"
+msgstr "Toplu Torrentlar İçin Elle Dosya Seçimini Etkinleştir"
+
+msgctxt "#40483"
+msgid "Smart Episode Scrolling (Only works in List View )"
+msgstr "Akıllı Bölüm Kaydırma (Sadece Liste Görünümünde çalışır)"
+
+msgctxt "#40484"
+msgid "Artwork Customization"
+msgstr "Sanat Eseri Özelleştirme"
+
+msgctxt "#40485"
+msgid "General Customization"
+msgstr "Genel Özelleştirme"
+
+msgctxt "#40486"
+msgid "Hide Episode Info and Plot"
+msgstr "Bölüm Bilgilerini ve Özetini Gizle"
+
+msgctxt "#40487"
+msgid "Smart Scroll Wait Time"
+msgstr "Akıllı Kaydırma Bekleme Süresi"
+
+msgctxt "#40488"
+msgid "Clean Cache On Update"
+msgstr "Güncellemede Önbelleği Temizle"
+
+msgctxt "#40489"
+msgid "Source Filtering by Size"
+msgstr "Boyuta Göre Kaynak Filtreleme"
+
+msgctxt "#40490"
+msgid "Internet Speed (Mbps)"
+msgstr "İnternet Hızı (Mbps)"
+
+msgctxt "#40491"
+msgid "Movie Max Size (GB)"
+msgstr "Film Maksimum Boyutu (GB)"
+
+msgctxt "#40492"
+msgid "Movie Min Size (GB)"
+msgstr "Film Minimum Boyutu (GB)"
+
+msgctxt "#40493"
+msgid "Episode Max Size (GB)"
+msgstr "Bölüm Maksimum Boyutu (GB)"
+
+msgctxt "#40494"
+msgid "Episode Min Size (GB)"
+msgstr "Bölüm Minimum Boyutu (GB)"
+
+msgctxt "#40495"
+msgid "Use Kodi's Preferred Language Settings"
+msgstr "Kodi'nin Tercih Edilen Dil Ayarlarını Kullan"
+
+msgctxt "#40496"
+msgid "Terminate on Cloud Sources"
+msgstr "Bulut Kaynaklarda Sonlandır"
+
+msgctxt "#40497"
+msgid "Off"
+msgstr "Kapalı"
+
+msgctxt "#40498"
+msgid "Internet Speed"
+msgstr "İnternet Hızı"
+
+msgctxt "#40499"
+msgid "Hard Limit"
+msgstr "Sıkı Sınırlama"
+
+msgctxt "#40500"
+msgid "Hide BATCH Items"
+msgstr "TOPLU Öğeleri Gizle"
+
+msgctxt "#40501"
+msgid "Show Delete from Database in Context Menu"
+msgstr "Veritabanından Sil'i İçerik Menüsünde Göster"
+
+msgctxt "#40502"
+msgid "Re-Use Language Invoker"
+msgstr "Dil İsteyicisini Yeniden Kullan"
+
+msgctxt "#40503"
+msgid "Toggle Re-Use Language Invoker:    [COLOR red]Faster speeds but some instability![/COLOR]"
+msgstr "Dil İsteyicisini Aç/Kapat:    [COLOR red]Daha hızlı ancak bazı kararsızlıklar![/COLOR]"
+
+msgctxt "#40504"
+msgid "Universal Sub Embeds"
+msgstr "Evrensel Altyazı Gömülüleri"
+
+msgctxt "#40505"
+msgid "English Sub/Dub Embeds"
+msgstr "İngilizce Altyazı/Dublaj Gömülüleri"
+
+msgctxt "#40506"
+msgid "Portuguese Sub/Dub Embeds"
+msgstr "Portekizce Altyazı/Dublaj Gömülüleri"
+
+msgctxt "#40507"
+msgid "None"
+msgstr "Hiçbiri"
+
+msgctxt "#40508"
+msgid "Spanish Sub/Dub Embeds"
+msgstr "İspanyolca Altyazı/Dublaj Gömülüleri"
+
+msgctxt "#40509"
+msgid "French Sub/Dub Embeds"
+msgstr "Fransızca Altyazı/Dublaj Gömülüleri"
+
+msgctxt "#40510"
+msgid "Simkl"
+msgstr "Simkl"
+
+msgctxt "#40511"
+msgid "Enable Simkl"
+msgstr "Simkl'yi etkinleştir"
+
+msgctxt "#40512"
+msgid "Context Menu Customization"
+msgstr "İçerik Menüsü Özelleştirme"
+
+msgctxt "#40513"
+msgid "Show 'Marked as Watched [COLOR blue](Watchlist)[/COLOR]' in Context Menu"
+msgstr "İçerik Menüsünde 'İzlenmiş Olarak İşaretlendi [COLOR blue](İzleme Listesi)[/COLOR]' göster"
+
+msgctxt "#40514"
+msgid "Set Percent to Mark as Watched"
+msgstr "İzlenmiş Olarak İşaretlemek İçin Yüzde Ayarla"
+
+msgctxt "#40515"
+msgid "NOTE: Next up Dialog will not begin until this percentage is met"
+msgstr "NOT: Sonraki İzlenecek İletişim Kutusu, bu yüzdeye ulaşılana kadar başlamayacaktır"
+
+msgctxt "#40516"
+msgid "Hide Unaired Episodes"
+msgstr "Yayınlanmamış Bölümleri Gizle"
+
+msgctxt "#40517"
+msgid "Set Content Year"
+msgstr "İçerik Yılını Ayarla"
+
+msgctxt "#40518"
+msgid "Year"
+msgstr "Yıl"
+
+msgctxt "#40519"
+msgid "Set Content Season"
+msgstr "İçerik Sezonunu Ayarla"
+
+msgctxt "#40520"
+msgid "Season"
+msgstr "Sezon"
+
+msgctxt "#40521"
+msgid "Winter"
+msgstr "Kış"
+
+msgctxt "#40522"
+msgid "Spring"
+msgstr "İlkbahar"
+
+msgctxt "#40523"
+msgid "Summer"
+msgstr "Yaz"
+
+msgctxt "#40524"
+msgid "Fall"
+msgstr "Sonbahar"
+
+msgctxt "#40526"
+msgid "Arctic Fuse"
+msgstr "Kutup Sigortası"
+
+msgctxt "#40527"
+msgid "Italian Sub/Dub Embeds"
+msgstr "İtalyanca Altyazı/Dublaj Gömülüleri"
+
+msgctxt "#40528"
+msgid "Providers"
+msgstr "Sağlayıcılar"
+
+msgctxt "#40529"
+msgid "Embeds"
+msgstr "Gömülüler"
+
+msgctxt "#40530"
+msgid "Disable connection error notifications?"
+msgstr "Bağlantı hatası bildirimlerini devre dışı bırakılsın mı?"
+
+msgctxt "#40531"
+msgid "Source Filtering by Release Title"
+msgstr "Yayın Başlığına Göre Kaynak Filtreleme"
+
+msgctxt "#40532"
+msgid "Filter Selection"
+msgstr "Filtre Seçimi"
+
+msgctxt "#40533"
+msgid "Release Title Filter 1"
+msgstr "Yayın Başlığı Filtresi 1"
+
+msgctxt "#40534"
+msgid "Release Title Filter 2"
+msgstr "Yayın Başlığı Filtresi 2"
+
+msgctxt "#40535"
+msgid "Release Title Filter 3"
+msgstr "Yayın Başlığı Filtresi 3"
+
+msgctxt "#40536"
+msgid "Release Title Filter 4"
+msgstr "Yayın Başlığı Filtresi 4"
+
+msgctxt "#40537"
+msgid "Release Title Filter 5"
+msgstr "Yayın Başlığı Filtresi 5"
+
+msgctxt "#40538"
+msgid "Filter Logic for Multiple Filters"
+msgstr "Birden Fazla Filtre İçin Filtre Mantığı"
+
+msgctxt "#40539"
+msgid "AND"
+msgstr "VE"
+
+msgctxt "#40540"
+msgid "OR"
+msgstr "VEYA"
+
+msgctxt "#40541"
+msgid "Replace Anilist Posters with Mal Posters"
+msgstr "Anilist Posterlerini Mal Posterleriyle Değiştir"
+
+######MAIN Category DIRECTORY#######
+msgctxt "#50000"
+msgid "Airing Anime Calendar"
+msgstr "Yayınlanan Anime Takvimi"
+
+msgctxt "#50001"
+msgid "Airing Anime"
+msgstr "Yayınlanan Anime"
+
+msgctxt "#50002"
+msgid "Movies"
+msgstr "Filmler"
+
+msgctxt "#50003"
+msgid "TV Shows"
+msgstr "TV Programları"
+
+msgctxt "#50004"
+msgid "Trending"
+msgstr "Trend"
+
+msgctxt "#50005"
+msgid "Popular"
+msgstr "Popüler"
+
+msgctxt "#50006"
+msgid "Voted"
+msgstr "Oy Verilen"
+
+msgctxt "#50007"
+msgid "Completed"
+msgstr "Tamamlanan"
+
+msgctxt "#50008"
+msgid "Upcoming"
+msgstr "Yaklaşan"
+
+msgctxt "#50009"
+msgid "Top 100 Anime"
+msgstr "En İyi 100 Anime"
+
+msgctxt "#50010"
+msgid "Genres & Tags"
+msgstr "Türler ve Etiketler"
+
+msgctxt "#50011"
+msgid "Search"
+msgstr "Ara"
+
+msgctxt "#50012"
+msgid "Tools"
+msgstr "Araçlar"
+
+msgctxt "#50013"
+msgid "Trending Last year"
+msgstr "Geçen Yılın Trendleri"
+
+msgctxt "#50014"
+msgid "Popular Last year"
+msgstr "Geçen Yılın Popülerleri"
+
+msgctxt "#50015"
+msgid "Voted Last year"
+msgstr "Geçen Yılın Oylananları"
+
+msgctxt "#50016"
+msgid "Completed Last year"
+msgstr "Geçen Yıl Tamamlananlar"
+
+msgctxt "#50017"
+msgid "Upcoming Last year"
+msgstr "Geçen Yılın Yaklaşanları"
+
+msgctxt "#50018"
+msgid "Trending This year"
+msgstr "Bu Yılın Trendleri"
+
+msgctxt "#50019"
+msgid "Popular This year"
+msgstr "Bu Yılın Popülerleri"
+
+msgctxt "#50020"
+msgid "Voted This year"
+msgstr "Bu Yılın Oylananları"
+
+msgctxt "#50021"
+msgid "Completed This year"
+msgstr "Bu Yıl Tamamlananlar"
+
+msgctxt "#50022"
+msgid "Upcoming This year"
+msgstr "Bu Yılın Yaklaşanları"
+
+msgctxt "#50023"
+msgid "Upcoming Next year"
+msgstr "Gelecek Yılın Yaklaşanları"
+
+msgctxt "#50024"
+msgid "Trending Last Season"
+msgstr "Geçen Sezonun Trendleri"
+
+msgctxt "#50025"
+msgid "Popular Last Season"
+msgstr "Geçen Sezonun Popülerleri"
+
+msgctxt "#50026"
+msgid "Voted Last Season"
+msgstr "Geçen Sezonun Oylananları"
+
+msgctxt "#50027"
+msgid "Completed Last Season"
+msgstr "Geçen Sezon Tamamlananlar"
+
+msgctxt "#50028"
+msgid "Upcoming Last Season"
+msgstr "Geçen Sezonun Yaklaşanları"
+
+msgctxt "#50029"
+msgid "Trending This Season"
+msgstr "Bu Sezonun Trendleri"
+
+msgctxt "#50030"
+msgid "Popular This Season"
+msgstr "Bu Sezonun Popülerleri"
+
+msgctxt "#50031"
+msgid "Voted This Season"
+msgstr "Bu Sezonun Oylananları"
+
+msgctxt "#50032"
+msgid "Completed This Season"
+msgstr "Bu Sezonun Tamamlananları"
+
+msgctxt "#50033"
+msgid "Upcoming This Season"
+msgstr "Bu Sezonun Yaklaşanları"
+
+msgctxt "#50034"
+msgid "Upcoming Next Season"
+msgstr "Gelecek Sezonun Yaklaşanları"
+
+msgctxt "#50035"
+msgid "All Time Trending"
+msgstr "Tüm Zamanların Trendleri"
+
+msgctxt "#50036"
+msgid "All Time Popular"
+msgstr "Tüm Zamanların Popülerleri"
+
+msgctxt "#50037"
+msgid "All Time Voted"
+msgstr "Tüm Zamanların Oylananları"
+
+msgctxt "#50050"
+msgid "Mainmenu Customize"
+msgstr "Ana Menüyü Özelleştir"
+
+msgctxt "#50051"
+msgid "Main Menu Items"
+msgstr "Ana Menü Öğeleri"
+
+msgctxt "#50052"
+msgid "Movie Menu Items"
+msgstr "Film Menü Öğeleri"
+
+msgctxt "#50053"
+msgid "TV Show Menu Items"
+msgstr "TV Programı Menü Öğeleri"
+
+msgctxt "#50054"
+msgid "Submenu Customize"
+msgstr "Alt Menüyü Özelleştir"
+
+msgctxt "#50055"
+msgid "Main Menu - Trending Items"
+msgstr "Ana Menü - Trend Öğeleri"
+
+msgctxt "#50056"
+msgid "Main Menu - Popular Items"
+msgstr "Ana Menü - Popüler Öğeler"
+
+msgctxt "#50057"
+msgid "Main Menu - Voted Items"
+msgstr "Ana Menü - Oy Verilen Öğeler"
+
+msgctxt "#50058"
+msgid "Main Menu - Completed Items"
+msgstr "Ana Menü - Tamamlanan Öğeler"
+
+msgctxt "#50059"
+msgid "Main Menu - Upcoming Items"
+msgstr "Ana Menü - Yaklaşan Öğeler"
+
+msgctxt "#50060"
+msgid "Movies - Trending Items"
+msgstr "Filmler - Trend Öğeleri"
+
+msgctxt "#50061"
+msgid "Movies - Popular Items"
+msgstr "Filmler - Popüler Öğeler"
+
+msgctxt "#50062"
+msgid "Movies - Voted Items"
+msgstr "Filmler - Oy Verilen Öğeler"
+
+msgctxt "#50063"
+msgid "Movies - Completed Items"
+msgstr "Filmler - Tamamlanan Öğeler"
+
+msgctxt "#50064"
+msgid "Movies - Upcoming Items"
+msgstr "Filmler - Yaklaşan Öğeler"
+
+msgctxt "#50065"
+msgid "TV Shows - Trending Items"
+msgstr "TV Programları - Trend Öğeleri"
+
+msgctxt "#50066"
+msgid "TV Shows - Popular Items"
+msgstr "TV Programları - Popüler Öğeler"
+
+msgctxt "#50067"
+msgid "TV Shows - Voted Items"
+msgstr "TV Programları - Oy Verilen Öğeler"
+
+msgctxt "#50068"
+msgid "TV Shows - Completed Items"
+msgstr "TV Programları - Tamamlanan Öğeler"
+
+msgctxt "#50069"
+msgid "TV Shows - Upcoming Items"
+msgstr "TV Programları - Yaklaşan Öğeler"
+
+msgctxt "#50070"
+msgid "Search Both"
+msgstr "Her İkisini de Ara"
+
+msgctxt "#50071"
+msgid "Search Movies"
+msgstr "Filmleri Ara"
+
+msgctxt "#50072"
+msgid "Search TV Shows"
+msgstr "TV Programlarını Ara"
+
+msgctxt "#50073"
+msgid "Multi Select..."
+msgstr "Çoklu Seçim..."
+
+msgctxt "#50074"
+msgid "Action"
+msgstr "Aksiyon"
+
+msgctxt "#50075"
+msgid "Adventure"
+msgstr "Macera"
+
+msgctxt "#50076"
+msgid "Comedy"
+msgstr "Komedi"
+
+msgctxt "#50077"
+msgid "Drama"
+msgstr "Dram"
+
+msgctxt "#50078"
+msgid "Ecchi"
+msgstr "Ecchi"
+
+msgctxt "#50079"
+msgid "Fantasy"
+msgstr "Fantastik"
+
+msgctxt "#50080"
+msgid "Hentai"
+msgstr "Hentai"
+
+msgctxt "#50081"
+msgid "Horror"
+msgstr "Korku"
+
+msgctxt "#50082"
+msgid "Shoujo"
+msgstr "Shoujo"
+
+msgctxt "#50083"
+msgid "Mecha"
+msgstr "Mecha"
+
+msgctxt "#50084"
+msgid "Music"
+msgstr "Müzik"
+
+msgctxt "#50085"
+msgid "Mystery"
+msgstr "Gizem"
+
+msgctxt "#50086"
+msgid "Psychological"
+msgstr "Psikolojik"
+
+msgctxt "#50087"
+msgid "Romance"
+msgstr "Romantik"
+
+msgctxt "#50088"
+msgid "Sci-Fi"
+msgstr "Bilim Kurgu"
+
+msgctxt "#50089"
+msgid "Slice of Life"
+msgstr "Gündelik Hayat"
+
+msgctxt "#50090"
+msgid "Sports"
+msgstr "Spor"
+
+msgctxt "#50091"
+msgid "Supernatural"
+msgstr "Doğaüstü"
+
+msgctxt "#50092"
+msgid "Thriller"
+msgstr "Gerilim"
+
+msgctxt "#50093"
+msgid "Genremenu Customize"
+msgstr "Tür Menüsünü Özelleştir"
+
+msgctxt "#50094"
+msgid "Main Menu - Genre Items"
+msgstr "Ana Menü - Tür Öğeleri"
+
+msgctxt "#50095"
+msgid "Movies - Genre Items"
+msgstr "Filmler - Tür Öğeleri"
+
+msgctxt "#50096"
+msgid "TV Shows - Genre Items"
+msgstr "TV Programları - Tür Öğeleri"
