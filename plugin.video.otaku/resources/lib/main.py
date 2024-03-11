@@ -2377,36 +2377,121 @@ def DELETE_ANIME_DATABASE(payload, params):
     control.notify('Removed "%s" from database' % title_user)
 
 
+import requests
+
 @route('tmdb_helper')
 def TMDB_HELPER(payload, params):
-    from resources.lib.indexers.tmdb2anime import TMDB2ANIME
     import ast
     action_args = params.pop('actionArgs')
 
     if isinstance(action_args, six.string_types):
         action_args = ast.literal_eval(action_args)
 
-    media_type = action_args['item_type']
+    item_type = action_args['item_type']
     source_select = params.pop('source_select') == 'true'
     params.update({'source_select': source_select})
-    if media_type == 'movie':
+    tmdb_id = action_args['tmdb_id']
+
+    # Check if 'season' is in action_args
+    if 'season' in action_args:
+        season_number = action_args['season']
+    else:
+        season_number = None
+
+    # Check if 'episode' is in action_args
+    if 'episode' in action_args:
+        episode_number = action_args['episode']
+    else:
+        episode_number = None
+
+    # media_type = database.get_media_type(tmdb_id)
+
+    if item_type == 'movie':
         anime_ids = database.get_mapping(tmdb_id=action_args['tmdb_id'])
         if not anime_ids.get('anilist_id'):
-            anime_ids = TMDB2ANIME().get_ids(action_args['tmdb_id'])
+            # Task 2: Get imdb_id, tmdb_release_date, tmdb_title from TMDB API
+            api_key = "5c7138ea2959a97b70130d273ba39688"
+            response = requests.get(f"https://api.themoviedb.org/3/movie/{tmdb_id}?api_key={api_key}")
+            data = response.json()
+            imdb_id = data.get('imdb_id')
+            tmdb_release_date = data.get('release_date')
+            tmdb_title = data.get('title')
+    
+            # Task 3: Use tmdb_title and tmdb_release_date to get the correct movie from Mal
+            response = requests.get(f"https://api.jikan.moe/v4/anime?q={tmdb_title}&type=movie&start_date={tmdb_release_date}&order_by=start_date")
+            data = response.json()
+            mal_id = data['data'][0]['mal_id']
+            
+            # Convert mal_id to anilist_id
+            anime_ids = database.get_mapping(mal_id=mal_id)  # Use the mal_id you just retrieved
+
         if anime_ids.get('anilist_id'):
             playload = '{0}/{1}/'.format(anime_ids.get('anilist_id'), anime_ids.get('mal_id'))
             PLAY_MOVIE(playload, params)
         else:
             control.notify('No Anilist ID Found, Might be a special or not in database')
+            return
+
     else:
-        anime_ids = TMDB2ANIME().get_ids(action_args['tmdb_id'], action_args['season'])
-        if anime_ids.get('anilist_id'):
-            playload = '{0}/{1}/'.format(anime_ids.get('anilist_id'), action_args['episode'])
-            PLAY(playload, params)
+        # Task 2: Get tvdb_season_id from TMDB API
+        api_key = "5c7138ea2959a97b70130d273ba39688"
+        response = requests.get(f"https://api.themoviedb.org/3/tv/{tmdb_id}/season/{season_number}/external_ids?api_key={api_key}")
+        data = response.json()
+        tvdb_season_id = data.get('tvdb_id')
+
+        if tvdb_season_id is None:
+            control.notify('No TVDB_ID Found, Might not be in the TVDB Database')
+            return
+
+        # Task 3: Get tvdb_id from the output
+        tvdb_id = data['tvdb_id']
+
+        # Task 4: Use tvdb_id to make a request to the TVDB API
+        token = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJhZ2UiOiIiLCJhcGlrZXkiOiJlZGFlNjBkYy0xYjQ0LTRiYWMtOGRiNy02NWMwYWFmNTI1OGIiLCJjb21tdW5pdHlfc3VwcG9ydGVkIjpmYWxzZSwiZXhwIjoxNzEyNjQyNTgyLCJnZW5kZXIiOiIiLCJoaXRzX3Blcl9kYXkiOjEwMDAwMDAwMCwiaGl0c19wZXJfbW9udGgiOjEwMDAwMDAwMCwiaWQiOiIxIiwiaXNfbW9kIjp0cnVlLCJpc19zeXN0ZW1fa2V5IjpmYWxzZSwiaXNfdHJ1c3RlZCI6ZmFsc2UsInBpbiI6IjUxYmRiZDM1LWJjZDUtNDBkOS05YmMzLTc4OGUyNDQ1NGJhZiIsInJvbGVzIjpbIk1vZCJdLCJ0ZW5hbnQiOiJ0dmRiIiwidXVpZCI6IiJ9.YDJdveGMiRkOoihnEyKLljxgqxGc-VQd6fgTDD0usgUD0S1mpJUlc3EecjEqayzYxO5gaIy98bUcTs6wYkfmZB91rwFM-DGQ6Olp9Ke8wJ5F9su9MU0pTtRD3xhVDIQ6r8CYNtdnuh-minPNHmm3Lyf7m1-KrGgc8Pmmga5pRZ7hCV_WxITJEvkAbEnDAUOyIW89jseCzlkLMhWDsD513utsmNxtOqGo45gdO18uhfMLy8CbeKci72fMbeimlhSOZsLo94m-G6rCXzo6VBM-U_IQD0hNrj9iZd8EkOWbi7ezhxMNE__3o72Vr5X4fNLB_3EuudHbCQFmKc8iKbE7Fzd_MBLmqz9Ni-6yzpqCmGlaemjubNS7CWd6ZOhTMl_PwOLoVDsfPPXsVALPvwCc-yWxF9uRe2XJoFYK9LvsVVXKgNbQ9OqnNo-AwX82L9BdsM0rfyeN8JWNrd2vPG1MeFaGp0HSB3EItLOek3cg3c1NUqys3wOZUISl21UN5uPzexqtXPAaJTFHIWUr6hrivwlvMo-jtjhipLQ3oR-XDRQWeq6Nd1qMW7vnyK1gXaI13Gbq4iNacJSib0aAYPuQhV-pZUhHnhogwzejBs6INXYi-HrGNN_wAl_hAcM-OBLD4Yx40q7L1KyLReEHlSiw7qqzdP-WgPtrrE_Z7pjRdwA"
+        headers = {"Authorization": f"Bearer {token}"}
+        response = requests.get(f"https://api4.thetvdb.com/v4/seasons/{tvdb_season_id}/extended", headers=headers)
+
+        # Task 5: Get seriesId from the output
+        data = response.json()
+        series_id = data['data']['seriesId']
+        total_episodes = data['data']['episodes'][-1]['number']
+        mid_episode_number = total_episodes // 2
+
+        # Task 6: Use seriesId amd season_number to get the anilist id from our database
+        tvdb_id = series_id
+        tvdb_season = season_number
+
+        # Check if both mappings return a result and if they match
+        mapping = database.get_tmdb_helper_mapping(tvdb_id=tvdb_id, tvdb_season=tvdb_season)
+        anilist_id = mapping['anilist_id']
+        
+        # Ensure anilist_id is always a list
+        if not isinstance(anilist_id, list):
+            anilist_id = [anilist_id]
+        
+        # If there's only one anilist_id, use it
+        if len(anilist_id) == 1:
+            if item_type == 'movie':
+                playload = '{0}/{1}/'.format(mapping.get('anilist_id'), mapping.get('mal_id'))
+                PLAY_MOVIE(playload, params)
+            else:    
+                playload = '{0}/{1}/'.format(anilist_id[0], action_args['episode'])
+                PLAY(playload, params)
+
+        # If there's more than one anilist_id, use the appropriate one based on episode_number
+        elif len(anilist_id) > 1:
+            if action_args['episode'] <= mid_episode_number:
+                playload = '{0}/{1}/'.format(anilist_id[0], action_args['episode'])
+                PLAY(playload, params)
+            else:
+                # Adjust the episode number to start from 1 for the second part
+                adjusted_episode_number = action_args['episode'] - mid_episode_number
+                playload = '{0}/{1}/'.format(anilist_id[1], adjusted_episode_number)
+                PLAY(playload, params)
         else:
             control.notify('No Anilist ID Found, Might be a special or not in database')
-
-
+            return
+        
 @route('tools')
 def TOOLS_MENU(payload, params):
     TOOLS_ITEMS = [

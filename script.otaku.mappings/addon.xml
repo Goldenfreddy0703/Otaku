@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<addon id="script.otaku.mappings" version="24.03.10" name="Otaku Mappings" provider-name="TeamOtaku">
+<addon id="script.otaku.mappings" version="24.03.11" name="Otaku Mappings" provider-name="TeamOtaku">
     <extension point="xbmc.python.module" library="lib"/>
 	<extension point="xbmc.addon.metadata">
         <summary>Anime ID Mappings for Otaku Addon</summary>

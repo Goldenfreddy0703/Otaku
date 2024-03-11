@@ -352,6 +352,32 @@ def get_mapping(anilist_id='', mal_id='', kitsu_id='', tmdb_id=''):
     return mapping
 
 
+def get_tmdb_helper_mapping(tvdb_id='', tvdb_season=''):
+    control.mappingDB_lock.acquire()
+    conn = db.connect(control.mappingDB, timeout=60.0)
+    conn.row_factory = _dict_factory
+    conn.execute("PRAGMA FOREIGN_KEYS = 1")
+    cursor = conn.cursor()
+    mapping = {}
+
+    # Check if tvdb_season is an integer
+    if isinstance(tvdb_season, int):
+        # If it's an integer, query the database normally
+        db_query = 'SELECT * FROM anime WHERE thetvdb_id IN ({0}) AND thetvdb_season IN ({1})'.format(tvdb_id, tvdb_season)
+    else:
+        # If it's not an integer, handle it differently
+        # This will depend on your specific application logic
+        db_query = ''  # Replace this with your actual code
+
+    if db_query:
+        cursor.execute(db_query)
+        mapping = cursor.fetchone()
+        cursor.close()
+
+    control.try_release_lock(control.mappingDB_lock)
+    return mapping
+
+
 def get_mal_picture(anilist_id):
     control.mappingDB_lock.acquire()
     conn = db.connect(control.mappingDB, timeout=60.0)
