@@ -227,12 +227,6 @@ class AnilistSyncDatabase:
             if confirm == 0:
                 return
 
-        # Delete mal_dub.json from app data
-        try:
-            os.remove(os.path.join(control.dataPath, 'mal_dub.json'))
-        except:
-            pass
-
         path = control.anilistSyncDB
         xbmcvfs.delete(path)
         file = open(path, 'a+')

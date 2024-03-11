@@ -378,6 +378,20 @@ def get_tmdb_helper_mapping(tvdb_id='', tvdb_season=''):
     return mapping
 
 
+def get_mal_dub_ids():
+    control.mappingDB_lock.acquire()
+    conn = db.connect(control.mappingDB, timeout=60.0)
+    conn.row_factory = _dict_factory
+    conn.execute("PRAGMA FOREIGN_KEYS = 1")
+    cursor = conn.cursor()
+    db_query = 'SELECT mal_dub_id FROM anime'
+    cursor.execute(db_query)
+    mal_dub_ids = [item['mal_dub_id'] for item in cursor.fetchall()]
+    cursor.close()
+    control.try_release_lock(control.mappingDB_lock)
+    return mal_dub_ids
+
+
 def get_mal_picture(anilist_id):
     control.mappingDB_lock.acquire()
     conn = db.connect(control.mappingDB, timeout=60.0)

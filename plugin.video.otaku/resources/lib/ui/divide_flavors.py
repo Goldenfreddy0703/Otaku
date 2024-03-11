@@ -1,6 +1,5 @@
 import json
-from resources.lib.ui import control, client
-
+from resources.lib.ui import control, database
 
 def div_flavor(f):
     def wrapper(*args, **kwargs):
@@ -16,14 +15,6 @@ def div_flavor(f):
 
 
 def _get_mal_dub():
-    try:
-        with open(control.maldubFile, 'r+') as mal_dub:
-            mal_dub = json.load(mal_dub)
-    except:
-        with open(control.maldubFile, 'a+') as file_to_dump:
-            mal_dub_raw = client.request('https://raw.githubusercontent.com/MAL-Dubs/MAL-Dubs/main/data/dubInfo.json')
-            mal_dub_list = json.loads(mal_dub_raw)["dubbed"]
-            mal_dub = {str(item): {'dub': True} for item in mal_dub_list}
-            json.dump(mal_dub, file_to_dump, indent=4)
-
+    mal_dub_list = database.get_mal_dub_ids()  # Call the function that returns all mal_dub_ids
+    mal_dub = {str(item): {'dub': True} for item in mal_dub_list}
     return mal_dub
