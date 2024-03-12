@@ -493,11 +493,11 @@ msgstr "Titelsprache"
 
 msgctxt "#40370"
 msgid "Romaji (Shingeki no Kyojin)"
-msgstr "Romaji (Shingeki no Kyojin)"
+msgstr ""
 
 msgctxt "#40371"
 msgid "English (Attack on Titan)"
-msgstr "Englisch (Attack on Titan)"
+msgstr ""
 
 msgctxt "#40372"
 msgid "Inspect Cloud Files on Scrape"
