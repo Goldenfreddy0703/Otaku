@@ -22,10 +22,10 @@ _You can install it via repository to provide automatic updates (future updates 
 
 _or install it manually in the following order (future updates should not be installed manually and these download links could be outdated)_
 
-- [context.otaku](https://github.com/Goldenfreddy0703/repository.otaku/raw/master/repo/zips/context.otaku/context.otaku-0.0.12.zip)
+- [context.otaku](https://github.com/Goldenfreddy0703/repository.otaku/raw/master/repo/zips/context.otaku/context.otaku-0.0.13.zip)
 - [script.otaku.themepak](https://github.com/Goldenfreddy0703/repository.otaku/raw/master/repo/zips/script.otaku.themepak/script.otaku.themepak-0.0.11.zip)
-- [script.otaku.mappings](https://github.com/Goldenfreddy0703/repository.otaku/raw/master/repo/zips/script.otaku.mappings/script.otaku.mappings-24.02.0.zip)
-- [plugin.video.otaku](https://github.com/Goldenfreddy0703/repository.otaku/raw/master/repo/zips/plugin.video.otaku/plugin.video.otaku-0.4.84.zip)
+- [script.otaku.mappings](https://github.com/Goldenfreddy0703/repository.otaku/raw/master/repo/zips/script.otaku.mappings/script.otaku.mappings-24.05.02.zip)
+- [plugin.video.otaku](https://github.com/Goldenfreddy0703/repository.otaku/raw/master/repo/zips/plugin.video.otaku/plugin.video.otaku-0.4.106.zip)
 
 After each update, it is recommended that you clear cache/rebuild database to make sure changes take effect.
 
@@ -44,7 +44,6 @@ If you guys are having problems with Otaku, please feel free to contact me or ta
 - Watchlist Completed Indicators.
 
 **_Optional_**:
-- Viewtypes: Want to have a Set Viewtypes options for Menu View, Anime View,and Episode View.
 - Accounts: Adding an Easy News Debrid Provider.
 - Accounts: Adding an Offcloud Debrid Provider.
 
