@@ -193,6 +193,9 @@
 		<!-- Consistant Scraping -->
 		<setting type="lsep" label="40567"/>
 		<setting id="consistent.torrentInspection" type="bool" label="40568" default="false" />
+		<setting id="consistent.prioritize_season" type="bool" subsetting="false" label="40572" default="false" visible="eq(-1,true)" />
+		<setting id="consistent.prioritize_part" type="bool" subsetting="false" label="40573" default="false" visible="eq(-2,true)" />\
+		<setting id="consistent.prioritize_episode" type="bool" subsetting="false" label="40574" default="false" visible="eq(-3,true)" />
 
 		<!-- Cloud Scraping -->
 		<setting type="lsep" label="40545"/>
@@ -282,11 +285,11 @@
 		<setting id="general.prioritize_multisubs" type="bool" label="40463" default="false" enable="eq(1,false) + eq(-1,false) + eq(-3,0)" />
 		<setting id="general.prioritize_batches" type="bool" label="40464" default="false" enable="eq(-2,false) + eq(-1,false) + eq(-4,0)" />
 		<setting id="general.prioritize_season" type="bool" label="40468" default="false" enable="eq(-5,0)" />
-		<setting id="menu.prioritize_season" type="number" subsetting="true" label="40469" option="int" default="1" visible="eq(-1,true)" enable="eq(-6,0)" />
+		<setting id="menu.prioritize_season_value" type="number" subsetting="true" label="40469" option="int" default="1" visible="eq(-1,true)" enable="eq(-6,0)" />
 		<setting id="general.prioritize_part" type="bool" label="40470" default="false" enable="eq(-7,0)" />
-		<setting id="menu.prioritize_part" type="number" subsetting="true" label="40471" option="int" default="1" visible="eq(-1,true)" enable="eq(-8,0)" />
+		<setting id="menu.prioritize_part_value" type="number" subsetting="true" label="40471" option="int" default="1" visible="eq(-1,true)" enable="eq(-8,0)" />
 		<setting id="general.prioritize_episode" type="bool" label="40570" default="false" enable="eq(-9,0)" />
-		<setting id="menu.prioritize_episode" type="number" subsetting="true" label="40571" option="int" default="1" visible="eq(-1,true)" enable="eq(-10,0)" />
+		<setting id="menu.prioritize_episode_value" type="number" subsetting="true" label="40571" option="int" default="1" visible="eq(-1,true)" enable="eq(-10,0)" />
 		<!-- Search Filtering -->
 		<setting type="lsep" label="40409"/>
 		<setting id="search.adult" type="bool" label="40410" default="false" />

@@ -433,19 +433,22 @@ class Sources(DisplayWindow):
         prioritize_part = False
         prioritize_episode = False 
         prioritize_consistently = False
+        keyword = None
 
         if control.getSetting('general.sortsources') == '0':  # Torrents selected
             prioritize_dualaudio = control.getSetting('general.prioritize_dualaudio') == 'true'
             prioritize_multisubs = control.getSetting('general.prioritize_multisubs') == 'true'
             prioritize_batches = control.getSetting('general.prioritize_batches') == 'true'
-            prioritize_season = control.getSetting('general.prioritize_season') == 'true'
-            prioritize_part = control.getSetting('general.prioritize_part') == 'true'
-            prioritize_episode = control.getSetting('general.prioritize_episode') == 'true'
             prioritize_consistently = control.getSetting('consistent.torrentInspection') == 'true'
-            if prioritize_consistently == True:
-                prioritize_season = 'true'
-                prioritize_part = 'true'
-                prioritize_episode = 'true'
+   
+            if prioritize_consistently:
+                prioritize_season = control.getSetting('consistent.prioritize_season') == 'true'
+                prioritize_part = control.getSetting('consistent.prioritize_part') == 'true'
+                prioritize_episode = control.getSetting('consistent.prioritize_episode') == 'true'
+            else:
+                prioritize_season = control.getSetting('general.prioritize_season') == 'true'
+                prioritize_part = control.getSetting('general.prioritize_part') == 'true'
+                prioritize_episode = control.getSetting('general.prioritize_episode') == 'true'
             
             from itertools import chain, combinations
     

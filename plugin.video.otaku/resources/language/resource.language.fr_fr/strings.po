@@ -1259,6 +1259,18 @@ msgctxt "#40571"
 msgid "Episode Number"
 msgstr "Numéro d'épisode"
 
+msgctxt "#40572"
+msgid "Prioritize Seasons Consistently"
+msgstr "Prioriser les saisons de manière cohérente"
+
+msgctxt "#40573"
+msgid "Prioritize Parts Consistently"
+msgstr "Prioriser les parties de manière cohérente"
+
+msgctxt "#40574"
+msgid "Prioritize Episodes Consistently"
+msgstr "Prioriser les épisodes de manière cohérente"
+
 ######MAIN Category DIRECTORY#######
 msgctxt "#50000"
 msgid "Airing Anime Calendar"

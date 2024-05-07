@@ -20,6 +20,7 @@ import pickle
 import six
 import time
 import json
+import re
 from resources.lib.AniListBrowser import AniListBrowser
 from resources.lib.OtakuBrowser import OtakuBrowser
 from resources.lib.ui import client, control, database, player, utils
@@ -1764,9 +1765,10 @@ def ANILIST_GENRE_THRILLER_PAGES(payload, params):
 
 @route('remove_search_item/*')
 def REMOVE_SEARCH_ITEM(payload, params):
-    payload = payload.split('/')
-    if len(payload) >= 3:
-        database.remove_search(table=payload[1], value=payload[2])
+    match = re.match(r"search/(\w+)/(.*)/(\d+)", payload)
+    if match:
+        stype, query, page = match.groups()
+        database.remove_search(table=stype, value=query)
     else:
         control.notify("Invalid Search Item")
 
@@ -1825,12 +1827,11 @@ def SEARCH(payload, params):
 
 @route('search/*')
 def SEARCH_PAGES(payload, params):
-    page = 1
-    if len(payload.split("/")) == 3:
-        stype, query, page = payload.split("/")
-    else:
-        stype, query = payload.split("/")
-    return control.draw_items(_ANILIST_BROWSER.get_search(stype, query, int(page)))
+    match = re.match(r"(\w+)/(.*)/(\d+)", payload)
+    if match:
+        stype, query, page = match.groups()
+        
+        return control.draw_items(_ANILIST_BROWSER.get_search(stype, query, int(page)))
 
 
 # <!-- Movie Menu Items -->

@@ -191,13 +191,13 @@ class OtakuBrowser(BrowserBase):
                 season = s_id
             else:
                 season = 1
-            control.setSetting("consistent.prioritize_season", str(season))
+            control.setSetting("consistent.prioritize_season_value", str(season))
 
             part = database.get_tvdb_part(anilist_id)    
-            control.setSetting("consistent.prioritize_part", str(part))
+            control.setSetting("consistent.prioritize_part_value", str(part))
 
             episode = int(episode)
-            control.setSetting("consistent.prioritize_episode", str(episode))
+            control.setSetting("consistent.prioritize_episode_value", str(episode))
 
             season = int(season)
             database._update_season(anilist_id, season)
