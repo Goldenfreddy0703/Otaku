@@ -1251,6 +1251,14 @@ msgctxt "#40569"
 msgid "Arctic Zephyr - Reloaded"
 msgstr ""
 
+msgctxt "#40570"
+msgid "Prioritize By Episode"
+msgstr ""
+
+msgctxt "#40571"
+msgid "Episode Number"
+msgstr ""
+
 ######MAIN Category DIRECTORY#######
 msgctxt "#50000"
 msgid "Airing Anime Calendar"

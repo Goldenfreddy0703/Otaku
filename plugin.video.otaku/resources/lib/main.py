@@ -1765,7 +1765,10 @@ def ANILIST_GENRE_THRILLER_PAGES(payload, params):
 @route('remove_search_item/*')
 def REMOVE_SEARCH_ITEM(payload, params):
     payload = payload.split('/')
-    database.remove_search(table=payload[1], value=payload[2])
+    if len(payload) >= 3:
+        database.remove_search(table=payload[1], value=payload[2])
+    else:
+        control.notify("Invalid Search Item")
 
 
 @route('clear_history')

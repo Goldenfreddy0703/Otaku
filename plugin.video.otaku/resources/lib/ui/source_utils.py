@@ -38,32 +38,67 @@ def getQuality(release_title):
 def getInfo(release_title):
     info = []
     release_title = cleanTitle(release_title)
+
+    prioritize_season = ''
+    prioritize_part = ''
+    prioritize_episode = ''
     
-    if control.getSetting('consistent.torrentInspection') == 'false':
-        prioritize_season = control.getSetting("menu.prioritize_season")
-        prioritize_part = control.getSetting("menu.prioritize_part")
-        prioritize_episode = control.getSetting("menu.prioritize_episode")
+    prioritize_dualaudio = False
+    prioritize_multisubs = False
+    prioritize_batches = False
+    prioritize_season = False
+    prioritize_part = False
+    prioritize_episode = False 
+    prioritize_consistently = False
 
-    else:
-        prioritize_season = control.getSetting("consistent.prioritize_season")
-        prioritize_part = control.getSetting("consistent.prioritize_part")
-        prioritize_episode = control.getSetting("consistent.prioritize_episode")
+    if control.getSetting('general.sortsources') == '0':  # Torrents selected
+        prioritize_dualaudio = control.getSetting('general.prioritize_dualaudio') == 'true'
+        prioritize_multisubs = control.getSetting('general.prioritize_multisubs') == 'true'
+        prioritize_batches = control.getSetting('general.prioritize_batches') == 'true'
+        prioritize_season = control.getSetting('general.prioritize_season') == 'true'
+        prioritize_part = control.getSetting('general.prioritize_part') == 'true'
+        prioritize_episode = control.getSetting('general.prioritize_episode') == 'true'
+        prioritize_consistently = control.getSetting('consistent.torrentInspection') == 'true'
 
-    # info.season
-    if any(i.format(prioritize_season) in release_title for i in ['season {}', 'season 0{}', 'season{}', 'season0{}', 's{}', 's0{}']):
-        info.append('SEASON')
+        from itertools import chain, combinations
 
-    # info.part
-    if any(i.format(prioritize_part) in release_title for i in ['part {}', 'part 0{}', 'cour {}', 'cour 0{}', 'part{}', 'part0{}', 'cour{}', 'cour0{}']):
-        info.append('PART')
+        # Define the order of the keys
+        key_order = ['SEASON', 'PART', 'EPISODE', 'DUAL-AUDIO', 'MULTI-SUBS', 'BATCH']
 
-    # info.episode
-    if any(i.format(prioritize_episode) in release_title for i in ['episode {}', 'episode 0{}', 'ep {}', 'ep 0{}','episode{}', 'episode0{}', 'ep{}', 'ep0{}', 'e{}', 'e0{}']):
-        info.append('EPISODE')
+        # Define the user's selected priorities
+        selected_priorities = [prioritize_season, prioritize_part, prioritize_episode, prioritize_dualaudio, prioritize_multisubs, prioritize_batches]
 
-    # info.subtitles
-    if any(i in release_title for i in ['multi-sub', 'multi sub', 'multiple subtitle']):
-        info.append('MULTI-SUBS')
+        # Generate all possible combinations of the selected priorities
+        selected_combinations = list(chain(*map(lambda x: combinations([key for key, selected in zip(key_order, selected_priorities) if selected], x), range(0, len(selected_priorities)+1))))
+
+        # Initialize keyword as an empty list
+        keyword = []
+        
+        for combination in selected_combinations:
+            # Skip the empty combination
+            if not combination:
+                continue
+        
+            # Join the keys in the combination with '_OR_' and append to the keyword list
+            keyword.append('_OR_'.join(combination))
+        
+        # Keep only the last combination in the keyword list
+        keyword = [keyword[-1]] if keyword else []
+        
+        # Convert the keyword list to a string
+        keyword = ' '.join(keyword) if keyword else ''
+
+        if prioritize_consistently == 'false':
+            if prioritize_season == 'true':
+                prioritize_season = control.getSetting("menu.prioritize_season")
+            if prioritize_part == 'true':
+                prioritize_part = control.getSetting("menu.prioritize_part")
+            if prioritize_episode == 'true':
+                prioritize_episode = control.getSetting("menu.prioritize_episode")
+        else:
+            prioritize_season = control.getSetting("consistent.prioritize_season")
+            prioritize_part = control.getSetting("consistent.prioritize_part")
+            prioritize_episode = control.getSetting("consistent.prioritize_episode")
 
     # info.video
     if any(i in release_title for i in ['x264', 'x 264', 'h264', 'h 264', 'avc']):
@@ -110,8 +145,6 @@ def getInfo(release_title):
         info.append('WMA')
     if any(i in release_title for i in ['dub', 'dubbed']):
         info.append('DUB')
-    if any(i in release_title for i in ['dual audio']):
-        info.append('DUAL-AUDIO')
 
     # info.channels
     if any(i in release_title for i in ['2 0 ', '2 0ch', '2ch']):
@@ -146,6 +179,76 @@ def getInfo(release_title):
         info.append('BLUR')
     if any(i in release_title for i in [' 3d']):
         info.append('3D')
+
+    # Check if '_OR_' is in the keyword
+    if '_OR_' in keyword:
+        # Split the keyword into individual terms
+        terms = keyword.split('_OR_')
+    
+        # Define the formats for each term
+        term_formats = {
+            'SEASON': ['season {}'.format(prioritize_season), 'season 0{}'.format(prioritize_season), 's{}'.format(prioritize_season), 's0{}'.format(prioritize_season)],
+            'PART': ['part {}'.format(prioritize_part), 'part 0{}'.format(prioritize_part), 'cour {}'.format(prioritize_part), 'cour 0{}'.format(prioritize_part), 'part{}'.format(prioritize_part), 'part0{}'.format(prioritize_part), 'cour{}'.format(prioritize_part), 'cour0{}'.format(prioritize_part)],
+            'EPISODE': ['episode {}'.format(prioritize_episode), 'episode 0{}'.format(prioritize_episode), 'ep {}'.format(prioritize_episode), 'ep 0{}'.format(prioritize_episode), 'episode{}'.format(prioritize_episode), 'episode0{}'.format(prioritize_episode), 'ep{}'.format(prioritize_episode), 'ep0{}'.format(prioritize_episode)],
+            'DUAL-AUDIO': ['dual audio'],
+            'MULTI-SUBS': ['multi-sub', 'multi sub', 'multiple subtitle'],
+            'BATCH': ['batch']
+        }
+        # Define the variables for each term
+        term_variables = {
+            'SEASON': str(prioritize_season),
+            'PART': str(prioritize_part),
+            'EPISODE': str(prioritize_episode)
+        }
+    
+        # Create a new dictionary that only contains the keys that are in terms
+        filtered_term_formats = {term: term_formats[term] for term in terms if term in term_formats}
+        
+        # Flatten the dictionary into a list
+        flat_filtered_term_formats = [format_string for format_strings in filtered_term_formats.values() for format_string in format_strings]
+        
+        # Create a new list that only contains the values of the keys that are in terms
+        filtered_term_variables_values = [term_variables[term] for term in terms if term in term_variables]
+
+        # Join the list into a single string with a comma as a separator
+        filtered_term_variables_string = ','.join(filtered_term_variables_values)
+        
+        # Check if all terms exist in the release_title and append the keyword to info
+        if sum(i.format(filtered_term_variables_string) in release_title for i in flat_filtered_term_formats) >= len(terms):
+            info.append(keyword)
+        
+    else:
+        # Define the keyword as the only term
+        term = keyword
+
+        # Define the formats for each term
+        term_formats = {
+            'SEASON': ['season {}'.format(prioritize_season), 'season 0{}'.format(prioritize_season), 's{}'.format(prioritize_season), 's0{}'.format(prioritize_season)],
+            'PART': ['part {}'.format(prioritize_part), 'part 0{}'.format(prioritize_part), 'cour {}'.format(prioritize_part), 'cour 0{}'.format(prioritize_part), 'part{}'.format(prioritize_part), 'part0{}'.format(prioritize_part), 'cour{}'.format(prioritize_part), 'cour0{}'.format(prioritize_part)],
+            'EPISODE': ['episode {}'.format(prioritize_episode), 'episode 0{}'.format(prioritize_episode), 'ep {}'.format(prioritize_episode), 'ep 0{}'.format(prioritize_episode), 'episode{}'.format(prioritize_episode), 'episode0{}'.format(prioritize_episode), 'ep{}'.format(prioritize_episode), 'ep0{}'.format(prioritize_episode)],
+            'DUAL-AUDIO': ['dual audio'],
+            'MULTI-SUBS': ['multi-sub', 'multi sub', 'multiple subtitle'],
+            'BATCH': ['batch']
+        }
+        # Define the variables for each term
+        term_variables = {
+            'SEASON': str(prioritize_season),
+            'PART': str(prioritize_part),
+            'EPISODE': str(prioritize_episode)
+        }
+    
+        # Create a new dictionary that only contains the keys that are in term
+        filtered_term_formats = term_formats[term]
+        
+        # Create a new list that only contains the values of the keys that are in term
+        filtered_term_variables_values = term_variables[term]
+
+        # Join the list into a single string with a comma as a separator
+        filtered_term_variables_string = ','.join(filtered_term_variables_values)
+        
+        # Check if any term exist in the release_title and append the keyword to info
+        if any(i.format(filtered_term_variables_string) in release_title for i in filtered_term_formats):
+            info.append(keyword)
 
     return info
 

@@ -478,7 +478,6 @@ class Sources(DisplayWindow):
         debrid_priorities = self.debrid_priority()
 
         if keyword:
-            control._print(keyword)
             # Filter the torrent list based on the keyword
             torrent_list_filtered = [i for i in torrent_list if keyword in i['info']]
             torrent_list_not_filtered = [i for i in torrent_list if keyword not in i['info']]
@@ -497,7 +496,6 @@ class Sources(DisplayWindow):
                     if file['quality'] == resolution:
                         sortedList.append(file)
         else:
-            control._print('No keyword')
             # Sort Souces Medthod: Torrents
             # Torrents: Sub or Dub
             # - Helps Gets Torrents
