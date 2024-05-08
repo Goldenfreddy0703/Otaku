@@ -2350,26 +2350,10 @@ def TOGGLE_LANGUAGE_INVOKER(payload, params):
     return control.toggle_reuselanguageinvoker()
 
 
-@route('download/*')
-def DOWNLOAD(payload, params):
-    none, type_, anilist_id, episode, filter_lang = payload.rsplit("/")
-    if type_ == 'play_movie':
-        sources = _BROWSER.get_sources(anilist_id, 1, None, 'movie', download=True)
-        _mock_args = {'anilist_id': anilist_id}
-    else:
-        sources = _BROWSER.get_sources(anilist_id, episode, filter_lang, 'show', download=True)
-        _mock_args = {"anilist_id": anilist_id, "episode": episode}
-
-    from resources.lib.windows.source_select import SourceSelect
-    if control.getSetting('general.dialog') == '4':
-        link = SourceSelect(*('source_select_az.xml', control.ADDON_PATH), actionArgs=_mock_args, sources=sources).doModal()
-    else:
-        link = SourceSelect(*('source_select.xml', control.ADDON_PATH), actionArgs=_mock_args, sources=sources).doModal()
-    from resources.lib.ui import download_manager
-
-    if not link:
-        return
-    download_manager.DownloadTask().download(link)
+@route('download_manager')
+def DOWNLOAD_MANAGER(payload, params):
+    from resources.lib.windows.download_manager import DownloadManager
+    DownloadManager(*('download_manager.xml', control.ADDON_PATH)).doModal()
 
 
 @route('marked_as_watched/*')
@@ -2520,6 +2504,7 @@ def TOOLS_MENU(payload, params):
         (control.lang(30023), "clear_all_history", 'clear_search_history.png'),
         (control.lang(30026), "rebuild_database", 'rebuild_database.png'),
         (control.lang(30024), "wipe_addon_data", 'wipe_addon_data.png'),
+        (control.lang(30028), 'download_manager', '')
     ]
 
     TOOLS_ITEMS_SETTINGS = TOOLS_ITEMS[:]

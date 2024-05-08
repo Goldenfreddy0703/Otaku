@@ -51,6 +51,10 @@ msgctxt "#30026"
 msgid "Rebuild Database"
 msgstr "Datenbank neu erstellen"
 
+msgctxt "#30028"
+msgid "Download Manager"
+msgstr "Download-Manager"
+
 ######DEBRID DIRECTORY#######
 msgctxt "#30100"
 msgid "Open this link in a browser: {}"

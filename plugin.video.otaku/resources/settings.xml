@@ -62,8 +62,8 @@
 
 		<!-- Miscellaneous -->
 		<setting type="lsep" label="40542"/>
+		<setting id="download_manager" type="action" label="30028" action="RunPlugin(plugin://plugin.video.otaku/download_manager)"/>
 		<setting id="download.location" label="40543" type="folder" default="" />
-		<setting id="download.background" type="bool" label="40566" default="false" />
 
 		<!--
 		<setting id="contenttype.seasons" type="labelenum" label="- Seasons content type" values="seasons|tvshows" default="tvshows" visible="eq(-2,true)"/>
@@ -93,6 +93,7 @@
 		<setting id="clear_history" type="action" label="30023" action="RunPlugin(plugin://plugin.video.otaku/clear_all_history)"/>
 		<setting id="rebuild_database" type="action" label="30026" action="RunPlugin(plugin://plugin.video.otaku/rebuild_database)"/>
 		<setting id="wipe_addon_data" type="action" label="30024" action="RunPlugin(plugin://plugin.video.otaku/wipe_addon_data)"/>
+		<setting id="download_manager" type="action" label="30028" action="RunPlugin(plugin://plugin.video.otaku/download_manager)"/>
 
 		<!-- Language Invoker -->
 		<setting type="lsep" label="40502" />

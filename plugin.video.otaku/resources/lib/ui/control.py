@@ -1,7 +1,7 @@
 import os
 import sys
 import threading
-import xbmcgui
+import xbmc, xbmcgui
 from kodi_six import xbmc, xbmcaddon, xbmcplugin, xbmcvfs
 from six.moves import urllib_parse
 
@@ -46,6 +46,7 @@ torrentScrapeCacheFile = os.path.join(dataPath, 'torrentScrape.db')
 torrentScrapeCacheFile_lock = threading.Lock()
 
 maldubFile = os.path.join(dataPath, 'mal_dub.json')
+downloads_json = os.path.join(dataPath, 'downloads.json')
 
 showDialog = xbmcgui.Dialog()
 dialogWindow = xbmcgui.WindowDialog
@@ -218,8 +219,8 @@ def yesno_dialog(title, text, nolabel=None, yeslabel=None):
     return xbmcgui.Dialog().yesno(title, text, nolabel=nolabel, yeslabel=yeslabel)
 
 
-def notify(text):
-    xbmcgui.Dialog().notification(ADDON_NAME, text, ADDON_ICON, 5000, False)
+def notify(title, text, icon=OTAKU_LOGO3_PATH, time=5000, sound=True):
+    return xbmcgui.Dialog().notification(title, text, icon, time, sound)
 
 
 def multiselect_dialog(title, _list):
@@ -228,6 +229,10 @@ def multiselect_dialog(title, _list):
 
 def select_dialog(title, dialog_list):
     return xbmcgui.Dialog().select(title, dialog_list)
+
+
+def context_menu(context_list):
+    return xbmcgui.Dialog().contextmenu(context_list)
 
 
 def get_view_type(viewtype):
@@ -579,6 +584,13 @@ def getGlobalProp(property):
         return value.lower == "true"
     else:
         return value
+    
+
+def abort_requested():
+    monitor = xbmc.Monitor()
+    abort_requested_ = monitor.abortRequested()
+    del monitor
+    return abort_requested_
 
 
 def format_string(string, format_):

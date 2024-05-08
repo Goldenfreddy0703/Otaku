@@ -80,6 +80,11 @@ class GetSources(BaseWindow):
                 self.background.setImage(url)
         pass
 
+    def onAction(self, action):
+        actionID = action.getId()
+        if actionID in [92, 10]:
+            self.canceled = True
+
     def close(self):
         if not self.silent:
             if self.display_style == 0:

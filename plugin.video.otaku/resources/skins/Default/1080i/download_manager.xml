@@ -1,0 +1,194 @@
+<window type="dialog">
+    <defaultcontrol>2</defaultcontrol>
+    <coordinates>
+        <left>0</left>
+        <top>0</top>
+    </coordinates>
+    <controls>
+        <!-- Background Texture -->
+        <control type="image">
+            <texture background="true">white.png</texture>
+            <colordiffuse>FF000000</colordiffuse>
+        </control>
+
+        <!-- Background -->
+        <control type="image">
+            <top>0</top>
+            <left>0</left>
+            <width>1920</width>
+            <height>1080</height>
+            <texture>background.jpg</texture>
+        </control>
+        
+        <control type="image">
+            <top>0</top>
+            <left>0</left>
+            <width>1920</width>
+            <height>1080</height>
+            <texture background="true">white.png</texture>
+            <colordiffuse>CC000000</colordiffuse>
+        </control>
+
+        <control type="grouplist">
+                <top>150</top>
+                <left>1300</left>
+                <width>500</width>
+                <itemgap>0</itemgap>
+            <control type="button" id="3100">
+                <label>Clear Completed</label>
+                <height>130</height>
+                <width>500</width>
+                <aligny>center</aligny>
+                <align>center</align>
+            </control>
+            <control type="button" id="3101">
+                <label>Close</label>
+                <height>130</height>
+                <width>500</width>
+                <aligny>center</aligny>
+                <align>center</align>
+            </control>
+        </control>
+
+        <!-- Scrollbar  -->
+        <control type="scrollbar" id="17">
+      	    <left>1250</left>
+      	    <top>150</top>
+      	    <width>20</width>
+      	    <height>838</height>
+      	    <visible>true</visible>
+      	    <pulseonselect>no</pulseonselect>
+      	    <orientation>vertical</orientation>
+      	    <showonepage>false</showonepage>
+            <onleft>1000</onleft>
+        </control>
+
+        <!-- Top Logo/picture  -->
+        <control type="image">
+            <top>-935</top>
+            <left>560</left>
+            <width>200</width>
+            <aspectratio>keep</aspectratio>
+            <texture>common/trans-goku.png</texture>
+        </control>
+
+        <!-- Download List -->
+        <control type="list" id="1000">
+            <viewtype label="Downloads">list</viewtype>
+            <left>80</left>
+            <top>150</top>
+            <width>1170</width>
+            <height>920</height>
+            <orientation>vertical</orientation>
+            <focusposition>1</focusposition>
+	        <pagecontrol>17</pagecontrol>
+	        <onright>17</onright>
+
+            <itemlayout height="120">
+                <control type="image">
+                    <visible>true</visible>
+                    <texture background="true">white.png</texture>
+                    <colordiffuse>AA2e2d32</colordiffuse>
+                </control>
+                    <control type="label">
+                        <top>20</top>
+                        <left>10</left>
+                        <width>1160</width>
+                        <height>10</height>
+                        <font>font12</font>
+                        <textcolor>66FFFFFF</textcolor>
+                        <shadowcolor>dimgrey</shadowcolor>
+                        <align>left</align>
+                        <aligny>center</aligny>
+                        <label>$INFO[ListItem.Label]</label>
+                    </control>
+                    <control type="label">
+                        <top>60</top>
+                        <left>10</left>
+                        <width>350</width>
+                        <height>0</height>
+                        <aligny>center</aligny>
+                        <textcolor>66FFFFFF</textcolor>
+                        <shadowcolor>dimgrey</shadowcolor>
+                        <font>font10</font>
+                        <label>$INFO[ListItem.Property(item.info.status)] - $INFO[ListItem.Property(item.info.progress)]</label>
+                    </control>
+                </itemlayout>
+            <focusedlayout height="120">
+                <control type="image">
+                    <width>100%</width>
+                    <height>97%</height>
+                    <texture background="true">white.png</texture>
+                    <colordiffuse>77d3d3d3</colordiffuse>
+                </control>
+                <control type="label">
+                    <top>20</top>
+                    <left>10</left>
+                    <width>1160</width>
+                    <height>10</height>
+                    <font>font13</font>
+                    <textcolor>FFFFFFFF</textcolor>
+		            <shadowcolor>dimgrey</shadowcolor>
+                    <align>left</align>
+                    <aligny>center</aligny>
+                    <label>[B]$INFO[ListItem.Label][/B]</label>
+                    <scroll>true</scroll>
+                </control>
+<!--             <control type="label">-->
+<!--                     <top>60</top>-->
+<!--                     <left>10</left>-->
+<!--                     <width>350</width>-->
+<!--                     <height>0</height>-->
+<!--                     <aligny>center</aligny>-->
+<!--                     <textcolor>66FFFFFF</textcolor>-->
+<!--                     <shadowcolor>dimgrey</shadowcolor>-->
+<!--                     <font>font10</font>-->
+<!--                     <label>$INFO[ListItem.Property(item.info.status)]</label>-->
+<!--                 </control>-->
+                <control type="label">
+                    <top>60</top>
+                    <left>400</left>
+                    <width>450</width>
+                    <height>0</height>
+                    <font>font10</font>
+                    <textcolor>FFFFFFFF</textcolor>
+                    <align>left</align>
+                    <aligny>center</aligny>
+                    <label>Progress: [COLOR blue]$INFO[ListItem.Property(item.info.progress)][/COLOR]</label>
+                </control>
+                <control type="label">
+                    <top>90</top>
+                    <left>400</left>
+                    <width>450</width>
+                    <height>0</height>
+                    <aligny>center</aligny>
+                    <textcolor>FFFFFFFF</textcolor>
+                    <font>font10</font>
+                    <label>ETA: [COLOR blue]$INFO[ListItem.Property(item.info.eta)][/COLOR]</label>
+                </control>
+                <control type="label">
+                    <top>60</top>
+                    <left>650</left>
+                    <width>500</width>
+                    <height>0</height>
+                    <font>font10</font>
+                    <textcolor>FFFFFFFF</textcolor>
+                    <align>left</align>
+                    <aligny>center</aligny>
+                    <label>Download: [COLOR blue]$INFO[ListItem.Property(item.info.downloaded)]/$INFO[ListItem.Property(item.info.filesize)][/COLOR]</label>
+                </control>
+                <control type="label">
+                    <top>90</top>
+                    <left>650</left>
+                    <width>500</width>
+                    <height>0</height>
+                    <font>font10</font>
+                    <textcolor>FFFFFFFF</textcolor>
+                    <align>left</align>
+                    <aligny>center</aligny>
+                    <label>Speed: [COLOR blue]$INFO[ListItem.Property(item.info.speed)][/COLOR]</label>
+                </control>
+            </focusedlayout>
+        </control>
+    </controls>
+</window>

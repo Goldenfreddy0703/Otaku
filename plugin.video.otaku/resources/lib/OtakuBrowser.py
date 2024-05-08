@@ -159,7 +159,7 @@ class OtakuBrowser(BrowserBase):
                 control.playList.add(url=url, listitem=i[1])
         return items
 
-    def get_sources(self, anilist_id, episode, filter_lang, media_type, rescrape=False, source_select=False, download=False):
+    def get_sources(self, anilist_id, episode, filter_lang, media_type, rescrape=False, source_select=False):
         show = database.get_show(anilist_id)
         if not show:
             show = AniListBrowser().get_anilist(anilist_id)
@@ -174,8 +174,7 @@ class OtakuBrowser(BrowserBase):
             'rescrape': rescrape,
             'get_backup': self.get_backup,
             'source_select': source_select,
-            'duration': kodi_meta.get('duration', -1),
-            'download': download
+            'duration': kodi_meta.get('duration', -1)
         }
 
         if control.getSetting("consistent.torrentInspection") == 'true':

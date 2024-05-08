@@ -49,7 +49,11 @@ msgstr "Cela effacera complètement les paramètres de votre extension. Êtes-vo
 
 msgctxt "#30026"
 msgid "Rebuild Database"
-msgstr "Reconstruction de la base de données"
+msgstr "Reconstruire la base de données"
+
+msgctxt "#30028"
+msgid "Download Manager"
+msgstr "Gestionnaire de téléchargement"
 
 ######DEBRID DIRECTORY#######
 msgctxt "#30100"

@@ -4,6 +4,7 @@ import time
 import pickle
 from resources.lib.ui import control, database
 from resources.lib.windows.base_window import BaseWindow
+from resources.lib.windows.download_manager import Manager
 from resources.lib.windows.resolver import Resolver
 from resources.lib import OtakuBrowser as browser
 
@@ -109,8 +110,39 @@ class SourceSelect(BaseWindow):
     def onAction(self, action):
         actionID = action.getId()
 
-        if actionID in [7, 92, 10, 401, 411, 100]:
-            self.handle_action(actionID)
+        if actionID in [7, 100, 401] and self.getFocusId() == 1000:
+            self.position = self.display_list.getSelectedPosition()
+            self.resolve_item()
+
+        if actionID == 117:
+            context = control.context_menu(
+                [
+                    "Play",
+                    "Download",
+                    "File Select"
+                ]
+            )
+            self.position = self.display_list.getSelectedPosition()
+            if context == 0:  # Play
+                self.resolve_item(False)
+            elif context == 1:  # Download
+                if not self.sources[self.position]['debrid_provider']:
+                    control.notify(control.ADDON_NAME, "Please Select A Debrid File")
+                else:
+                    self.close()
+                    source = [self.sources[self.display_list.getSelectedPosition()]]
+                    resolver = Resolver(*('resolver.xml', control.ADDON_PATH), actionArgs=self.actionArgs, source_select=True)
+                    link = resolver.doModal(source, {}, False)
+                    Manager().download_file(link)
+
+            elif context == 2:  # File Selection
+                if not self.sources[self.position]['debrid_provider']:
+                    control.notify(control.ADDON_NAME, "Please Select A Debrid File")
+                self.resolve_item(True)
+
+        if actionID in [92, 10]:
+            self.stream_link = False
+            self.close()
 
     def info_list_to_sorted_dict(self, info_list):
         info = {}
