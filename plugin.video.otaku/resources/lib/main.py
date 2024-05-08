@@ -2504,7 +2504,7 @@ def TOOLS_MENU(payload, params):
         (control.lang(30023), "clear_all_history", 'clear_search_history.png'),
         (control.lang(30026), "rebuild_database", 'rebuild_database.png'),
         (control.lang(30024), "wipe_addon_data", 'wipe_addon_data.png'),
-        (control.lang(30028), 'download_manager', '')
+        (control.lang(30028), 'download_manager', 'download_manager.png')
     ]
 
     TOOLS_ITEMS_SETTINGS = TOOLS_ITEMS[:]

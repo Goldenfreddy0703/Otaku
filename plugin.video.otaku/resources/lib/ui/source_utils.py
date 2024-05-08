@@ -288,7 +288,7 @@ def get_cache_check_reg(episode):
     return re.compile(reg_string)
 
 
-def get_best_match(dict_key, dictionary_list, episode):
+def get_best_match(dict_key, dictionary_list, episode, pack_select=False):
     regex = get_cache_check_reg(episode)
 
     files = []
@@ -297,7 +297,7 @@ def get_best_match(dict_key, dictionary_list, episode):
         i['regex_matches'] = regex.findall(path)
         files.append(i)
 
-    if control.getSetting('general.manual.select') == 'true':
+    if control.getSetting('general.manual.select') == 'true' or pack_select:
         files = user_select(files, dict_key)
     else:
         files = [i for i in files if len(i['regex_matches']) > 0]

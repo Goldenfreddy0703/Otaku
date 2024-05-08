@@ -49,9 +49,9 @@ class sources(BrowserBase):
                 continue
 
             if control.getSetting('general.manual.select') != 'true':
-                best_math = source_utils.get_best_match('path', torrent_files, episode)
+                best_match = source_utils.get_best_match('path', torrent_files, episode)
                 for f_index, torrent_file in enumerate(torrent_files):
-                    if torrent_file['path'] == best_math['path']:
+                    if torrent_file['path'] == best_match['path']:
                         self.cloud_files.append(
                             {
                                 'quality': source_utils.getQuality(torrent['filename']),

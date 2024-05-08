@@ -29,7 +29,6 @@ class Resolver(BaseWindow):
         self.progress = 1
         self.silent = False
 
-        self.pack_select = None
         self.resolvers = {
             'all_debrid': all_debrid.AllDebrid,
             'debrid_link': debrid_link.DebridLink,
@@ -37,11 +36,12 @@ class Resolver(BaseWindow):
             'real_debrid': real_debrid.RealDebrid
         }
         self.source_select = source_select
+        self.pack_select = None
 
     def onInit(self):
-        self.resolve(self.sources, self.args, self.pack_select)
+        self.resolve(self.sources)
 
-    def resolve(self, sources, args, pack_select=False):
+    def resolve(self, sources):
 
         # last played source move to top of list
         if len(sources) > 1 and not self.source_select:
@@ -138,19 +138,18 @@ class Resolver(BaseWindow):
             traceback.print_exc()
             self.close()
 
-    @staticmethod
-    def resolve_source(api, source):
+    def resolve_source(self, api, source):
         stream_link = None
         api = api()
         hash_ = source['hash']
         magnet = 'magnet:?xt=urn:btih:%s' % hash_
         if source['type'] == 'torrent':
-            stream_link = api.resolve_single_magnet(hash_, magnet, source['episode_re'])
+            stream_link = api.resolve_single_magnet(hash_, magnet, source['episode_re'], self.pack_select)
         elif source['type'] == 'cloud' or source['type'] == 'hoster':
             if source['torrent_files']:
-                best_math = source_utils.get_best_match('path', source['torrent_files'], source['episode'])
+                best_match = source_utils.get_best_match('path', source['torrent_files'], source['episode'], self.pack_select)
                 for f_index, torrent_file in enumerate(source['torrent_files']):
-                    if torrent_file['path'] == best_math['path']:
+                    if torrent_file['path'] == best_match['path']:
                         hash_ = source['torrent_info']['links'][f_index]
                         break
             stream_link = api.resolve_hoster(hash_)

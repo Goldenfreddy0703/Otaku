@@ -173,22 +173,24 @@ class Premiumize:
                 returnFolders.append({'name': i['name'], 'id': i['id'], 'type': 'folder'})
         return returnFolders
 
-    def resolve_single_magnet(self, hash_, magnet, episode=''):
-
+    def resolve_single_magnet(self, hash_, magnet, episode='', pack_select=False):
         folder_details = self.direct_download(magnet)['content']
         folder_details = sorted(folder_details, key=lambda i: int(i['size']), reverse=True)
         folder_details = [i for i in folder_details if source_utils.is_file_ext_valid(i['link'])]
-
         filter_list = [i for i in folder_details]
 
-        if len(filter_list) == 1:
+        if pack_select:
+            identified_file = source_utils.get_best_match('path', folder_details, episode, pack_select)
+            stream_link = self._fetch_transcode_or_standard(identified_file)
+            return stream_link
+
+        elif len(filter_list) == 1:
             stream_link = self._fetch_transcode_or_standard(filter_list[0])
             self._handle_add_to_cloud(magnet)
             return stream_link
 
-        elif len(filter_list) >= 5:
-            identified_file = source_utils.get_best_match('path', folder_details, episode)
-
+        elif len(filter_list) >= 1:
+            identified_file = source_utils.get_best_match('path', folder_details, episode, pack_select)
             stream_link = self._fetch_transcode_or_standard(identified_file)
             return stream_link
 

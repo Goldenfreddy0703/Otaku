@@ -182,8 +182,8 @@ class SourceSelect(BaseWindow):
                     break
         return info
 
-    def resolve_item(self):
-        if control.getSetting('general.autotrynext') == 'true':
+    def resolve_item(self, pack_select=False):
+        if control.getSetting('general.autotrynext') == 'true' and not pack_select:
             sources = self.sources[self.position:]
         else:
             sources = [self.sources[self.position]]
@@ -198,7 +198,7 @@ class SourceSelect(BaseWindow):
         else:
             resolver = Resolver(*('resolver.xml', control.ADDON_PATH), actionArgs=self.actionArgs, source_select=True)
 
-        self.stream_link = resolver.doModal(sources, {}, False)
+        self.stream_link = resolver.doModal(sources, {}, pack_select)
 
         if self.stream_link is None:
             return

@@ -3,6 +3,8 @@
     <coordinates>
         <left>0</left>
         <top>0</top>
+		<width>1920</width>
+		<height>1080</height>
     </coordinates>
     <controls>
         <!-- Background Texture -->
@@ -29,10 +31,11 @@
             <colordiffuse>CC000000</colordiffuse>
         </control>
 
-        <control type="grouplist">
+        <control type="grouplist" id="2000">
                 <top>150</top>
                 <left>1300</left>
                 <width>500</width>
+                <onleft>1000</onleft>
                 <itemgap>0</itemgap>
             <control type="button" id="3100">
                 <label>Clear Completed</label>
@@ -58,9 +61,8 @@
       	    <height>838</height>
       	    <visible>true</visible>
       	    <pulseonselect>no</pulseonselect>
-      	    <orientation>vertical</orientation>
       	    <showonepage>false</showonepage>
-            <onleft>1000</onleft>
+            <onright>1000</onright>
         </control>
 
         <!-- Top Logo/picture  -->
@@ -82,7 +84,8 @@
             <orientation>vertical</orientation>
             <focusposition>1</focusposition>
 	        <pagecontrol>17</pagecontrol>
-	        <onright>17</onright>
+	        <onleft>17</onleft>
+            <onright>2000</onright>
 
             <itemlayout height="120">
                 <control type="image">
