@@ -25,10 +25,6 @@
         <label>Get Watch Order</label>
         <visible>String.StartsWith(ListItem.path,plugin://plugin.video.otaku/)+[String.IsEqual(ListItem.dbtype,tvshow)|String.IsEqual(ListItem.dbtype,movie)]</visible>
       </item>
-      <item library="download.py">
-        <label>Download</label>
-        <visible>String.StartsWith(ListItem.path,plugin://plugin.video.otaku/)+[String.IsEqual(ListItem.dbtype,episode)|String.IsEqual(ListItem.dbtype,movie)]</visible>
-      </item>
       <item library="watchlist.py">
         <label>Watchlist Manager</label>
         <visible>String.StartsWith(ListItem.path,plugin://plugin.video.otaku/)+[String.IsEqual(ListItem.dbtype,tvshow)|String.IsEqual(ListItem.dbtype,movie)]</visible>
