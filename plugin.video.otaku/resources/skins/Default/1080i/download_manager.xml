@@ -3,8 +3,6 @@
     <coordinates>
         <left>0</left>
         <top>0</top>
-		<width>1920</width>
-		<height>1080</height>
     </coordinates>
     <controls>
         <!-- Background Texture -->
@@ -35,7 +33,7 @@
                 <top>150</top>
                 <left>1300</left>
                 <width>500</width>
-                <onleft>1000</onleft>
+                <onleft>17</onleft>
                 <itemgap>0</itemgap>
             <control type="button" id="3100">
                 <label>Clear Completed</label>
@@ -53,6 +51,15 @@
             </control>
         </control>
 
+        <!-- Top Logo/picture  -->
+        <control type="image">
+            <top>-935</top>
+            <left>560</left>
+            <width>200</width>
+            <aspectratio>keep</aspectratio>
+            <texture>common/trans-goku.png</texture>
+        </control>
+
         <!-- Scrollbar  -->
         <control type="scrollbar" id="17">
       	    <left>1250</left>
@@ -61,17 +68,10 @@
       	    <height>838</height>
       	    <visible>true</visible>
       	    <pulseonselect>no</pulseonselect>
+            <orientation>vertical</orientation>
       	    <showonepage>false</showonepage>
-            <onright>1000</onright>
-        </control>
-
-        <!-- Top Logo/picture  -->
-        <control type="image">
-            <top>-935</top>
-            <left>560</left>
-            <width>200</width>
-            <aspectratio>keep</aspectratio>
-            <texture>common/trans-goku.png</texture>
+            <onright>2000</onright>
+            <onleft>1000</onleft>
         </control>
 
         <!-- Download List -->
@@ -84,8 +84,7 @@
             <orientation>vertical</orientation>
             <focusposition>1</focusposition>
 	        <pagecontrol>17</pagecontrol>
-	        <onleft>17</onleft>
-            <onright>2000</onright>
+            <onright>17</onright>
 
             <itemlayout height="120">
                 <control type="image">
