@@ -9,7 +9,6 @@
     <import addon="context.otaku" version="0.0.12"/>
     <import addon="script.otaku.themepak" version="0.0.11"/>
     <import addon="script.otaku.mappings"/>
-    <import addon="script.module.requests"/>
     <!-- <import addon="script.module.web-pdb" version="1.6.0"/> -->
   </requires>
   <extension library="default.py" point="xbmc.python.pluginsource">
