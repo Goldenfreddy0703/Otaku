@@ -21,6 +21,7 @@ class DownloadManager(BaseWindow):
 
     def onInit(self):
         self.display_list = self.getControl(1000)
+        self.setFocusId(3100)
         self.background_info_updater()
         super().onInit()
 
