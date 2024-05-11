@@ -63,7 +63,7 @@
 		<!-- Miscellaneous -->
 		<setting type="lsep" label="40542"/>
 		<setting id="download_manager" type="action" label="30028" action="RunPlugin(plugin://plugin.video.otaku/download_manager)"/>
-		<setting id="download.location" label="40543" type="folder" default="" />
+		<setting id="download.location" label="40543" type="folder" option="writeable" default="" />
 
 		<!--
 		<setting id="contenttype.seasons" type="labelenum" label="- Seasons content type" values="seasons|tvshows" default="tvshows" visible="eq(-2,true)"/>
@@ -190,6 +190,7 @@
 		<setting id="general.autotrynext" type="bool" label="40312" default="true" />
 		<setting id="general.timeout" type="slider" label="40425" option="int" range="10,10,180" default="30" />
 		<setting id="general.terminate.oncloud" type="bool" label="40496" default="true" />
+		<setting id="general.terminate.onlocal" type="bool" label="40575" default="true" />
 
 		<!-- Consistant Scraping -->
 		<setting type="lsep" label="40567"/>
@@ -204,10 +205,8 @@
 		<setting id="premiumize.cloudInspection" type="bool" label="40548" default="false" />
 
 		<!-- Local Scraping -->
-		<!--
 		<setting type="lsep" label="40546"/>
 		<setting id="scraping.localInspection" type="bool" label="40549" default="false" />
-		-->
 	</category>
 
 	<!-- Playback -->

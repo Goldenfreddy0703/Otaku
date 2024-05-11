@@ -39,7 +39,12 @@ class DownloadManager(BaseWindow):
         elif actionID == 117:
             context_response = control.context_menu(['Cancel Download'])
             if context_response == 0:
-                pass
+                position = self.display_list.getSelectedPosition()
+                url_hash = self.display_list.getListItem(position).getProperty('item.info.hash')
+                manager.cancel_task(url_hash)
+                manager.remove_download_task(url_hash)
+                self.close()
+                DownloadManager(*('download_manager.xml', control.ADDON_PATH)).doModal()
 
     def onClick(self, controlID):
         self.handle_action(controlID)
@@ -137,9 +142,11 @@ class Manager:
 
     def cancel_task(self, url_hash):
         self.get_download_index()
-        # info = self.get_task_info(url_hash)
-        # info["canceled"] = True
-        # self.update_task_info(url_hash, info)
+        with open(control.downloads_json) as file:
+            data = json.load(file)
+        info = data[url_hash]
+        info["canceled"] = True
+        self.update_task_info(url_hash, info)
 
     def insert_into_index(self):
         control.setSetting("DMIndex", ",".join(self.download_ids))
@@ -220,14 +227,17 @@ class Manager:
         with open(self.output_path, 'wb') as f:
             for chunk in chunks:
                 if chunk:
+                    with open(control.downloads_json) as file:
+                        data = json.load(file)
+                    if data[self.url_hash].get('canceled'):
+                        os.remove(self.output_path)
+                        control.notify("Download Canceled")
+                        break
                     f.write(chunk)
                     self.update_status(len(chunk))
                     self.update_task_info(self.url_hash, self.download)
         self.download['status'] = 'DONE'
         self.update_task_info(self.url_hash, self.download)
-        if self.canceled:
-            os.remove(self.output_path)
-            control.notify(control.ADDON_NAME, "Download Canceled")
 
     def update_status(self, chunk_size):
         """

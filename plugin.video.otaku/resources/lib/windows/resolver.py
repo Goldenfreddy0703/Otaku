@@ -125,6 +125,15 @@ class Resolver(BaseWindow):
                                     self.return_data.update({'skip': i.get('skip')})
                             self.close()
                             return
+                        
+                    elif i['type'] == 'Local Inspection':
+                        stream_link = i['hash']
+                        self.return_data = {
+                        'url': stream_link,
+                        'headers': {}
+                        }
+                        self.close()
+                        return
 
                 except:
                     import traceback

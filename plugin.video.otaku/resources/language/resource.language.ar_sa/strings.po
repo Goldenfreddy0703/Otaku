@@ -214,6 +214,10 @@ msgctxt "#40238"
 msgid "Info"
 msgstr "معلومات"
 
+msgctxt "#40239"
+msgid "Localfiles"
+msgstr "ملفات محلية"
+
 ######SETTINGS.XML VALUES######
 msgctxt "#40300"
 msgid "General"
@@ -1172,8 +1176,8 @@ msgid "Scrape Premiumize Cloud"
 msgstr "جمع المعلومات من سحابة Premiumize"
 
 msgctxt "#40549"
-msgid "Scrape Local Content"
-msgstr "جمع المعلومات من المحتوى المحلي"
+msgid "Scrape Local Files"
+msgstr "جمع المعلومات من الملفات المحلية"
 
 msgctxt "#40550"
 msgid "Force view types on menus"
@@ -1274,6 +1278,10 @@ msgstr "تحديد أولوية الأجزاء بشكل متسق"
 msgctxt "#40574"
 msgid "Prioritize Episodes Consistently"
 msgstr "تحديد أولوية الحلقات بشكل متسق"
+
+msgctxt "#40575"
+msgid "Terminate on Local Sources"
+msgstr "إنهاء عند مصادر محلية"
 
 ######MAIN Category DIRECTORY#######
 msgctxt "#50000"

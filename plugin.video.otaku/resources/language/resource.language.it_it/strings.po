@@ -214,6 +214,10 @@ msgctxt "#40238"
 msgid "Info"
 msgstr "Informazioni"
 
+msgctxt "#40239"
+msgid "Localfiles"
+msgstr "File locali"
+
 ######SETTINGS.XML VALUES######
 msgctxt "#40300"
 msgid "General"
@@ -1172,8 +1176,8 @@ msgid "Scrape Premiumize Cloud"
 msgstr "Scraping cloud Premiumize"
 
 msgctxt "#40549"
-msgid "Scrape Local Content"
-msgstr "Scraping contenuto locale"
+msgid "Scrape Local Files"
+msgstr "Scraping file locali"
 
 msgctxt "#40550"
 msgid "Force view types on menus"
@@ -1274,6 +1278,10 @@ msgstr "Priorità alle parti in modo coerente"
 msgctxt "#40574"
 msgid "Prioritize Episodes Consistently"
 msgstr "Priorità agli episodi in modo coerente"
+
+msgctxt "#40575"
+msgid "Terminate on Local Sources"
+msgstr "Termina sulle fonti locali"
 
 ######MAIN Category DIRECTORY#######
 msgctxt "#50000"

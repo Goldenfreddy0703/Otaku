@@ -214,6 +214,10 @@ msgctxt "#40238"
 msgid "Info"
 msgstr "Bilgi"
 
+msgctxt "#40239"
+msgid "Localfiles"
+msgstr "yerel dosyalar"
+
 ######SETTINGS.XML VALUES######
 msgctxt "#40300"
 msgid "General"
@@ -1172,8 +1176,8 @@ msgid "Scrape Premiumize Cloud"
 msgstr "Premiumize Bulutunu Kazı"
 
 msgctxt "#40549"
-msgid "Scrape Local Content"
-msgstr "Yerel İçeriği Kazı"
+msgid "Scrape Local Files"
+msgstr "Yerel Dosyaları Kazı"
 
 msgctxt "#40550"
 msgid "Force view types on menus"
@@ -1274,6 +1278,10 @@ msgstr "Bölümleri Düzenli Olarak Önceliklendir"
 msgctxt "#40574"
 msgid "Prioritize Episodes Consistently"
 msgstr "Bölümleri Düzenli Olarak Önceliklendir"
+
+msgctxt "#40575"
+msgid "Terminate on Local Sources"
+msgstr "Yerel Kaynaklarda Sonlandır"
 
 ######MAIN Category DIRECTORY#######
 msgctxt "#50000"

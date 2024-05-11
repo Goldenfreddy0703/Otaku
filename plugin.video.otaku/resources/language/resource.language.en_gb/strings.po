@@ -214,6 +214,10 @@ msgctxt "#40238"
 msgid "Info"
 msgstr ""
 
+msgctxt "#40239"
+msgid "Localfiles"
+msgstr ""
+
 ######SETTINGS.XML VALUES######
 msgctxt "#40300"
 msgid "General"
@@ -1172,7 +1176,7 @@ msgid "Scrape Premiumize Cloud"
 msgstr ""
 
 msgctxt "#40549"
-msgid "Scrape Local Content"
+msgid "Scrape Local Files"
 msgstr ""
 
 msgctxt "#40550"
@@ -1273,6 +1277,10 @@ msgstr ""
 
 msgctxt "#40574"
 msgid "Prioritize Episodes Consistently"
+msgstr ""
+
+msgctxt "#40575"
+msgid "Terminate on Local Sources"
 msgstr ""
 
 ######MAIN Category DIRECTORY#######

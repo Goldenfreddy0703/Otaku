@@ -214,6 +214,10 @@ msgctxt "#40238"
 msgid "Info"
 msgstr "Info"
 
+msgctxt "#40239"
+msgid "Localfiles"
+msgstr "lokale Dateien"
+
 ######SETTINGS.XML VALUES######
 msgctxt "#40300"
 msgid "General"
@@ -1169,11 +1173,11 @@ msgstr "Scrape Real-Debrid-Cloud"
 
 msgctxt "#40548"
 msgid "Scrape Premiumize Cloud"
-msgstr "Scrape Premiumize-Cloud"
+msgstr "Premiumize-Cloud scrapen"
 
 msgctxt "#40549"
-msgid "Scrape Local Content"
-msgstr "Lokalen Inhalt scannen"
+msgid "Scrape Local Files"
+msgstr "Lokale Dateien scrapen"
 
 msgctxt "#40550"
 msgid "Force view types on menus"
@@ -1274,6 +1278,10 @@ msgstr "Teile konsistent priorisieren"
 msgctxt "#40574"
 msgid "Prioritize Episodes Consistently"
 msgstr "Episoden konsistent priorisieren"
+
+msgctxt "#40575"
+msgid "Terminate on Local Sources"
+msgstr "Beenden bei lokalen Quellen"
 
 ######MAIN Category DIRECTORY#######
 msgctxt "#50000"

@@ -42,6 +42,7 @@ class Sources(DisplayWindow):
         self.torrentCacheSources = {}
         self.hosterSources = {}
         self.cloud_files = []
+        self.local_files = []
         self.remainingProviders = []
         self.allTorrents = {}
         self.hosterDomains = {}

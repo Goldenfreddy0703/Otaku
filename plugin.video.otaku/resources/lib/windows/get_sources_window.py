@@ -118,6 +118,7 @@ class GetSources(BaseWindow):
         self.setProperty('cached_torrents', str(len([i for i in self.torrentCacheSources])))
         self.setProperty('hosters_sources', str(len([i for i in self.embedSources])))
         self.setProperty('cloud_sources', str(len([i for i in self.cloud_files])))
+        self.setProperty('local_sources', str(len([i for i in self.local_files])))
 
         # Set remaining providers string
         self.setProperty("remaining_providers_count", str((len(self.remainingProviders))))
