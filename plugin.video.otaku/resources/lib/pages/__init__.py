@@ -50,7 +50,7 @@ class Sources(DisplayWindow):
         self.remainingProviders = [
             'nyaa', 'animetosho', 'aniwave', 'gogo', 'animix',
             'animepahe', 'h!anime', 'otakuanimes', 'animelatino',
-            'nekosama', 'aniplay', 'Local Inspection'
+            'nekosama', 'aniplay', 'Local Inspection', 'Cloud Inspection'
         ]
         self.allTorrents = {}
         self.allTorrents_len = 0
@@ -308,8 +308,6 @@ class Sources(DisplayWindow):
         self.remainingProviders.remove('Local Inspection')
 
     def user_cloud_inspection(self, query, anilist_id, episode, media_type, rescrape):
-        self.remainingProviders.append('Cloud Inspection')
-
         if not rescrape:
             debrid = {}
 

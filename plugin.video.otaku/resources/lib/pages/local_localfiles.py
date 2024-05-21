@@ -46,5 +46,5 @@ class sources(BrowserBase):
         title = title.replace('(', '')
         title = title.replace(')', '')
         title = title.replace('-', '')
-        title = f'{title} '
+        title = '{} '.format(title)
         return title

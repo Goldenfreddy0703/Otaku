@@ -14,7 +14,7 @@ CLOCK = time.time
 
 class DownloadManager(BaseWindow):
     def __init__(self, xml_file, location):
-        super().__init__(xml_file, location)
+        super(DownloadManager, self).__init__(xml_file, location)
         self.abort = False
         self.downloads = []
         self.display_list = None
@@ -23,7 +23,7 @@ class DownloadManager(BaseWindow):
         self.display_list = self.getControl(1000)
         self.setFocusId(3100)
         self.background_info_updater()
-        super().onInit()
+        super(DownloadManager, self).onInit()
 
     def onAction(self, action):
         actionID = action.getId()
@@ -68,7 +68,7 @@ class DownloadManager(BaseWindow):
 
     def populate_menu_items(self):
         def create_menu_item(download_item):
-            new_item = xbmcgui.ListItem(label=f"{download_item['filename']}")
+            new_item = xbmcgui.ListItem(label="{}".format(download_item['filename']))
             self.set_menu_item_properties(new_item, download_item)
             return new_item
 
@@ -196,11 +196,11 @@ class Manager:
             self.output_filename = urllib_parse.unquote(self.output_filename)
         self.output_path = os.path.join(self.storage_location, self.output_filename)
 
-        yesno = control.yesno_dialog(control.ADDON_NAME, f'''
-        Do you want to download "[I]{self.output_filename}[/I]" to:
-            {self.output_path[:50]}
-            {self.output_path[50:100]}
-        ''')
+        yesno = control.yesno_dialog(control.ADDON_NAME, '''
+        Do you want to download "[I]{}[/I]" to:
+            {}
+            {}
+        '''.format(self.output_filename, self.output_path[:50], self.output_path[50:100]))
         if not yesno:
             return False
 
@@ -271,7 +271,7 @@ class Manager:
         minutes, seconds = divmod(seconds, 60)
         hours, minutes = divmod(minutes, 60)
 
-        return f"{int(hours):02}:{int(minutes):02}:{int(seconds):02}"
+        return "{:02}:{:02}:{:02}".format(int(hours), int(minutes), int(seconds))
 
     @staticmethod
     def get_display_size(size_bytes):
@@ -281,12 +281,13 @@ class Manager:
 
         if size_bytes is not None and size_bytes > 0:
             name_idx = int(math.floor(math.log(size_bytes, 1024)))
-            if name_idx > (last_size_value := len(size_names) - 1):
+            last_size_value = len(size_names) - 1
+            if name_idx > last_size_value:
                 name_idx = last_size_value
             chunk = math.pow(1024, name_idx)
             size = round(size_bytes / chunk, 2)
 
-        return f"{size} {size_names[name_idx]}"
+        return "{} {}".format(size, size_names[name_idx])
 
     def get_display_speed(self):
 
@@ -301,7 +302,7 @@ class Manager:
             return "-"
         for i in speed_categories:
             if speed < 1024:
-                return f"{self.safe_round(speed, 2)} {i}"
+                return "{} {}".format(self.safe_round(speed, 2), i)
             else:
                 speed = speed / 1024
 

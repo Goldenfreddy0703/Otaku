@@ -126,7 +126,7 @@ class SourceSelect(BaseWindow):
             if context == 0:  # Play
                 self.resolve_item(False)
             elif context == 1:  # Download
-                if not self.sources[self.position]['debrid_provider']:
+                if self.sources[self.position].get('debrid_provider') == '' or self.sources[self.position].get('debrid_provider') == 'local_files':
                     control.notify(control.ADDON_NAME, "Please Select A Debrid File")
                 else:
                     self.close()

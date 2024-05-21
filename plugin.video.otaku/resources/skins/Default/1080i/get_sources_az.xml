@@ -265,7 +265,7 @@
                 <width>auto</width>
                 <textcolor>FFDDDDDD</textcolor>
                 <label>$ADDON[plugin.video.otaku 40225]: $INFO[Window().Property(remaining_providers_count)]</label>
-                <visible>Integer.IsGreaterOrEqual(Window().Property(remaining_providers_count),10)</visible>
+                <visible>Integer.IsGreaterOrEqual(Window().Property(remaining_providers_count),13)</visible>
             </control>
 
             <control type="label">
@@ -278,7 +278,7 @@
                 <width>auto</width>
                 <textcolor>FFDDDDDD</textcolor>
                 <label>$INFO[Window().Property(remaining_providers_list)]</label>
-                <visible>!Integer.IsGreaterOrEqual(Window().Property(remaining_providers_count),10)</visible>
+                <visible>!Integer.IsGreaterOrEqual(Window().Property(remaining_providers_count),13)</visible>
             </control>
 
             <control type="list" id="2000">
