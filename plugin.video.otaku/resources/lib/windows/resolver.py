@@ -126,7 +126,7 @@ class Resolver(BaseWindow):
                             self.close()
                             return
                         
-                    elif i['type'] == 'Local Inspection':
+                    elif i['type'] == 'local':
                         stream_link = i['hash']
                         self.return_data = {
                         'url': stream_link,

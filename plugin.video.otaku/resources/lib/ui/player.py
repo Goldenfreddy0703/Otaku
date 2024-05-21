@@ -1,4 +1,5 @@
 import sys
+import os
 
 from kodi_six import xbmc, xbmcgui, xbmcplugin
 from resources.lib.ui import client, control, utils, database
@@ -449,6 +450,14 @@ def _prefetch_play_link(link):
 
     if not link:
         return None
+
+    # Check if link is a local file path
+    if os.path.isfile(link):
+        return {
+            "url": link,
+            "headers": {},
+        }
+
     url = link
     headers = {}
 

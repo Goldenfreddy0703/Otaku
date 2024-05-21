@@ -30,10 +30,10 @@ class sources(BrowserBase):
         source = {
             'release_title': f,
             'hash': os.path.join(PATH, f),
-            'type': 'Local Inspection',
+            'type': 'local',
             'quality': source_utils.getQuality(f),
-            'debrid_provider': PATH,
-            'provider': 'NA',
+            'debrid_provider': 'local_files',
+            'provider': 'Local',
             'episode_re': episode,
             'size': self._get_size(os.path.getsize(os.path.join(PATH, f))),
             'info': source_utils.getInfo(f),
