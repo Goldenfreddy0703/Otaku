@@ -4,7 +4,7 @@ import random
 import time
 
 from resources.lib import pages
-from resources.lib.indexers import simkl
+from resources.lib.indexers import simkl, anizip
 from resources.lib.ui import client, control, database, utils
 from resources.lib.ui.BrowserBase import BrowserBase
 from resources.lib.AniListBrowser import AniListBrowser
@@ -97,7 +97,7 @@ class OtakuBrowser(BrowserBase):
         #     else:
         #         data = ([], 'episodes')
         # else:
-        data = simkl.SIMKLAPI().get_episodes(anilist_id, filter_lang)
+        data = anizip.ANIZIPAPI().get_episodes(anilist_id, filter_lang)
         # if not data[0]:
         #     data = consumet.CONSUMETAPI().get_episodes(anilist_id, filter_lang)
         return data
