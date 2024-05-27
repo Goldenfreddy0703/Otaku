@@ -272,6 +272,11 @@
 		<setting id="general.release_title_filter.value3" type="text" subsetting="true" label="40535" default="" visible="eq(-4,2) + eq(-5,true)" />
 		<setting id="general.release_title_filter.value4" type="text" subsetting="true" label="40536" default="" visible="eq(-5,3) + eq(-6,true)" />
 		<setting id="general.release_title_filter.value5" type="text" subsetting="true" label="40537" default="" visible="eq(-6,4) + eq(-7,true)" />
+		<setting id="general.release_title_filter.exclude1" type="bool" label="40580" default="false" subsetting="true" visible="eq(-7,0) + eq(-8,true)" />
+		<setting id="general.release_title_filter.exclude2" type="bool" label="40580" default="false" subsetting="true" visible="eq(-8,1) + eq(-9,true)" />
+		<setting id="general.release_title_filter.exclude3" type="bool" label="40580" default="false" subsetting="true" visible="eq(-9,2) + eq(-10,true)" />
+		<setting id="general.release_title_filter.exclude4" type="bool" label="40580" default="false" subsetting="true" visible="eq(-10,3) + eq(-11,true)" />
+		<setting id="general.release_title_filter.exclude5" type="bool" label="40580" default="false" subsetting="true" visible="eq(-11,4) + eq(-12,true)" />
 
 		<setting type="sep" />
 		<!-- Manual File Selection -->
@@ -348,6 +353,7 @@
 		<setting id="anilist.login" type="action" subsetting="true" label="40352" option="close" action="RunPlugin(plugin://plugin.video.otaku/watchlist_login/anilist?auth_dialog=true)" visible="eq(-3,true)"/>
 		<setting id="anilist.listsettings" type="action" label="40353" option="close" visible="eq(-4,true)"/>
 		<setting id="anilist.sort" type="labelenum" subsetting="true" label="40354" values="Romaji Title|English Title|Score|Progress|Last Updated|Last Added" default="Last Updated" visible="eq(-5,true)"/>
+		<setting id="anilist.order" type="enum" subsetting="true" label="40577" lvalues="40578|40579" default="0" visible="eq(-6,true)"/>
 
 		<!-- Kitsu -->
 		<setting type="lsep" label="40355"/>
@@ -359,7 +365,8 @@
 		<setting id="kitsu.login" type="action" subsetting="true" label="40359" option="close" action="RunPlugin(plugin://plugin.video.otaku/watchlist_login/kitsu)" visible="eq(-4,true)"/>
 		<setting id="kitsu.listsettings" type="action" label="40353" option="close" visible="eq(-5,true)"/>
 		<setting id="kitsu.sort" type="labelenum" subsetting="true" label="40354" values="Date Updated|Progress|Title" default="Date Updated" visible="eq(-6,true)"/>
-		<setting id="kitsu.titles" type="labelenum" subsetting="true" label="40360" values="Canonical|Romanized|English" default="Canonical" visible="eq(-7,true)"/>
+		<setting id="kitsu.order" type="enum" subsetting="true" label="40577" lvalues="40578|40579" default="0" visible="eq(-7,true)"/>
+		<setting id="kitsu.titles" type="labelenum" subsetting="true" label="40360" values="Canonical|Romanized|English" default="Canonical" visible="eq(-8,true)"/>
 
 		<!-- MyAnimeList -->
 		<setting type="lsep" label="40361"/>
@@ -370,6 +377,7 @@
 		<setting id="mal.hidenotif" type="bool" subsetting="true" label="40530" default="false" visible="eq(-3,true)"/>
 		<setting id="mal.listsettings" type="action" label="40353" option="close" visible="eq(-4,true)"/>
 		<setting id="mal.sort" type="labelenum" subsetting="true" label="40354" values="List Score|Last Updated|Anime Start Date|Anime Title" default="Last Updated" visible="eq(-5,true)"/>
+		<setting id="mal.order" type="enum" subsetting="true" label="40577" lvalues="40578|40579" default="0" visible="eq(-6,true)"/>
 		<setting id="mal.userid" type="text"  default="" visible="false"/>
 		<setting id="mal.authvar" type="text"  default="" visible="false"/>
 		<setting id="mal.token" type="text"  default="" visible="false"/>

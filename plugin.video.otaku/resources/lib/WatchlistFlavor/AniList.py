@@ -3,7 +3,7 @@ import json
 import pickle
 import random
 
-from resources.lib.ui import database, get_meta
+from resources.lib.ui import control, database, get_meta
 from resources.lib.WatchlistFlavor.WatchlistFlavorBase import WatchlistFlavorBase
 
 
@@ -194,11 +194,15 @@ class AniListWLF(WatchlistFlavorBase):
         for mlist in lists:
             entries += mlist['entries']
         get_meta.collect_meta(entries)
-
-        all_results = map(self._base_next_up_view, reversed(entries)) if next_up else map(self._base_watchlist_status_view, reversed(entries))
+        
+        if control.getSetting('anilist.order') == '0':
+            all_results = map(self._base_next_up_view, reversed(entries)) if next_up else map(self._base_watchlist_status_view, reversed(entries))
+        else:
+            all_results = map(self._base_next_up_view, entries) if next_up else map(self._base_watchlist_status_view, entries)
 
         all_results = [i for i in all_results if i is not None]
         all_results = list(itertools.chain(*all_results))
+        
         return all_results
 
     def _base_watchlist_status_view(self, res):

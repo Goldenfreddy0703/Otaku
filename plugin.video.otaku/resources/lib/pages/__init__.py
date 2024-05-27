@@ -419,14 +419,32 @@ class Sources(DisplayWindow):
             release_title_filter3 = control.getSetting('general.release_title_filter.value3')
             release_title_filter4 = control.getSetting('general.release_title_filter.value4')
             release_title_filter5 = control.getSetting('general.release_title_filter.value5')
+        
+            # Get the new settings
+            exclude_filter1 = control.getSetting('general.release_title_filter.exclude1') == 'true'
+            exclude_filter2 = control.getSetting('general.release_title_filter.exclude2') == 'true'
+            exclude_filter3 = control.getSetting('general.release_title_filter.exclude3') == 'true'
+            exclude_filter4 = control.getSetting('general.release_title_filter.exclude4') == 'true'
+            exclude_filter5 = control.getSetting('general.release_title_filter.exclude5') == 'true'
+        
             _torrent_list = torrent_list
             release_title_logic = control.getSetting('general.release_title_filter.logic')
             if release_title_logic == '0':
                 # AND filter
-                torrent_list = [i for i in _torrent_list if release_title_filter1 in i['release_title'] and release_title_filter2 in i['release_title'] and release_title_filter3 in i['release_title'] and release_title_filter4 in i['release_title'] and release_title_filter5 in i['release_title']]
+                torrent_list = [i for i in _torrent_list if 
+                                (not exclude_filter1 or release_title_filter1 not in i['release_title']) and 
+                                (not exclude_filter2 or release_title_filter2 not in i['release_title']) and 
+                                (not exclude_filter3 or release_title_filter3 not in i['release_title']) and 
+                                (not exclude_filter4 or release_title_filter4 not in i['release_title']) and 
+                                (not exclude_filter5 or release_title_filter5 not in i['release_title'])]
             if release_title_logic == '1':
                 # OR filter
-                torrent_list = [i for i in _torrent_list if (release_title_filter1 != "" and release_title_filter1 in i['release_title']) or (release_title_filter2 != "" and release_title_filter2 in i['release_title']) or (release_title_filter3 != "" and release_title_filter3 in i['release_title']) or (release_title_filter4 != "" and release_title_filter4 in i['release_title']) or (release_title_filter5 != "" and release_title_filter5 in i['release_title'])]
+                torrent_list = [i for i in _torrent_list if 
+                                (release_title_filter1 != "" and (exclude_filter1 ^ (release_title_filter1 in i['release_title']))) or 
+                                (release_title_filter2 != "" and (exclude_filter2 ^ (release_title_filter2 in i['release_title']))) or 
+                                (release_title_filter3 != "" and (exclude_filter3 ^ (release_title_filter3 in i['release_title']))) or 
+                                (release_title_filter4 != "" and (exclude_filter4 ^ (release_title_filter4 in i['release_title']))) or 
+                                (release_title_filter5 != "" and (exclude_filter5 ^ (release_title_filter5 in i['release_title'])))]
 
         # Get the value of the 'sourcesort.menu' setting
         sort_option = control.getSetting('general.sourcesort')

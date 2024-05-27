@@ -150,11 +150,15 @@ class MyAnimeListWLF(WatchlistFlavorBase):
             if control.getSetting('mal.hidenotif') == 'false':
                 control.ok_dialog(control.ADDON_NAME, "Can't connect MyAnimeList 'API'")
                 return []
-
+    
+        # Get the user's preferred sort order from the settings
+        sort_order = control.getSetting('mal.order')
+    
         if next_up:
-            all_results = filter(lambda x: True if x else False, map(self._base_next_up_view, results['data']))
+            all_results = filter(lambda x: True if x else False, map(self._base_next_up_view, results['data'])) if sort_order == '0' else filter(lambda x: True if x else False, map(self._base_next_up_view, reversed(results['data'])))
         else:
-            all_results = map(self._base_watchlist_status_view, results['data'])
+            all_results = map(self._base_watchlist_status_view, results['data']) if sort_order == '0' else map(self._base_watchlist_status_view, reversed(results['data']))
+    
         all_results = list(itertools.chain(*all_results))
 
         all_results += self._handle_paging(results['paging'].get('next'), base_plugin_url, page)

@@ -148,10 +148,13 @@ class KitsuWLF(WatchlistFlavorBase):
         el = result["included"][:len(_list)]
         self._mapping = [x for x in result['included'] if x['type'] == 'mappings']
 
+        # Get the user's preferred sort order from the settings
+        sort_order = control.getSetting('kitsu.order')
+
         if next_up:
-            all_results = map(self._base_next_up_view, _list, el)
+            all_results = map(self._base_next_up_view, _list, el) if sort_order == '0' else map(self._base_next_up_view, reversed(_list), reversed(el))
         else:
-            all_results = map(self._base_watchlist_view, _list, el)
+            all_results = map(self._base_watchlist_view, _list, el) if sort_order == '0' else map(self._base_watchlist_view, reversed(_list), reversed(el))
 
         all_results = list(itertools.chain(*all_results))
 

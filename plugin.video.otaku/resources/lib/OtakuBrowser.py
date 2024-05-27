@@ -97,11 +97,12 @@ class OtakuBrowser(BrowserBase):
         #     else:
         #         data = ([], 'episodes')
         # else:
-        data = anizip.ANIZIPAPI().get_episodes(anilist_id, filter_lang)
-        if not data[0]:
-            data = simkl.SIMKLAPI().get_episodes(anilist_id, filter_lang)
+        #data = anizip.ANIZIPAPI().get_episodes(anilist_id, filter_lang)
+        #if not data[0]:
+        #    data = simkl.SIMKLAPI().get_episodes(anilist_id, filter_lang)
         # if not data[0]:
         #     data = consumet.CONSUMETAPI().get_episodes(anilist_id, filter_lang)
+        data = simkl.SIMKLAPI().get_episodes(anilist_id, filter_lang)
         return data
 
     @staticmethod

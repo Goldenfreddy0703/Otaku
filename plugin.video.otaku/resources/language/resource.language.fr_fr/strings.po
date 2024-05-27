@@ -1287,6 +1287,22 @@ msgctxt "#40576"
 msgid "Local File Directory"
 msgstr "Répertoire des fichiers locaux"
 
+msgctxt "#40577"
+msgid "Sort order:"
+msgstr "Ordre de tri :"
+
+msgctxt "#40578"
+msgid "Ascending"
+msgstr "Croissant"
+
+msgctxt "#40579"
+msgid "Descending"
+msgstr "Décroissant"
+
+msgctxt "#40580"
+msgid "Exclude Keywords"
+msgstr "Exclure les mots-clés"
+
 ######MAIN Category DIRECTORY#######
 msgctxt "#50000"
 msgid "Airing Anime Calendar"

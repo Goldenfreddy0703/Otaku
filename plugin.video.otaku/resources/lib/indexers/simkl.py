@@ -94,9 +94,9 @@ class SIMKLAPI:
 
         season = result.get('season') if result else '1'
 
-        sync_data = SyncUrl().get_anime_data(anilist_id, 'Anilist')
         s_id = database.get_tvdb_season(anilist_id)
         if not s_id:
+            sync_data = SyncUrl().get_anime_data(anilist_id, 'Anilist')
             s_id = utils.get_season(sync_data[0]) if sync_data else None
         if isinstance(s_id, list) and s_id:
             season = s_id[0]
