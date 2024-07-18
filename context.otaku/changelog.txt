@@ -1,0 +1,20 @@
+Changelog v0.0.15 (2024-07-17)
+- Merged Joezito's Changelog with main
+
+Changelog v1.0.18 (2024-07-11)
+- Fixed some bugs
+
+Changelog v1.0.17 (2024-07-07)
+- Reformated Context Menu
+- Moved All Context Menu items here
+
+Changelog v1.0.16 (2024-07-06)
+- Added resume param to source select and rescrape
+- Moved Watchlist Logout to main code
+
+Changelog v1.0.15 (2024-07-05)
+- Removed WatchList
+
+Changelog v1.0.14 (2024-05-04)
+- Removed Download
+- Removed watch order

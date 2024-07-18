@@ -2309,6 +2309,16 @@ def PLAY(payload, params):
     anilist_id, episode, filter_lang = payload.rsplit("/")
     source_select = bool(params.get('source_select'))
     rescrape = bool(params.get('rescrape'))
+    resume_time = params.get('resume')
+
+    if resume_time:
+        resume_time = float(resume_time)
+        context = control.context_menu([f'Resume from {utils.format_time(resume_time)}', 'Play from beginning'])
+        if context == -1:
+            return control.exit_code()
+        elif context == 1:
+            resume_time = None
+
     sources = _BROWSER.get_sources(anilist_id, episode, filter_lang, 'show', rescrape, source_select)
     _mock_args = {"anilist_id": anilist_id, "episode": episode}
 
@@ -2327,7 +2337,7 @@ def PLAY(payload, params):
             resolver = Resolver(*('resolver.xml', control.ADDON_PATH), actionArgs=_mock_args)
         link = resolver.doModal(sources, {}, False)
     player.play_source(link, anilist_id, watchlist_update_episode, _BROWSER.get_episodeList, int(episode),
-                       source_select=source_select, rescrape=rescrape)
+                       source_select=source_select, rescrape=rescrape, resume_time=resume_time)
 
 
 @route('play_movie/*')
@@ -2336,6 +2346,15 @@ def PLAY_MOVIE(payload, params):
     anilist_id, mal_id, kitsu_id = payload_list
     source_select = bool(params.get('source_select'))
     rescrape = bool(params.get('rescrape'))
+    resume_time = params.get('resume')
+    if resume_time:
+        resume_time = float(resume_time)
+        context = control.context_menu([f'Resume from {utils.format_time(resume_time)}', 'Play from beginning'])
+        if context == -1:
+            return
+        elif context == 1:
+            resume_time = None
+
     if not anilist_id:
         try:
             anilist_id = database.get_show_mal(mal_id)['anilist_id']
@@ -2359,7 +2378,7 @@ def PLAY_MOVIE(payload, params):
         else:
             resolver = Resolver(*('resolver.xml', control.ADDON_PATH), actionArgs=_mock_args)
         link = resolver.doModal(sources, {}, False)
-    player.play_source(link, anilist_id, watchlist_update_episode, _BROWSER.get_episodeList, 1, source_select=source_select, rescrape=rescrape)
+    player.play_source(link, anilist_id, watchlist_update_episode, _BROWSER.get_episodeList, 1, source_select=source_select, rescrape=rescrape, resume_time=resume_time)
 
 
 @route('toggleLanguageInvoker')
@@ -2367,8 +2386,8 @@ def TOGGLE_LANGUAGE_INVOKER(payload, params):
     return control.toggle_reuselanguageinvoker()
 
 
-@route('select_fanart/*')
-def SELECT_FANART(payload, params):
+@route('fanart_select/*')
+def FANART_SELECT(payload, params):
     payload_list = payload.rsplit("/")
     if len(payload_list) == 1:
         anilist_id = payload
@@ -2392,7 +2411,7 @@ def SELECT_FANART(payload, params):
     if not episode:
         OtakuBrowser().get_anime_init(anilist_id)
 
-    control.execute('ActivateWindow(Videos,plugin://{}/select_fanart/{})'.format(control.ADDON_ID, anilist_id))
+    control.execute('ActivateWindow(Videos,plugin://{}/fanart_select/{})'.format(control.ADDON_ID, anilist_id))
 
 
 @route('fanart/*')
@@ -2442,7 +2461,7 @@ def MARKED_AS_WATCHED(payload, params):
     control.execute('ActivateWindow(Videos,{0}/watchlist_to_ep/{1}/{2}/{3}/{4})'.format(plugin, anilist_id, mal_id, kitsu_id, episode))
 
 
-@route('delete_anime_from_database/*')
+@route('delete_anime_database/*')
 def DELETE_ANIME_DATABASE(payload, params):
     payload_list = payload.rsplit("/")
     if len(payload_list) == 4:

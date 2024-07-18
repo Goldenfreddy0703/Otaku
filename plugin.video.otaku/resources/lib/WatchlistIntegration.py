@@ -73,7 +73,7 @@ def WATCHLIST_TO_EP(payload, params):
     return control.draw_items(anime_general, content_type)
 
 
-@route('watchlist_context/*')
+@route('watchlist_manager/*')
 def CONTEXT_MENU(payload, params):
     flavor_settings = {
         'AniList': ('anilist.enabled', 'anilist.username'),

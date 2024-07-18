@@ -1,59 +1,68 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<addon id="context.otaku" version="0.0.14" name="Otaku - Global Context Menu Items" provider-name="TeamOtaku">
+<addon id="context.otaku" version="1.0.18" name="Otaku - Global Context Menu" provider-name="TeamOtaku">
   <requires>
-    <!-- <import addon="xbmc.python" version="2.24.0" /> -->
+     <import addon="xbmc.python" version="3.0.0" />
   </requires>
   <extension point="kodi.context.item">
     <menu id="kodi.core.main">
-      <item library="rescrape.py">
-        <label>Rescrape Item</label>
-        <visible>String.StartsWith(ListItem.path,plugin://plugin.video.otaku/)+[String.IsEqual(ListItem.dbtype,episode)]</visible>
-      </item>
-      <item library="sourceSelect.py">
-        <label>Source Select</label>
-        <visible>String.StartsWith(ListItem.path,plugin://plugin.video.otaku/)+[String.IsEqual(ListItem.dbtype,episode)|String.IsEqual(ListItem.dbtype,movie)]</visible>
-      </item>
-      <item library="findRecommendations.py">
+      <item library="default.py" args="findrecommendations">
         <label>Find Recommendations</label>
-        <visible>String.StartsWith(ListItem.path,plugin://plugin.video.otaku/)+[String.IsEqual(ListItem.dbtype,tvshow)|String.IsEqual(ListItem.dbtype,movie)]</visible>
+        <visible>String.IsEqual(Window(home).Property(context.otaku.findrecommendations),true)+String.StartsWith(ListItem.Path,plugin://plugin.video.otaku/)+[String.IsEqual(ListItem.DBTYPE,tvshow)|String.IsEqual(ListItem.DBTYPE,movie)]</visible>
       </item>
-      <item library="findRelations.py">
+      <item library="default.py" args="findrelations">
         <label>Find Relations</label>
-        <visible>String.StartsWith(ListItem.path,plugin://plugin.video.otaku/)+[String.IsEqual(ListItem.dbtype,tvshow)|String.IsEqual(ListItem.dbtype,movie)]</visible>
+        <visible>String.IsEqual(Window(home).Property(context.otaku.findrelations),true)+String.StartsWith(ListItem.Path,plugin://plugin.video.otaku/)+[String.IsEqual(ListItem.DBTYPE,tvshow)|String.IsEqual(ListItem.DBTYPE,movie)]</visible>
       </item>
-      <item library="getWatchOrder.py">
+      <item library="default.py" args="getwatchorder">
         <label>Get Watch Order</label>
-        <visible>String.StartsWith(ListItem.path,plugin://plugin.video.otaku/)+[String.IsEqual(ListItem.dbtype,tvshow)|String.IsEqual(ListItem.dbtype,movie)]</visible>
+        <visible>String.IsEqual(Window(home).Property(context.otaku.getwatchorder),true)+String.StartsWith(ListItem.Path,plugin://plugin.video.otaku/)+[String.IsEqual(ListItem.DBTYPE,tvshow)|String.IsEqual(ListItem.DBTYPE,movie)]</visible>
       </item>
-      <item library="watchlist.py">
-        <label>Watchlist Manager</label>
-        <visible>String.StartsWith(ListItem.path,plugin://plugin.video.otaku/)+[String.IsEqual(ListItem.dbtype,tvshow)|String.IsEqual(ListItem.dbtype,movie)]</visible>
+      <item library="default.py" args="markedaswatched">
+        <label>Marked as Watched [COLOR blue]WatchList[/COLOR]</label>
+        <visible>String.IsEqual(Window(home).Property(context.otaku.markedaswatched),true)+String.StartsWith(ListItem.Path,plugin://plugin.video.otaku/)+[String.IsEqual(ListItem.DBTYPE,episode)|String.IsEqual(ListItem.DBTYPE,movie)]</visible>
       </item>
-      <item library="watchlistLogout.py">
+      <item library="default.py" args="rescrape">
+        <label>Rescrape</label>
+        <visible>String.IsEqual(Window(home).Property(context.otaku.rescrape),true)+String.StartsWith(ListItem.Path,plugin://plugin.video.otaku/)+[String.IsEqual(ListItem.DBTYPE,episode)|String.IsEqual(ListItem.DBTYPE,movie)]</visible>
+      </item>
+      <item library="default.py" args="sourceselect">
+        <label>Source Select</label>
+        <visible>String.IsEqual(Window(home).Property(context.otaku.sourceselect),true)+String.StartsWith(ListItem.Path,plugin://plugin.video.otaku/)+[String.IsEqual(ListItem.DBTYPE,episode)|String.IsEqual(ListItem.DBTYPE,movie)]</visible>
+      </item>
+      <item library="default.py" args="logout">
         <label>Logout</label>
-        <visible>String.StartsWith(ListItem.path,plugin://plugin.video.otaku/)+[String.Contains(ListItem.folderpath,/watchlist/)]</visible>
+        <visible>String.IsEqual(Window(home).Property(context.otaku.logout),true)+String.StartsWith(ListItem.Path,plugin://plugin.video.otaku/)+String.Contains(ListItem.folderpath,/watchlist/)</visible>
+      </item>
+      <item library="default.py" args="deletefromdatabase">
+        <label>Delete From Database</label>
+        <visible>String.IsEqual(Window(home).Property(context.otaku.deletefromdatabase),true)+String.StartsWith(ListItem.Path,plugin://plugin.video.otaku/)+[String.IsEqual(ListItem.DBTYPE,tvshow)|String.IsEqual(ListItem.DBTYPE,movie)]</visible>
+      </item>
+      <item library="default.py" args="watchlist">
+        <label>WatchList Manager</label>
+        <visible>String.IsEqual(Window(home).Property(context.otaku.watchlist),true)+String.StartsWith(ListItem.Path,plugin://plugin.video.otaku/)+[String.IsEqual(ListItem.DBTYPE,tvshow)|String.IsEqual(ListItem.DBTYPE,movie)]</visible>
+      </item>
+      <item library="default.py" args="fanartselect">
+        <label>Select Fanart</label>
+        <visible>String.IsEqual(Window(home).Property(context.otaku.fanartselect),true)+String.StartsWith(ListItem.Path,plugin://plugin.video.otaku/)+[String.IsEqual(ListItem.DBTYPE,tvshow)|String.IsEqual(ListItem.DBTYPE,movie)]</visible>
       </item>
     </menu>
   </extension>
+  <extension point="xbmc.service" library="service.py" />
   <extension point="xbmc.addon.metadata">
     <summary lang="en">otaku - This Addon is currently in beta. Please be aware there may be bugs present</summary>
     <description lang="en">Adds Global Contextual Menu Items for otaku menu items throughout Kodi
     </description>
     <platform>all</platform>
     <license>GPL-3.0</license>
-    <forum></forum>
-    <website></website>
-    <source></source>
-    <disclaimer lang="en"></disclaimer>
+<!--    <forum></forum>-->
+<!--    <website></website>-->
+<!--    <source></source>-->
+<!--    <disclaimer lang="en"></disclaimer>-->
     <assets>
       <icon>icon.png</icon>
       <fanart>fanart.jpg</fanart>
       <clearlogo>logo.png</clearlogo>
       <poster>poster.png</poster>
     </assets>
-    <news>
-Changelog 0.0.10:
-- Initial release
-    </news>
   </extension>
 </addon>

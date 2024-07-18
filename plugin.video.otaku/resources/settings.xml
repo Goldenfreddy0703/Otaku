@@ -54,9 +54,17 @@
 		<!-- Context Menu Customization -->
 		<setting type="lsep" label="40512"/>
 		<setting id="sep"/>
-		<setting id="context.delete.from.database" type="bool" label="40501" default="false" />
-		<setting id="context.marked.watched" label="40513" type="bool" default="true" />
-		<setting id="context.fanart.select" label="40584" type="bool" default="false"/>
+		<setting type="lsep" label="Context Menus" />
+		<setting id="context.otaku.findrecommendations" label="Find Recommendations" type="bool" default="true" />
+		<setting id="context.otaku.findrelations" label="Find Relations" type="bool" default="true" />
+		<setting id="context.otaku.getwatchorder" label="Get Watch Order" type="bool" default="true" />
+		<setting id="context.otaku.rescrape" label="Rescrape" type="bool" default="true" />
+		<setting id="context.otaku.sourceselect" label="Source Select" type="bool" default="true" />
+		<setting id="context.otaku.logout" label="Logout" type="bool" default="true" />
+		<setting id="context.otaku.deletefromdatabase" label="Delete From Database" type="bool" default="true" />
+		<setting id="context.otaku.watchlist" label="WatchList Manager" type="bool" default="true" />
+		<setting id="context.otaku.markedaswatched" label="Marked as Watched [COLOR blue]WatchList[/COLOR]" type="bool" default="true" />
+		<setting id="context.otaku.fanartselect" label="Select Fanart" type="bool" default="true" />
 
 		<!-- Artwork Customization -->
 		<setting type="lsep" label="40484"/>

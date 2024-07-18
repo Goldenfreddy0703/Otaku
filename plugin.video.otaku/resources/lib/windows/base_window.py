@@ -49,7 +49,7 @@ class BaseWindow(control.xmlWindow):
             fanart = control.OTAKU_FANART_PATH
         else:
             if isinstance(fanart, list):
-                if control.getSetting('context.fanart.select') == 'true':
+                if control.getSetting('context.otaku.fanartselect') == 'true':
                     fanart_select = control.getSetting('fanart.select.anilist.{}'.format(anilist_id))
                     fanart = fanart_select if fanart_select else random.choice(fanart)
                 else:

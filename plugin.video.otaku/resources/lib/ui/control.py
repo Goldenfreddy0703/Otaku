@@ -202,6 +202,11 @@ def get_plugin_params():
     return dict(urllib_parse.parse_qsl(sys.argv[2].replace('?', '')))
 
 
+def exit_code():
+    if getSetting('reuselanguageinvoker.status') == 'Enabled':
+        exit_(1)
+
+
 def keyboard(text):
     keyboard_ = xbmc.Keyboard("", text, False)
     keyboard_.doModal()
@@ -382,7 +387,7 @@ def xbmc_add_player_item(name, url, art=None, info=None, draw_cm=None, bulk_add=
         art['fanart'] = OTAKU_FANART_PATH
     else:
         if isinstance(art['fanart'], list):
-            if getSetting('context.fanart.select') == 'true':
+            if getSetting('context.otaku.fanartselect') == 'true':
                 if info.get('unique_ids', {}).get('anilist_id'):
                     fanart_select = getSetting('fanart.select.anilist.{}'.format(info["unique_ids"]["anilist_id"]))
                     art['fanart'] = fanart_select if fanart_select else random.choice(art['fanart'])
@@ -449,13 +454,6 @@ def draw_items(video_data, contentType="tvshows", draw_cm=[], bulk_add=False):
 
     if not isinstance(video_data, list):
         video_data = [video_data]
-    if getSetting('context.delete.from.database') == 'true' and contentType == 'tvshows':
-        draw_cm.append(("Delete from database", 'delete_anime_from_database'))
-    if getSetting('watchlist.update.enabled') == 'true':
-        if getSetting('context.marked.watched') == 'true' and contentType == 'episodes':
-            draw_cm.append(("Marked as Watched [COLOR blue]WatchList[/COLOR]", 'marked_as_watched'))
-    if getSetting('context.fanart.select') == 'true' and contentType == 'tvshows':
-        draw_cm.append(("Select Fanart", 'select_fanart'))
 
     fanart_disable = getSetting('disable.fanart') == 'true'
     clearlogo_disable = getSetting('disable.clearlogo') == 'true'
@@ -665,6 +663,10 @@ def title_lang(title_key):
 
 def hide_unaired(content_type):
     return getSetting('general.unaired.episodes') == 'true' and content_type == 'episodes'
+
+
+def exit_(code):
+    sys.exit(code)
 
 
 def is_addon_visible():

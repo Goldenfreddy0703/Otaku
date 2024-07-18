@@ -39,6 +39,7 @@ class watchlistPlayer(xbmc.Player):
         super(watchlistPlayer, self).__init__()
         self.player = xbmc.Player()
         self._filter_lang = None
+        self.resume_time = None
         self._episode = None
         self._build_playlist = None
         self._anilist_id = None
@@ -63,12 +64,13 @@ class watchlistPlayer(xbmc.Player):
         self.skipintro_aniskip_offset = int(control.getSetting('skipintro.aniskip.offset'))
         self.skipoutro_aniskip_offset = int(control.getSetting('skipoutro.aniskip.offset'))
 
-    def handle_player(self, anilist_id, watchlist_update, build_playlist, episode, filter_lang, skip=None):
+    def handle_player(self, anilist_id, watchlist_update, build_playlist, episode, filter_lang, skip=None, resume_time=None):
         self._anilist_id = anilist_id
         self._watchlist_update = watchlist_update
         self._build_playlist = build_playlist
         self._episode = episode
         self._filter_lang = filter_lang
+        self.resume_time = resume_time
 
         if skip:
             self.skipintro_start_skip_time = skip.get('intro', {}).get('start', 0)
@@ -161,6 +163,8 @@ class watchlistPlayer(xbmc.Player):
             xbmc.sleep(250)
 
         control.closeAllDialogs()
+        if self.resume_time:
+            player().seekTime(self.resume_time)
 
         if control.getSetting('general.kodi_language') == 'false':
             # Subtitle Preferences
@@ -487,7 +491,7 @@ def _prefetch_play_link(link):
     }
 
 
-def play_source(link, anilist_id=None, watchlist_update=None, build_playlist=None, episode=None, filter_lang=None, rescrape=False, source_select=False, subs=None):
+def play_source(link, anilist_id=None, watchlist_update=None, build_playlist=None, episode=None, filter_lang=None, rescrape=False, source_select=False, subs=None, resume_time=None):
     try:
         skip = None
         if isinstance(link, dict):
@@ -543,7 +547,7 @@ def play_source(link, anilist_id=None, watchlist_update=None, build_playlist=Non
         control.update_listitem(item, episode_info['info'])
         item.setArt(episode_info['image'])
         xbmc.Player().play(playList, item)
-        watchlistPlayer().handle_player(anilist_id, watchlist_update, None, episode, filter_lang, skip)
+        watchlistPlayer().handle_player(anilist_id, watchlist_update, None, episode, filter_lang, skip, resume_time)
         return
 
     xbmcplugin.setResolvedUrl(control.HANDLE, True, item)
