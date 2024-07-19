@@ -78,29 +78,11 @@ class watchlistPlayer(xbmc.Player):
             self.skipoutro_start_skip_time = skip.get('outro', {}).get('start', 0)
             self.skipoutro_end_skip_time = skip.get('outro', {}).get('end', 9999)
         else:
-            if self.skipintro_aniskip_enable:
-                try:
-                    mal_id = database.get_show(anilist_id)['mal_id']
-                except TypeError:
-                    mal_id = ''
-                skipintro_aniskip_res = aniskip.get_skip_times(mal_id, episode, 'op')
-
-                if skipintro_aniskip_res:
-                    skip_times = skipintro_aniskip_res['results'][0]['interval']
-                    self.skipintro_start_skip_time = int(skip_times['startTime']) + int(self.skipintro_aniskip_offset)
-                    self.skipintro_end_skip_time = int(skip_times['endTime']) + int(self.skipintro_aniskip_offset)
-
-            if self.skipoutro_aniskip_enable:
-                try:
-                    mal_id = database.get_show(anilist_id)['mal_id']
-                except TypeError:
-                    mal_id = ''
-                skipoutro_aniskip_res = aniskip.get_skip_times(mal_id, episode, 'ed')
-
-                if skipoutro_aniskip_res:
-                    skip_times = skipoutro_aniskip_res['results'][0]['interval']
-                    self.skipoutro_start_skip_time = int(skip_times['startTime']) + int(self.skipoutro_aniskip_offset)
-                    self.skipoutro_end_skip_time = int(skip_times['endTime']) + int(self.skipoutro_aniskip_offset)
+            if self.skipintro_aniskip_enable or self.skipoutro_aniskip_enable:
+                # process skip times
+                self.process_hianime()
+                self.process_aniwave()
+                self.process_aniskip()
 
         control.setSetting('skipintro.start.skip.time', str(self.skipintro_start_skip_time))
         control.setSetting('skipintro.end.skip.time', str(self.skipintro_end_skip_time))
@@ -109,6 +91,49 @@ class watchlistPlayer(xbmc.Player):
         control.setSetting('skipoutro.end.skip.time', str(self.skipoutro_end_skip_time))
 
         self.keepAlive()
+
+    def process_aniskip(self):
+        if self.skipintro_aniskip_enable:
+            mal_id = database.get_show(self._anilist_id)['mal_id']
+            skipintro_aniskip_res = aniskip.get_skip_times(mal_id, self._episode, 'op')
+            if skipintro_aniskip_res:
+                skip_times = skipintro_aniskip_res['results'][0]['interval']
+                self.skipintro_start_skip_time = int(skip_times['startTime']) + self.skipintro_aniskip_offset
+                self.skipintro_end_skip_time = int(skip_times['endTime']) + self.skipintro_aniskip_offset
+                self.skipintro_aniskip = True
+
+        if self.skipoutro_aniskip_enable:
+            mal_id = database.get_show(self._anilist_id)['mal_id']
+            skipoutro_aniskip_res = aniskip.get_skip_times(mal_id, self._episode, 'ed')
+            if skipoutro_aniskip_res:
+                skip_times = skipoutro_aniskip_res['results'][0]['interval']
+                self.skipoutro_start_skip_time = int(skip_times['startTime']) + self.skipoutro_aniskip_offset
+                self.skipoutro_end_skip_time = int(skip_times['endTime']) + self.skipoutro_aniskip_offset
+                self.skipoutro_aniskip = True
+
+    def process_aniwave(self):
+        aniwave_start = int(control.getSetting('aniwave.skipintro.start'))
+        aniwave_end = int(control.getSetting('aniwave.skipintro.start'))
+        if aniwave_start != -1:
+            self.skipintro_start_skip_time = aniwave_start + self.skipintro_aniskip_offset
+            self.skipintro_end_skip_time = int(control.getSetting('aniwave.skipintro.end')) + self.skipintro_aniskip_offset
+            self.skipintro_aniskip = True
+        if aniwave_end != -1:
+            self.skipoutro_start_skip_time = aniwave_end + self.skipoutro_aniskip_offset
+            self.skipoutro_end_skip_time = int(control.getSetting('aniwave.skipoutro.end')) + self.skipoutro_aniskip_offset
+            self.skipoutro_aniskip = True
+
+    def process_hianime(self):
+        hianime_start = int(control.getSetting('hianime.skipintro.start'))
+        hianime_end = int(control.getSetting('hianime.skipoutro.start'))
+        if hianime_start != -1:
+            self.skipintro_start_skip_time = hianime_start + self.skipintro_aniskip_offset
+            self.skipintro_end_skip_time = int(control.getSetting('hianime.skipintro.end')) + self.skipintro_aniskip_offset
+            self.skipintro_aniskip = True
+        if hianime_end != -1:
+            self.skipoutro_start_skip_time = hianime_end + self.skipoutro_aniskip_offset
+            self.skipoutro_end_skip_time = int(control.getSetting('hianime.skipoutro.end')) + self.skipoutro_aniskip_offset
+            self.skipoutro_aniskip = True
 
     def onPlayBackStarted(self):
         if self._build_playlist and playList.size() == 1:

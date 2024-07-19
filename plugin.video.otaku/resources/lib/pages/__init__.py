@@ -105,6 +105,16 @@ class Sources(DisplayWindow):
         self.setProperty('process_started', 'true')
         duration = args['duration']
 
+        # set skip times to -1 before scraping
+        control.setSetting('aniwave.skipintro.start', '-1')
+        control.setSetting('aniwave.skipintro.end', '-1')
+        control.setSetting('hianime.skipintro.start', '-1')
+        control.setSetting('hianime.skipintro.end', '-1')
+        control.setSetting('aniwave.skipoutro.start', '-1')
+        control.setSetting('aniwave.skipoutro.end', '-1')
+        control.setSetting('hianime.skipoutro.start', '-1')
+        control.setSetting('hianime.skipoutro.end', '-1')
+
         if control.real_debrid_enabled() or control.all_debrid_enabled() or control.debrid_link_enabled() or control.premiumize_enabled():
             if control.getSetting('provider.nyaa') == 'true':
                 self.threads.append(
@@ -260,6 +270,13 @@ class Sources(DisplayWindow):
         if not rescrape:
             self.aniwaveSources = aniwave.sources().get_sources(anilist_id, episode, get_backup)
             self.embedSources += self.aniwaveSources
+            for x in self.aniwaveSources:
+                if x and x['skip'].get('intro') and x['skip']['intro']['start'] != 0:
+                    control.setSetting('aniwave.skipintro.start', str(x['skip']['intro']['start']))
+                    control.setSetting('aniwave.skipintro.end', str(x['skip']['intro']['end']))
+                if x and x['skip'].get('outro') and x['skip']['outro']['start'] != 0:
+                    control.setSetting('aniwave.skipoutro.start', str(x['skip']['outro']['start']))
+                    control.setSetting('aniwave.skipoutro.end', str(x['skip']['outro']['end']))
         self.remainingProviders.remove('aniwave')
 
     def animixplay_worker(self, anilist_id, episode, get_backup, rescrape):
@@ -278,7 +295,14 @@ class Sources(DisplayWindow):
         if not rescrape:
             self.hianimeSources = hianime.sources().get_sources(anilist_id, episode, get_backup)
             self.embedSources += self.hianimeSources
-        self.remainingProviders.remove('h!anime')
+            for x in self.hianimeSources:
+                if x and x['skip'].get('intro') and x['skip']['intro']['start'] != 0:
+                    control.setSetting('hianime.skipintro.start', str(x['skip']['intro']['start']))
+                    control.setSetting('hianime.skipintro.end', str(x['skip']['intro']['end']))
+                if x and x['skip'].get('outro') and x['skip']['outro']['start'] != 0:
+                    control.setSetting('hianime.skipoutro.start', str(x['skip']['outro']['start']))
+                    control.setSetting('hianime.skipoutro.end', str(x['skip']['outro']['end']))
+        self.remainingProviders.remove('hianime')
 
     def animess_worker(self, anilist_id, episode, get_backup, rescrape):
         self.animessSources = animess.sources().get_sources(anilist_id, episode, get_backup)
