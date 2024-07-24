@@ -8,40 +8,40 @@ def main():
     plugin = 'plugin://plugin.video.otaku'
     if arg == 'findrecommendations':
         path = path.split(plugin, 1)[1]
-        xbmc.executebuiltin(f"ActivateWindow(Videos,{plugin}/find_recommendations/{path})")
+        xbmc.executebuiltin('ActivateWindow(Videos,%s/find_recommendations/%s)' % (plugin, path))
     elif arg == 'findrelations':
         path = path.split(plugin, 1)[1]
-        xbmc.executebuiltin(f"ActivateWindow(Videos,{plugin}/find_relations/{path})")
+        xbmc.executebuiltin('ActivateWindow(Videos,%s/find_relations/%s)' % (plugin, path))
     elif arg == 'getwatchorder':
         path = path.split(plugin, 1)[1]
-        xbmc.executebuiltin(f"ActivateWindow(Videos,{plugin}/get_watch_order/{path})")
+        xbmc.executebuiltin('ActivateWindow(Videos,%s/watch_order/%s)' % (plugin, path))
     elif arg == 'rescrape':
         resume_time = item.getVideoInfoTag().getResumeTime()
         path += "?rescrape=true"
         if resume_time > 0:
-            path += f"&resume={resume_time}"
-        xbmc.executebuiltin(f"PlayMedia({path})")
+            path += "&resume=%s" % resume_time
+        xbmc.executebuiltin('PlayMedia(%s)' % path)
     elif arg == 'sourceselect':
         resume_time = item.getVideoInfoTag().getResumeTime()
         path += '?source_select=true'
         if resume_time > 0:
-            path += f'&resume={resume_time}'
-        xbmc.executebuiltin(f"PlayMedia({path})")
+            path += "&resume=%s" % resume_time
+        xbmc.executebuiltin('PlayMedia(%s)' % path)
     elif arg == 'logout':
-        path = path.split(f'{plugin}/watchlist', 1)[1]
-        xbmc.executebuiltin(f"RunPlugin({plugin}/watchlist_logout/{path})")
+        path = path.split('%s/watchlist' % plugin, 1)[1]
+        xbmc.executebuiltin('RunPlugin(%s/watchlist_logout%s)' % (plugin, path))
     elif arg == 'deletefromdatabase':
         path = path.split(plugin, 1)[1]
-        xbmc.executebuiltin(f"RunPlugin({plugin}/delete_anime_database{path})")
+        xbmc.executebuiltin('RunPlugin(%s/delete_anime_database%s)' % (plugin, path))
     elif arg == 'watchlist':
         path = path.split(plugin, 1)[1]
-        xbmc.executebuiltin(f"RunPlugin({plugin}/watchlist_manager/{path})")
+        xbmc.executebuiltin('RunPlugin(%s/watchlist_manager/%s)' % (plugin, path))
     elif arg == 'markedaswatched':
-        path = path.split(f'{plugin}/play', 1)[1]
-        xbmc.executebuiltin(f"RunPlugin({plugin}/marked_as_watched/{path})")
+        path = path.split('%s/play' % plugin, 1)[1]
+        xbmc.executebuiltin('RunPlugin(%s/marked_as_watched/%s)' % (plugin, path))
     elif arg == 'fanartselect':
         path = path.split(plugin, 1)[1]
-        xbmc.executebuiltin(f"ActivateWindow(Videos,{plugin}/fanart_select/{path})")
+        xbmc.executebuiltin('ActivateWindow(Videos,%s/fanart_select/%s)' % (plugin, path))
     else:
         raise KeyError("Could Not find %s in Context Menu Action" % arg)
 

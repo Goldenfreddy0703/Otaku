@@ -2313,7 +2313,7 @@ def PLAY(payload, params):
 
     if resume_time:
         resume_time = float(resume_time)
-        context = control.context_menu([f'Resume from {utils.format_time(resume_time)}', 'Play from beginning'])
+        context = control.context_menu(['Resume from {}'.format(utils.format_time(resume_time)), 'Play from beginning'])
         if context == -1:
             return control.exit_code()
         elif context == 1:
@@ -2347,9 +2347,10 @@ def PLAY_MOVIE(payload, params):
     source_select = bool(params.get('source_select'))
     rescrape = bool(params.get('rescrape'))
     resume_time = params.get('resume')
+
     if resume_time:
         resume_time = float(resume_time)
-        context = control.context_menu([f'Resume from {utils.format_time(resume_time)}', 'Play from beginning'])
+        context = control.context_menu(['Resume from {}'.format(utils.format_time(resume_time)), 'Play from beginning'])
         if context == -1:
             return
         elif context == 1:
