@@ -11,8 +11,7 @@ properties = [
     "context.otaku.logout",
     'context.otaku.deletefromdatabase',
     'context.otaku.watchlist',
-    'context.otaku.markedaswatched',
-    'context.otaku.fanartselect'
+    'context.otaku.markedaswatched'
 ]
 
 ADDON = xbmcaddon.Addon('plugin.video.otaku')

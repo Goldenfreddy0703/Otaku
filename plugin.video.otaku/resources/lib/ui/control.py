@@ -428,7 +428,7 @@ def xbmc_add_dir(name, url, art=None, info=None, draw_cm=None, fanart_disable=Fa
         art['fanart'] = OTAKU_FANART_PATH
     else:
         if isinstance(art['fanart'], list):
-            if getSetting('context.fanart.select') == 'true':
+            if getSetting('context.otaku.fanartselect') == 'true':
                 if info.get('unique_ids', {}).get('anilist_id'):
                     fanart_select = getSetting('fanart.select.anilist.{}'.format(info["unique_ids"]["anilist_id"]))
                     art['fanart'] = fanart_select if fanart_select else random.choice(art['fanart'])
@@ -454,6 +454,9 @@ def draw_items(video_data, contentType="tvshows", draw_cm=[], bulk_add=False):
 
     if not isinstance(video_data, list):
         video_data = [video_data]
+
+    if getSetting('context.otaku.fanartselect') == 'true' and contentType == 'tvshows':
+        draw_cm.append(("Select Fanart", 'fanart_select'))
 
     fanart_disable = getSetting('disable.fanart') == 'true'
     clearlogo_disable = getSetting('disable.clearlogo') == 'true'

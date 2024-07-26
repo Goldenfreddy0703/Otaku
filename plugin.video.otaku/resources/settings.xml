@@ -60,9 +60,9 @@
 		<setting id="context.otaku.getwatchorder" label="Get Watch Order" type="bool" default="true" />
 		<setting id="context.otaku.rescrape" label="Rescrape" type="bool" default="true" />
 		<setting id="context.otaku.sourceselect" label="Source Select" type="bool" default="true" />
-		<setting id="context.otaku.logout" label="Logout" type="bool" default="true" />
-		<setting id="context.otaku.deletefromdatabase" label="Delete From Database" type="bool" default="true" />
 		<setting id="context.otaku.watchlist" label="WatchList Manager" type="bool" default="true" />
+		<setting id="context.otaku.deletefromdatabase" label="Delete From Database" type="bool" default="true" />
+		<setting id="context.otaku.logout" label="Logout [COLOR blue]WatchList[/COLOR]" type="bool" default="true" />
 		<setting id="context.otaku.markedaswatched" label="Marked as Watched [COLOR blue]WatchList[/COLOR]" type="bool" default="true" />
 		<setting id="context.otaku.fanartselect" label="Select Fanart" type="bool" default="true" />
 

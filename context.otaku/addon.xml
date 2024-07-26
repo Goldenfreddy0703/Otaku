@@ -33,17 +33,13 @@
         <label>Logout</label>
         <visible>String.IsEqual(Window(home).Property(context.otaku.logout),true)+String.StartsWith(ListItem.Path,plugin://plugin.video.otaku/)+String.Contains(ListItem.folderpath,/watchlist/)</visible>
       </item>
-      <item library="default.py" args="deletefromdatabase">
-        <label>Delete From Database</label>
-        <visible>String.IsEqual(Window(home).Property(context.otaku.deletefromdatabase),true)+String.StartsWith(ListItem.Path,plugin://plugin.video.otaku/)+[String.IsEqual(ListItem.DBTYPE,tvshow)|String.IsEqual(ListItem.DBTYPE,movie)]</visible>
-      </item>
       <item library="default.py" args="watchlist">
         <label>WatchList Manager</label>
         <visible>String.IsEqual(Window(home).Property(context.otaku.watchlist),true)+String.StartsWith(ListItem.Path,plugin://plugin.video.otaku/)+[String.IsEqual(ListItem.DBTYPE,tvshow)|String.IsEqual(ListItem.DBTYPE,movie)]</visible>
       </item>
-      <item library="default.py" args="fanartselect">
-        <label>Select Fanart</label>
-        <visible>String.IsEqual(Window(home).Property(context.otaku.fanartselect),true)+String.StartsWith(ListItem.Path,plugin://plugin.video.otaku/)+[String.IsEqual(ListItem.DBTYPE,tvshow)|String.IsEqual(ListItem.DBTYPE,movie)]</visible>
+      <item library="default.py" args="deletefromdatabase">
+        <label>Delete From Database</label>
+        <visible>String.IsEqual(Window(home).Property(context.otaku.deletefromdatabase),true)+String.StartsWith(ListItem.Path,plugin://plugin.video.otaku/)+[String.IsEqual(ListItem.DBTYPE,tvshow)|String.IsEqual(ListItem.DBTYPE,movie)]</visible>
       </item>
     </menu>
   </extension>
