@@ -225,6 +225,7 @@
 		<setting id="rd.cloudInspection" type="bool" label="40547" default="false" />
 		<setting id="premiumize.cloudInspection" type="bool" label="40548" default="false" />
 		<setting id="alldebrid.cloudInspection" type="bool" label="40583" default="false" />
+		<setting id="tb.cloudInspection" type="bool" label="50100" default="false" />
 
 		<!-- Local Scraping -->
 		<setting type="lsep" label="40546"/>
@@ -354,6 +355,13 @@
 		<setting id="rd.username" type="text" label="40337" default="" enable="false" visible="eq(-1,true)" />
 		<setting id="rd.auth_start" type="action" label="40338" option="close" action="RunPlugin(plugin://plugin.video.otaku/authRealDebrid)" visible="eq(-2,true)" />
 		<setting id="rd.priority" type="slider" subsetting="true" label="40339" option="int" range="1,1,10" default="10" visible="eq(-3,true)" />
+
+		<!-- Torbox-->
+		<setting type="lsep" label="Torbox" />
+		<setting type="sep" />
+		<setting id="torbox.enabled" type="bool" default="false" label="50097" />
+		<setting id="tb.apikey" type="text" label="50098" default="" enable="true" visible="eq(-1,true)" />
+		<setting id="tb.priority" type="slider" subsetting="true" label="50099" option="int" range="1,1,10" default="10" visible="eq(-2,true)" />
 	</category>
 
 	<!-- Watchlist -->

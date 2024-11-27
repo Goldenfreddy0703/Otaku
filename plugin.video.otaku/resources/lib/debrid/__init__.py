@@ -1,7 +1,7 @@
 import copy
 import threading
 from resources.lib.debrid import (all_debrid, debrid_link, premiumize,
-                                  real_debrid)
+                                  real_debrid, torbox)
 from resources.lib.ui import control
 
 
@@ -11,6 +11,7 @@ class TorrentCacheCheck:
         self.realdebridCached = []
         self.all_debridCached = []
         self.debrid_linkCached = []
+        self.torboxCached = []
         self.threads = []
 
         self.episodeStrings = None
@@ -31,13 +32,17 @@ class TorrentCacheCheck:
         if control.all_debrid_enabled():
             self.threads.append(
                 threading.Thread(target=self.all_debrid_worker, args=(copy.deepcopy(torrent_list),)))
+            
+        if control.torbox_enabled():
+            self.threads.append(
+                threading.Thread(target=self.torbox_worker, args=(copy.deepcopy(torrent_list),)))
 
         for i in self.threads:
             i.start()
         for i in self.threads:
             i.join()
 
-        cachedList = self.realdebridCached + self.premiumizeCached + self.all_debridCached + self.debrid_linkCached
+        cachedList = self.realdebridCached + self.premiumizeCached + self.all_debridCached + self.debrid_linkCached + self.torboxCached
         return cachedList
 
     # Function to check cache on 'all_debrid'
@@ -125,3 +130,20 @@ class TorrentCacheCheck:
             count += 1
 
         self.premiumizeCached = cache_list
+
+    # Function to check cache on 'torbox'
+    def torbox_worker(self, torrent_list):
+        hash_list = [i['hash'] for i in torrent_list]
+        if len(hash_list) == 0:
+            return
+        
+        torboxCache = torbox.Torbox().hash_check(hash_list)
+        torboxCache = torboxCache['data']
+        cache_list = []
+
+        for i in torrent_list:
+            if i['hash'] in torboxCache:
+                i['debrid_provider'] = 'torbox'
+                cache_list.append(i)
+
+        self.torboxCached = cache_list

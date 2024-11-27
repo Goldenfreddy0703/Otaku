@@ -114,6 +114,10 @@ def premiumize_enabled():
     return True if getSetting('premiumize.token') != '' and getSetting('premiumize.enabled') == 'true' else False
 
 
+def torbox_enabled():
+    return True if getSetting('tb.apikey') != '' and getSetting('tb.enabled') == 'true' else False
+
+
 def myanimelist_enabled():
     return True if getSetting('mal.token') != '' and getSetting('mal.enabled') == 'true' else False
 

@@ -2,7 +2,7 @@ import re
 import json
 from resources.lib.ui import source_utils, client, control
 from resources.lib.ui.BrowserBase import BrowserBase
-from resources.lib.debrid import real_debrid, premiumize, all_debrid
+from resources.lib.debrid import real_debrid, premiumize, all_debrid, torbox
 import threading
 
 
@@ -23,6 +23,10 @@ class sources(BrowserBase):
         if debrid.get('all_debrid'):
             self.threads.append(
                 threading.Thread(target=self.alldebrid_cloud_inspection, args=(query, episode,)))
+            
+        if debrid.get('torbox'):
+            self.threads.append(
+                threading.Thread(target=self.torbox_cloud_inspection, args=(query, episode,)))
 
         for i in self.threads:
             i.start()
@@ -164,3 +168,41 @@ class sources(BrowserBase):
                     'episode': episode
                 }
             )
+    
+    def torbox_cloud_inspection(self, query, episode):
+        api = torbox.Torbox()
+        torrents = api.list_torrents()
+
+        filenames = [re.sub(r'\[.*?\]\s*', '', i['name']) for i in torrents]
+        filenames_query = ','.join(filenames)
+        resp = client.request('https://armkai.vercel.app/api/fuzzypacks', params={"dict": filenames_query, "match": query})
+        resp = json.loads(resp)
+        
+        for i in resp:
+            torrent = torrents[i]
+            if torrent['cached'] != True or torrent['download_finished'] != True:
+                continue
+
+            if len(torrent['files']) <= 0:
+                continue
+
+            if not any(source_utils.is_file_ext_valid(tor_file['name'].lower()) for tor_file in torrent['files']):
+                continue
+
+            file = source_utils.get_best_match('short_name', torrent['files'], episode)
+            if file and file['id'] is not None:
+                url = api.request_dl_link(torrent['id'], file['id'])
+                self.cloud_files.append(
+                    {
+                        'quality': source_utils.getQuality(file['name']),
+                        'lang': source_utils.getAudio_lang(file['name']),
+                        'hash': url,
+                        'provider': 'Cloud',
+                        'type': 'cloud',
+                        'release_title': torrent['name'],
+                        'info': source_utils.getInfo(file['name']),
+                        'debrid_provider': 'torbox',
+                        'size': self._get_size(int(torrent['size'])),
+                        'episode': episode
+                    }
+                )

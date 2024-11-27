@@ -115,7 +115,7 @@ class Sources(DisplayWindow):
         control.setSetting('hianime.skipoutro.start', '-1')
         control.setSetting('hianime.skipoutro.end', '-1')
 
-        if control.real_debrid_enabled() or control.all_debrid_enabled() or control.debrid_link_enabled() or control.premiumize_enabled():
+        if control.real_debrid_enabled() or control.all_debrid_enabled() or control.debrid_link_enabled() or control.premiumize_enabled() or control.torbox_enabled():
             if control.getSetting('provider.nyaa') == 'true':
                 self.threads.append(
                     threading.Thread(target=self.nyaa_worker, args=(query, anilist_id, episode, status, media_type, rescrape)))
@@ -345,6 +345,9 @@ class Sources(DisplayWindow):
             if control.all_debrid_enabled() and control.getSetting('alldebrid.cloudInspection') == 'true':
                 debrid['all_debrid'] = True
 
+            if control.torbox_enabled() and control.getSetting('tb.cloudInspection') == 'true':
+                debrid['torbox'] = True
+
             self.usercloudSources = debrid_cloudfiles.sources().get_sources(debrid, query, episode)
             self.cloud_files += self.usercloudSources
 
@@ -382,6 +385,8 @@ class Sources(DisplayWindow):
             p.append({'slug': 'all_debrid', 'priority': int(control.getSetting('alldebrid.priority'))})
         if control.getSetting('dl.enabled') == 'true':
             p.append({'slug': 'debrid_link', 'priority': int(control.getSetting('dl.priority'))})
+        if control.getSetting('tb.enabled') == 'true':
+            p.append({'slug': 'torbox', 'priority': int(control.getSetting('tb.priority'))})
 
         p.append({'slug': '', 'priority': 11})
 
