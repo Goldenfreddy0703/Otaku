@@ -359,7 +359,7 @@
 		<!-- Torbox-->
 		<setting type="lsep" label="Torbox" />
 		<setting type="sep" />
-		<setting id="torbox.enabled" type="bool" default="false" label="50097" />
+		<setting id="tb.enabled" type="bool" default="false" label="50097" />
 		<setting id="tb.apikey" type="text" label="50098" default="" enable="true" visible="eq(-1,true)" />
 		<setting id="tb.priority" type="slider" subsetting="true" label="50099" option="int" range="1,1,10" default="10" visible="eq(-2,true)" />
 	</category>
