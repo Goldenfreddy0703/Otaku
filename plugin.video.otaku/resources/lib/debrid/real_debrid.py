@@ -192,49 +192,48 @@ class RealDebrid:
 
     def resolve_single_magnet(self, hash_, magnet, episode='', pack_select=False):
         try:
-            for storage_variant in [hash_]['rd']:
-                key_list = 'all'
+            key_list = 'all'
 
-                torrent = self.addMagnet(magnet)
-                if not torrent:
-                    return
+            torrent = self.addMagnet(magnet)
+            if not torrent:
+                return
 
-                self.torrentSelect(torrent['id'], key_list)
+            self.torrentSelect(torrent['id'], key_list)
 
-                files = self.torrentInfo(torrent['id'])
-                selected_files = [(idx, i) for idx, i in enumerate([i for i in files['files'] if i['selected'] == 1])]
+            files = self.torrentInfo(torrent['id'])
+            selected_files = [(idx, i) for idx, i in enumerate([i for i in files['files'] if i['selected'] == 1])]
 
-                if pack_select:
-                    best_match = source_utils.get_best_match('path', [i[1] for i in selected_files], episode, pack_select)
-                    if best_match:
-                        try:
-                            file_index = [i[0] for i in selected_files if i[1]['path'] == best_match['path']][0]
-                            link = files['links'][file_index]
-                            stream_link = self.resolve_hoster(link)
-                        except IndexError:
-                            stream_link = None
-                    else:
-                        stream_link = None
-
-                elif len(selected_files) == 1:
-                    stream_link = self.resolve_hoster(files['links'][0])
-
-                elif len(selected_files) >= 5:
+            if pack_select:
+                best_match = source_utils.get_best_match('path', [i[1] for i in selected_files], episode, pack_select)
+                if best_match:
                     try:
-                        best_match = source_utils.get_best_match('path', [i[1] for i in selected_files], episode)
                         file_index = [i[0] for i in selected_files if i[1]['path'] == best_match['path']][0]
                         link = files['links'][file_index]
                         stream_link = self.resolve_hoster(link)
-                    except:
+                    except IndexError:
                         stream_link = None
-
                 else:
-                    selected_files = sorted(selected_files, key=lambda x: x[1]['bytes'], reverse=True)
-                    stream_link = self.resolve_hoster(files['links'][selected_files[0][0]])
+                    stream_link = None
 
-                self.deleteTorrent(torrent['id'])
+            elif len(selected_files) == 1:
+                stream_link = self.resolve_hoster(files['links'][0])
 
-                return stream_link
+            elif len(selected_files) >= 5:
+                try:
+                    best_match = source_utils.get_best_match('path', [i[1] for i in selected_files], episode)
+                    file_index = [i[0] for i in selected_files if i[1]['path'] == best_match['path']][0]
+                    link = files['links'][file_index]
+                    stream_link = self.resolve_hoster(link)
+                except:
+                    stream_link = None
+
+            else:
+                selected_files = sorted(selected_files, key=lambda x: x[1]['bytes'], reverse=True)
+                stream_link = self.resolve_hoster(files['links'][selected_files[0][0]])
+
+            self.deleteTorrent(torrent['id'])
+
+            return stream_link
         except:
             import traceback
             traceback.print_exc()
