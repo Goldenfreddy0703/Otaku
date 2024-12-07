@@ -49,7 +49,7 @@ class Sources(DisplayWindow):
         self.local_files = []
         self.remainingProviders = [
             'nyaa', 'animetosho', 'aniwave', 'gogo', 'animix',
-            'animepahe', 'h!anime', 'otakuanimes', 'animelatino',
+            'animepahe', 'h!anime', 'animesfhd', 'animelatino',
             'nekosama', 'aniplay', 'Local Inspection', 'Cloud Inspection'
         ]
         self.allTorrents = {}
@@ -172,7 +172,7 @@ class Sources(DisplayWindow):
             self.threads.append(
                 threading.Thread(target=self.animess_worker, args=(anilist_id, episode, get_backup, rescrape,)))
         else:
-            self.remainingProviders.remove('otakuanimes')
+            self.remainingProviders.remove('animesfhd')
 
         if control.getSetting('provider.animelatino') == 'true':
             self.threads.append(
@@ -314,7 +314,7 @@ class Sources(DisplayWindow):
     def animess_worker(self, anilist_id, episode, get_backup, rescrape):
         self.animessSources = animess.sources().get_sources(anilist_id, episode, get_backup)
         self.embedSources += self.animessSources
-        self.remainingProviders.remove('otakuanimes')
+        self.remainingProviders.remove('animesfhd')
 
     def animelatino_worker(self, anilist_id, episode, get_backup, rescrape):
         self.animelatinoSources = animelatino.sources().get_sources(anilist_id, episode, get_backup)

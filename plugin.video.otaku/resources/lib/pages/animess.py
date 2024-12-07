@@ -9,7 +9,7 @@ from resources.lib.ui.BrowserBase import BrowserBase
 
 
 class sources(BrowserBase):
-    _BASE_URL = 'https://otakuanimess.cc/'
+    _BASE_URL = 'https://animefhd.net/'
 
     def get_sources(self, anilist_id, episode, get_backup):
         show = database.get_show(anilist_id)
@@ -101,7 +101,7 @@ class sources(BrowserBase):
                     'type': 'direct',
                     'quality': 'EQ',
                     'debrid_provider': '',
-                    'provider': 'otakuanimes',
+                    'provider': 'animesfhd',
                     'size': 'NA',
                     'info': [lang],
                     'lang': 2 if lang == 'DUB' else 0
