@@ -160,7 +160,7 @@
 		<!-- Portugese Sub & Dub Embeds -->
 		<setting type="lsep" label="40506" />
 		<setting type="sep"/>
-		<setting id="provider.animesfhd" type="bool" label="Animesfhd" default="false" />
+		<setting id="provider.animess" type="bool" label="Animesfhd" default="false" />
 
 		<!-- Spanish Sub & Dub Embeds -->
 		<setting type="lsep" label="40508" />
