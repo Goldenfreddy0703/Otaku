@@ -1373,9 +1373,16 @@ class AniListBrowser(BrowserBase):
         variables = {
             'page': page,
             'perpage': self.perpage,
+            'type': "ANIME",
+            'isAdult': False,
+            'format': None,
             'search': query,
             'sort': "SEARCH_MATCH",
-            'type': "ANIME"
+            'countryOfOrigin': None,
+            'status': None,
+            'genre_in': None,
+            'tag_in': None,
+            'year': None
         }
 
         if format:
@@ -1383,6 +1390,18 @@ class AniListBrowser(BrowserBase):
 
         if self.format_in_type:
             variables['format'] = self.format_in_type
+
+        if self.countryOfOrigin_type:
+            variables['countryOfOrigin'] = self.countryOfOrigin_type
+
+        if self.status:
+            variables['status'] = self.status
+
+        if self.genre:
+            variables['includedGenres'] = self.genre
+
+        if self.tag:
+            variables['includedTags'] = self.tag
 
         search = self.get_search_res(variables)
         if control.getBool('search.adult'):
@@ -1875,7 +1894,6 @@ class AniListBrowser(BrowserBase):
 
         if "errors" in results.keys():
             return
-
         json_res = results.get('data', {}).get('Media', {}).get('relations')
 
         if control.getBool('general.malposters'):
@@ -1923,6 +1941,16 @@ class AniListBrowser(BrowserBase):
                 duration
                 countryOfOrigin
                 averageScore
+                stats {
+                    scoreDistribution {
+                        score
+                        amount
+                    }
+                }
+                trailer {
+                    id
+                    site
+                }
                 characters (
                     page: 1,
                     sort: ROLE,
@@ -1949,16 +1977,6 @@ class AniListBrowser(BrowserBase):
                         node {
                             name
                         }
-                    }
-                }
-                trailer {
-                    id
-                    site
-                }
-                stats {
-                    scoreDistribution {
-                        score
-                        amount
                     }
                 }
             }
@@ -2018,6 +2036,54 @@ class AniListBrowser(BrowserBase):
                                 extraLarge
                         }
                         bannerImage
+                        startDate {
+                            year
+                            month
+                            day
+                        }
+                        format
+                        episodes
+                        duration
+                        status
+                        studios {
+                          edges {
+                            node {
+                              name
+                            }
+                          }
+                        }
+                        trailer {
+                            id
+                            site
+                        }
+                        stats {
+                            scoreDistribution {
+                                score
+                                amount
+                            }
+                        }
+                        characters (perPage: 10) {
+                          edges {
+                            node {
+                              name {
+                                full
+                                native
+                                userPreferred
+                              }
+                            }
+                            voiceActors(language: JAPANESE) {
+                              id
+                              name {
+                                full
+                                native
+                                userPreferred
+                              }
+                              image {
+                                large
+                              }
+                            }
+                          }
+                        }
                     }
                 }
             }
@@ -2032,7 +2098,38 @@ class AniListBrowser(BrowserBase):
 
         json_res = results.get('data', {}).get('Page')
 
+        if control.getBool('general.malposters'):
+            try:
+                # Create a dictionary to track unique media items
+                unique_media = {}
+                for airing in json_res['airingSchedules']:
+                    media_id = airing['media']['id']
+                    # Only keep the most recent airing for each unique show
+                    if media_id not in unique_media or airing['airingAt'] > unique_media[media_id]['airingAt']:
+                        unique_media[media_id] = airing
+                        anilist_id = media_id
+                        mal_mapping = database.get_mappings(anilist_id, 'anilist_id')
+                        if mal_mapping and 'mal_picture' in mal_mapping:
+                            mal_picture = mal_mapping['mal_picture']
+                            mal_picture_url = mal_picture.rsplit('.', 1)[0] + 'l.' + mal_picture.rsplit('.', 1)[1]
+                            mal_picture_url = 'https://cdn.myanimelist.net/images/anime/' + mal_picture_url
+                            airing['media']['coverImage']['extraLarge'] = mal_picture_url
+                
+                # Replace the airingSchedules with unique media items sorted by airing time
+                json_res['airingSchedules'] = sorted(unique_media.values(), key=lambda x: x['airingAt'], reverse=True)
+            except Exception:
+                pass
+
         if json_res:
+            # Remove duplicate media entries
+            unique_media = {}
+            for airing in json_res['airingSchedules']:
+                media_id = airing['media']['id']
+                if media_id not in unique_media or airing['airingAt'] > unique_media[media_id]['airingAt']:
+                    unique_media[media_id] = airing
+            
+            # Sort by most recent airing time
+            json_res['airingSchedules'] = sorted(unique_media.values(), key=lambda x: x['airingAt'], reverse=True)
             return json_res
 
     def get_anilist_res_with_mal_id(self, variables):
@@ -2068,6 +2165,10 @@ class AniListBrowser(BrowserBase):
                     score
                     amount
                 }
+            }
+            trailer {
+                id
+                site
             }
             characters (
                 page: 1,
@@ -2105,9 +2206,7 @@ class AniListBrowser(BrowserBase):
 
         if "errors" in results.keys():
             return
-
         json_res = results.get('data', {}).get('Media')
-
         if json_res:
             return json_res
 
@@ -2351,15 +2450,12 @@ class AniListBrowser(BrowserBase):
             'plot': desc,
             'duration': duration,
             'genre': res.get('genres'),
-            'country': [res.get('countryOfOrigin', '')],
+            'country': [res.get('countryOfOrigin', '')]
         }
 
-        try:
-            start_date = res.get('startDate')
-            kodi_meta['premiered'] = '{}-{:02}-{:02}'.format(start_date['year'], start_date['month'], start_date['day'])
-            kodi_meta['year'] = start_date['year']
-        except TypeError:
-            pass
+        if start_date:
+            kodi_meta['premiered'] = start_date
+            kodi_meta['year'] = int(start_date.split('-')[0])
 
         try:
             cast = []
@@ -2406,16 +2502,15 @@ class AniListBrowser(BrowserBase):
         response = client.post(self._BASE_URL, json_data={'query': query})
         results = response.json()
         if not results:
-            # genres_list = ['Action', 'Adventure', 'Comedy', 'Drama', 'Ecchi', 'Fantasy', 'Hentai', "Horror", 'Mahou Shoujo', 'Mecha', 'Music', 'Mystery', 'Psychological', 'Romance', 'Sci-Fi', 'Slice of Life', 'Sports', 'Supernatural', 'Thriller']
-            genres_list = ['error']
+            genres_list = ['Action', 'Adventure', 'Comedy', 'Drama', 'Ecchi', 'Fantasy', 'Hentai', "Horror", 'Mahou Shoujo', 'Mecha', 'Music', 'Mystery', 'Psychological', 'Romance', 'Sci-Fi', 'Slice of Life', 'Sports', 'Supernatural', 'Thriller']
         else:
             genres_list = results['data']['genres']
-        # if 'Hentai' in genres_list:
-        #     genres_list.remove('Hentai')
+
         try:
             tags_list = [x['name'] for x in results['data']['tags'] if not x['isAdult']]
         except KeyError:
             tags_list = []
+
         multiselect = control.multiselect_dialog(control.lang(30940), genres_list + tags_list, preselect=[])
         if not multiselect:
             return []
@@ -2635,3 +2730,212 @@ class AniListBrowser(BrowserBase):
                 selected_tags.append(selected_tag)
 
         return selected_genres_mal, selected_genres_anilist, selected_tags
+
+    def get_recently_aired_shows(self, page=1):
+        import datetime
+        import time
+        
+        # Get current timestamp
+        current_time = int(time.time())
+        
+        # Calculate time range for recent episodes (last 7 days)
+        seven_days_ago = current_time - (7 * 24 * 60 * 60)
+        
+        # Fetch more items per page to account for filtering
+        # We'll fetch 100 items and filter down to 24 quality shows
+        variables = {
+            'page': page,
+            'perPage': 100,  # Fetch more to account for filtering
+            'airingAt_greater': seven_days_ago,
+            'airingAt_lesser': current_time,
+            'sort': 'TIME_DESC'
+        }
+        
+        # Fetch the requested page
+        page_result = self.get_recently_aired_shows_res(variables)
+        
+        # Pass the page number to process_recently_aired_view
+        # It will handle filtering and limiting to 24 items
+        return self.process_recently_aired_view(page_result, page)
+
+    def get_recently_aired_shows_res(self, variables):
+        query = '''
+        query (
+            $page: Int=1,
+            $perPage: Int=100,
+            $airingAt_greater: Int,
+            $airingAt_lesser: Int,
+            $sort: [AiringSort] = [TIME_DESC]
+        ) {
+            Page (page: $page, perPage: $perPage) {
+                pageInfo {
+                    hasNextPage
+                    total
+                }
+                airingSchedules (
+                    airingAt_greater: $airingAt_greater,
+                    airingAt_lesser: $airingAt_lesser,
+                    sort: $sort
+                ) {
+                    id
+                    episode
+                    airingAt
+                    media {
+                        id
+                        idMal
+                        title {
+                            romaji,
+                            english
+                        }
+                        coverImage {
+                            extraLarge
+                        }
+                        bannerImage
+                        startDate {
+                            year,
+                            month,
+                            day
+                        }
+                        description
+                        synonyms
+                        format
+                        episodes
+                        status
+                        genres
+                        duration
+                        countryOfOrigin
+                        averageScore
+                        popularity
+                        nextAiringEpisode {
+                            episode
+                            airingAt
+                        }
+                        stats {
+                            scoreDistribution {
+                                score
+                                amount
+                            }
+                        }
+                        trailer {
+                            id
+                            site
+                        }
+                        characters (perPage: 10) {
+                          edges {
+                            node {
+                              name {
+                                full
+                                native
+                                userPreferred
+                              }
+                            }
+                            voiceActors(language: JAPANESE) {
+                              id
+                              name {
+                                full
+                                native
+                                userPreferred
+                              }
+                              image {
+                                large
+                              }
+                            }
+                          }
+                        }
+                        studios {
+                            edges {
+                                node {
+                                    name
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        '''
+
+        result = client.request(self._BASE_URL, post={'query': query, 'variables': variables}, jpost=True)
+        results = json.loads(result)
+
+        if "errors" in results.keys():
+            return
+
+        json_res = results.get('data', {}).get('Page')
+
+        if control.getBool('general.malposters'):
+            try:
+                # Create a dictionary to track unique media items
+                unique_media = {}
+                for airing in json_res['airingSchedules']:
+                    media_id = airing['media']['id']
+                    # Only keep the most recent airing for each unique show
+                    if media_id not in unique_media or airing['airingAt'] > unique_media[media_id]['airingAt']:
+                        unique_media[media_id] = airing
+                        anilist_id = media_id
+                        mal_mapping = database.get_mappings(anilist_id, 'anilist_id')
+                        if mal_mapping and 'mal_picture' in mal_mapping:
+                            mal_picture = mal_mapping['mal_picture']
+                            mal_picture_url = mal_picture.rsplit('.', 1)[0] + 'l.' + mal_picture.rsplit('.', 1)[1]
+                            mal_picture_url = 'https://cdn.myanimelist.net/images/anime/' + mal_picture_url
+                            airing['media']['coverImage']['extraLarge'] = mal_picture_url
+                
+                # Replace the airingSchedules with unique media items sorted by airing time
+                json_res['airingSchedules'] = sorted(unique_media.values(), key=lambda x: x['airingAt'], reverse=True)
+            except Exception:
+                pass
+
+        if json_res:
+            # Remove duplicate media entries
+            unique_media = {}
+            for airing in json_res['airingSchedules']:
+                media_id = airing['media']['id']
+                if media_id not in unique_media or airing['airingAt'] > unique_media[media_id]['airingAt']:
+                    unique_media[media_id] = airing
+            
+            # Sort by most recent airing time
+            json_res['airingSchedules'] = sorted(unique_media.values(), key=lambda x: x['airingAt'], reverse=True)
+            return json_res
+
+    def process_recently_aired_view(self, json_res, page, target_count=24):
+        if not json_res:
+            return []
+        
+        hasNextPage = json_res['pageInfo']['hasNextPage']
+        get_meta.collect_meta([x['media'] for x in json_res['airingSchedules']])
+        mapfunc = partial(self.base_anilist_view, completed=self.open_completed())
+        
+        # Filter to only include TV shows and remove duplicates
+        seen_ids = set()
+        unique_results = []
+        
+        for schedule in json_res['airingSchedules']:
+            media = schedule['media']
+            
+            # Apply quality filters (OR condition: either good score OR popular)
+            average_score = media.get('averageScore', 0) or 0
+            popularity = media.get('popularity', 0) or 0
+            
+            # Skip if both are below thresholds
+            if average_score < 65 and popularity < 10000:
+                continue
+            
+            if media['id'] not in seen_ids and media.get('format') in ['TV', 'TV_SHORT', None]:
+                result = mapfunc(media)
+                if result:
+                    # Add episode info to the title if available
+                    if 'episode' in schedule and schedule['episode']:
+                        result['info']['title'] = f"{result['info']['title']} - Episode {schedule['episode']}"
+                    unique_results.append(result)
+                    seen_ids.add(media['id'])
+                    
+                    # Stop if we've reached the target count
+                    if len(unique_results) >= target_count:
+                        # If we hit the limit, there might be more items
+                        hasNextPage = True
+                        break
+        
+        # Always add pagination
+        unique_results += self.handle_paging(hasNextPage, "recently_aired_shows?page=%d", page)
+        
+        return unique_results
