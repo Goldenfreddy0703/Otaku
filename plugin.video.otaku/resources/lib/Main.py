@@ -160,7 +160,7 @@ def save_to_watch_history(mal_id):
             'thumb': kodi_meta.get('thumb', ''),
             'fanart': kodi_meta.get('fanart', ''),
             'landscape': kodi_meta.get('landscape', ''),
-            'banner': kodi_meta.get('banner', ''),
+            'banner': kodi_meta.get('poster', ''),  # Use poster as fallback for banner
             'clearart': kodi_meta.get('clearart', ''),
             'clearlogo': kodi_meta.get('clearlogo', '')
         }
@@ -1882,6 +1882,7 @@ def get_menu_items(menu_type):
             (control.lang(30902), "airing_last_season", 'airing_anime.png', {}),
             (control.lang(30903), "airing_this_season", 'airing_anime.png', {}),
             (control.lang(30904), "airing_next_season", 'airing_anime.png', {}),
+            (control.lang(30969), "recently_aired_shows", 'airing_anime.png', {}),
             (control.lang(30905), "movies", 'movies.png', {}),
             (control.lang(30906), "tv_shows", 'tv_shows.png', {}),
             (control.lang(30907), "tv_shorts", 'tv_shorts.png', {}),
@@ -4201,3 +4202,8 @@ def TOGGLE_HTTP2(payload, params):
 def UPDATE_NETWORK_STATUS(payload, params):
     """Update network status settings when settings are opened"""
     _update_network_status()
+
+@Route('recently_aired_shows')
+def RECENTLY_AIRED_SHOWS(payload, params):
+    page = int(params.get('page', 1))
+    control.draw_items(BROWSER.get_recently_aired_shows(page), 'tvshows')
