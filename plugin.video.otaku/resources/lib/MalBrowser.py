@@ -1813,3 +1813,119 @@ class MalBrowser(BrowserBase):
         selected_tags = []
 
         return selected_genres_mal, selected_genres_anilist, selected_tags
+
+    def get_recently_aired_shows(self, page=1):
+        """
+        Get recently aired shows using AniList API but process for MAL browser.
+        This allows the same route to work for both providers.
+        """
+        import time
+        from resources.lib.AniListBrowser import AniListBrowser
+        
+        # Use AniList to get the recently aired data
+        anilist_browser = AniListBrowser()
+        
+        # Get current timestamp
+        current_time = int(time.time())
+        
+        # Calculate time range for recent episodes (last 7 days)
+        seven_days_ago = current_time - (7 * 24 * 60 * 60)
+        
+        # Fetch more items per page to account for filtering
+        variables = {
+            'page': page,
+            'perPage': 100,  # Fetch more to account for filtering
+            'airingAt_greater': seven_days_ago,
+            'airingAt_lesser': current_time,
+            'sort': 'TIME_DESC'
+        }
+        
+        # Fetch the requested page using AniList API
+        page_result = anilist_browser.get_recently_aired_shows_res(variables)
+        
+        # Process the results for MAL
+        return self.process_recently_aired_mal_view(page_result, page)
+    
+    def process_recently_aired_mal_view(self, json_res, page, target_count=24):
+        """Process AniList recently aired data for MAL browser display."""
+        if not json_res:
+            return []
+        
+        from functools import partial
+        from resources.lib.ui import get_meta
+        
+        hasNextPage = json_res['pageInfo']['hasNextPage']
+        
+        # Collect metadata for all shows
+        mal_ids = []
+        for schedule in json_res['airingSchedules']:
+            mal_id = schedule['media'].get('idMal')
+            if mal_id:
+                mal_ids.append({'mal_id': mal_id})
+        
+        get_meta.collect_meta(mal_ids)
+        
+        # Filter to only include TV shows and remove duplicates
+        seen_ids = set()
+        unique_results = []
+        
+        for schedule in json_res['airingSchedules']:
+            media = schedule['media']
+            mal_id = media.get('idMal')
+            
+            # Skip if no MAL ID
+            if not mal_id:
+                continue
+            
+            # Apply quality filters (OR condition: either good score OR popular)
+            average_score = media.get('averageScore', 0) or 0
+            popularity = media.get('popularity', 0) or 0
+            
+            # Skip if both are below thresholds
+            if average_score < 65 and popularity < 10000:
+                continue
+            
+            if mal_id not in seen_ids and media.get('format') in ['TV', 'TV_SHORT', None]:
+                # Convert AniList media to MAL format
+                mal_media = {
+                    'mal_id': mal_id,
+                    'title': media['title']['romaji'],
+                    'title_english': media['title'].get('english'),
+                    'images': {
+                        'jpg': {
+                            'image_url': media['coverImage']['extraLarge']
+                        },
+                        'webp': {
+                            'large_image_url': media['coverImage']['extraLarge']
+                        }
+                    },
+                    'episodes': media.get('episodes'),
+                    'type': 'TV' if media.get('format') == 'TV' else 'TV Short',
+                    'status': media.get('status'),
+                    'score': (media.get('averageScore') or 0) / 10.0 if media.get('averageScore') else None,
+                    'synopsis': media.get('description'),
+                    'genres': [{'name': g} for g in (media.get('genres') or [])],
+                    'rating': None  # MAL rating field
+                }
+                
+                # Process through MAL view
+                mapfunc = partial(self.base_mal_view, completed=self.open_completed())
+                result = mapfunc(mal_media)
+                
+                if result:
+                    # Add episode info to the title if available
+                    if 'episode' in schedule and schedule['episode']:
+                        result['info']['title'] = f"{result['info']['title']} - Episode {schedule['episode']}"
+                    unique_results.append(result)
+                    seen_ids.add(mal_id)
+                    
+                    # Stop if we've reached the target count (24 items per page)
+                    if len(unique_results) >= target_count:
+                        # If we hit the limit, there might be more items
+                        hasNextPage = True
+                        break
+        
+        # Add pagination
+        unique_results += self.handle_paging(hasNextPage, "recently_aired_shows?page=%d", page)
+        
+        return unique_results

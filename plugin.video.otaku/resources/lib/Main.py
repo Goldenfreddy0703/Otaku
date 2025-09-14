@@ -966,7 +966,7 @@ def GENRES(payload, params):
     genres, tags = payload.rsplit("/")
     page = int(params.get('page', 1))
     format = None
-    base_key = plugin_url.split('/', 1)[0] + '//'
+    base_key = plugin_url.split('/', 1)[0]
     if base_key in mapping:
         format = mapping[base_key][0] if control.settingids.browser_api in ['mal', 'otaku'] else mapping[base_key][1]
     if genres or tags:
@@ -4186,14 +4186,14 @@ def PLAYBACK_OPTIONS(payload, params):
             'thumb': '',
             'fanart': '',
             'landscape': '',
-            'banner': '',
+            'banner': '',  # Use poster as fallback for banner
             'clearart': '',
             'clearlogo': ''
         }
 
     # Ask the user which playback option they want to use
     # Here the button labels are:
-    # Button 0: "Cancel"   | Button 1: "Rescrape" | Button 2: "Source Select"
+    # Button 0: "Cancel"   | Button 1: "Rescrape" | Button 2 (or -1): "Source Select"
     yesnocustom = control.yesnocustom_dialog(
         control.ADDON_NAME + " - Playback Options",
         "Please choose a playback option:",
