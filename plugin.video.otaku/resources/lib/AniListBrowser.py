@@ -2790,8 +2790,8 @@ class AniListBrowser(BrowserBase):
                         }
                         bannerImage
                         startDate {
-                            year,
-                            month,
+                            year
+                            month
                             day
                         }
                         description
@@ -2927,7 +2927,7 @@ class AniListBrowser(BrowserBase):
                     unique_results.append(result)
                     seen_ids.add(media['id'])
                     
-                    # Stop if we've reached the target count
+                    # Stop if we've reached the target count (24 items per page)
                     if len(unique_results) >= target_count:
                         # If we hit the limit, there might be more items
                         hasNextPage = True

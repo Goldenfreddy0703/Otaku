@@ -965,7 +965,7 @@ def GENRES(payload, params):
     genres, tags = payload.rsplit("/")
     page = int(params.get('page', 1))
     format = None
-    base_key = plugin_url.split('/', 1)[0] + '//'
+    base_key = plugin_url.split('/', 1)[0]
     if base_key in mapping:
         format = mapping[base_key][0] if control.settingids.browser_api == 'mal' else mapping[base_key][1]
     if genres or tags:
@@ -3867,7 +3867,7 @@ def PLAYBACK_OPTIONS(payload, params):
             'thumb': '',
             'fanart': '',
             'landscape': '',
-            'banner': '',
+            'banner': '',  # Use poster as fallback for banner
             'clearart': '',
             'clearlogo': ''
         }
@@ -3875,7 +3875,7 @@ def PLAYBACK_OPTIONS(payload, params):
 
     # Ask the user which playback option they want to use
     # Here the button labels are:
-    # Button 0: "Cancel"   | Button 1: "Rescrape" | Button 2: "Source Select"
+    # Button 0: "Cancel"   | Button 1: "Rescrape" | Button 2 (or -1): "Source Select"
     yesnocustom = control.yesnocustom_dialog(
         control.ADDON_NAME + " - Playback Options",
         "Please choose a playback option:",
@@ -4206,4 +4206,52 @@ def UPDATE_NETWORK_STATUS(payload, params):
 @Route('recently_aired_shows')
 def RECENTLY_AIRED_SHOWS(payload, params):
     page = int(params.get('page', 1))
-    control.draw_items(BROWSER.get_recently_aired_shows(page), 'tvshows')
+    if control.settingids.browser_api == 'mal':
+        # Use AniList API to get the data but process for MAL
+        from resources.lib.AniListBrowser import AniListBrowser
+        anilist_browser = AniListBrowser()
+        
+        # Get the recently aired shows data from AniList
+        results = anilist_browser.get_recently_aired_shows(page)
+        
+        # Convert AniList results to use MAL URLs
+        mal_results = []
+        for item in results:
+            # Skip the "Next Page" item
+            if item.get('is_dir') and 'Next Page' in item.get('info', {}).get('title', ''):
+                mal_results.append(item)
+                continue
+                
+            # Get MAL ID from the item
+            # The URL format for AniList is 'anime_all/{anilist_id}/', we need to convert it
+            if 'url' in item and item['url']:
+                # Extract the AniList ID from the URL
+                url_parts = item['url'].strip('/').split('/')
+                if url_parts and url_parts[0] == 'anime_all' and len(url_parts) > 1:
+                    # Need to get the MAL ID from the AniList data
+                    # The item should have the mal_id in its metadata if available
+                    # We'll need to query the database or use the mapping
+                    try:
+                        anilist_id = int(url_parts[1])
+                        # Try to get MAL ID from database mapping
+                        mal_mapping = database.get_mappings(anilist_id, 'anilist_id')
+                        if mal_mapping and mal_mapping.get('mal_id'):
+                            mal_id = mal_mapping['mal_id']
+                            # Update URL to use MAL format
+                            item['url'] = f'anime_all/{mal_id}/'
+                            mal_results.append(item)
+                        else:
+                            # If no MAL ID found, skip this item or keep AniList URL
+                            # For now, skip items without MAL ID
+                            continue
+                    except (ValueError, TypeError):
+                        continue
+                else:
+                    mal_results.append(item)
+            else:
+                mal_results.append(item)
+        
+        control.draw_items(mal_results, 'tvshows')
+    else:
+        # Original AniList behavior
+        control.draw_items(BROWSER.get_recently_aired_shows(page), 'tvshows')
