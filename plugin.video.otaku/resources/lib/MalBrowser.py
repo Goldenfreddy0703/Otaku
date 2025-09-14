@@ -1582,49 +1582,38 @@ class MalBrowser(BrowserBase):
         multiselect = control.multiselect_dialog(control.lang(30940), genres_list, preselect=[])
         if not multiselect:
             return []
-        genre_display_list = []
-        for selection in multiselect:
-            if selection < len(genres_list):
-                genre_display_list.append(str(genre[selection]['mal_id']))
-        return self.genres_payload(genre_display_list, [], page, format)
+        
+        from functools import partial
+        from resources.lib.ui import get_meta
+        
+        # Collect metadata
+        get_meta.collect_meta(json_res['data'])
+        
+        # Process through MAL view
+        mapfunc = partial(self.base_mal_view, completed=self.open_completed())
+        all_results = []
+        
+        for anime in json_res['data']:
+            # Additional quality check if needed
+            # Skip if score is too low (backup check)
+            if anime.get('score') and anime['score'] < 6.5:
+                continue
+                
+            result = mapfunc(anime)
+            if result:
+                # Add airing status to title if available
+                if anime.get('status') == 'Currently Airing':
+                    # Could potentially add episode count if available
+                    if anime.get('episodes'):
+                        result['info']['title'] = f"{result['info']['title']} (Airing)"
+                all_results.append(result)
+        
+        # Handle pagination
+        hasNextPage = json_res.get('pagination', {}).get('has_next_page', False)
+        all_results += self.handle_paging(hasNextPage, "recently_aired_shows?page=%d", page)
+        
+        return all_results
 
-    def genres_payload(self, genre_list, tag_list, page, format, prefix=None):
-        if not isinstance(genre_list, list):
-            genre_list = ast.literal_eval(genre_list)
-
-        genre = ','.join(genre_list)
-        params = {
-            'page': page,
-            'limit': self.perpage,
-            'genres': genre,
-            'sfw': self.adult,
-            'order_by': 'popularity'
-        }
-
-        if format:
-            params['type'] = format
-
-        if self.format_in_type:
-            params['type'] = self.format_in_type
-
-        if self.status:
-            params['status'] = self.status
-
-        if self.rating:
-            params['rating'] = self.rating
-
-        genres = database.get(self.get_base_res, 24, f'{self._BASE_URL}/anime', params)
-
-        try:
-            from resources.lib import Main
-            prefix = Main.plugin_url.split('/', 1)[0]
-            base_plugin_url = f"{prefix}/{genre_list}/{tag_list}?page=%d"
-        except Exception:
-            base_plugin_url = f"genres/{genre_list}/{tag_list}?page=%d"
-
-        return self.process_mal_view(genres, base_plugin_url, page)
-
-    @div_flavor
     def base_mal_view(self, res, completed=None, mal_dub=None):
         if not completed:
             completed = {}
@@ -1814,118 +1803,133 @@ class MalBrowser(BrowserBase):
 
         return selected_genres_mal, selected_genres_anilist, selected_tags
 
-    def get_recently_aired_shows(self, page=1):
-        """
-        Get recently aired shows using AniList API but process for MAL browser.
-        This allows the same route to work for both providers.
-        """
-        import time
-        from resources.lib.AniListBrowser import AniListBrowser
-        
-        # Use AniList to get the recently aired data
-        anilist_browser = AniListBrowser()
-        
-        # Get current timestamp
-        current_time = int(time.time())
-        
-        # Calculate time range for recent episodes (last 7 days)
-        seven_days_ago = current_time - (7 * 24 * 60 * 60)
-        
-        # Fetch more items per page to account for filtering
-        variables = {
-            'page': page,
-            'perPage': 100,  # Fetch more to account for filtering
-            'airingAt_greater': seven_days_ago,
-            'airingAt_lesser': current_time,
-            'sort': 'TIME_DESC'
-        }
-        
-        # Fetch the requested page using AniList API
-        page_result = anilist_browser.get_recently_aired_shows_res(variables)
-        
-        # Process the results for MAL
-        return self.process_recently_aired_mal_view(page_result, page)
-    
-    def process_recently_aired_mal_view(self, json_res, page, target_count=24):
-        """Process AniList recently aired data for MAL browser display."""
-        if not json_res:
+    def get_genres(self, page, format):
+        res = database.get(self.get_base_res, 24, f'{self._BASE_URL}/genres/anime')
+
+        genre = res['data']
+        genres_list = []
+        for x in genre:
+            genres_list.append(x['name'])
+        multiselect = control.multiselect_dialog(control.lang(30940), genres_list, preselect=[])
+        if not multiselect:
             return []
-        
-        from functools import partial
-        from resources.lib.ui import get_meta
-        
-        hasNextPage = json_res['pageInfo']['hasNextPage']
-        
-        # Collect metadata for all shows
-        mal_ids = []
-        for schedule in json_res['airingSchedules']:
-            mal_id = schedule['media'].get('idMal')
-            if mal_id:
-                mal_ids.append({'mal_id': mal_id})
-        
-        get_meta.collect_meta(mal_ids)
-        
-        # Filter to only include TV shows and remove duplicates
-        seen_ids = set()
-        unique_results = []
-        
-        for schedule in json_res['airingSchedules']:
-            media = schedule['media']
-            mal_id = media.get('idMal')
-            
-            # Skip if no MAL ID
-            if not mal_id:
-                continue
-            
-            # Apply quality filters (OR condition: either good score OR popular)
-            average_score = media.get('averageScore', 0) or 0
-            popularity = media.get('popularity', 0) or 0
-            
-            # Skip if both are below thresholds
-            if average_score < 65 and popularity < 10000:
-                continue
-            
-            if mal_id not in seen_ids and media.get('format') in ['TV', 'TV_SHORT', None]:
-                # Convert AniList media to MAL format
-                mal_media = {
-                    'mal_id': mal_id,
-                    'title': media['title']['romaji'],
-                    'title_english': media['title'].get('english'),
-                    'images': {
-                        'jpg': {
-                            'image_url': media['coverImage']['extraLarge']
-                        },
-                        'webp': {
-                            'large_image_url': media['coverImage']['extraLarge']
-                        }
-                    },
-                    'episodes': media.get('episodes'),
-                    'type': 'TV' if media.get('format') == 'TV' else 'TV Short',
-                    'status': media.get('status'),
-                    'score': (media.get('averageScore') or 0) / 10.0 if media.get('averageScore') else None,
-                    'synopsis': media.get('description'),
-                    'genres': [{'name': g} for g in (media.get('genres') or [])],
-                    'rating': None  # MAL rating field
-                }
-                
-                # Process through MAL view
-                mapfunc = partial(self.base_mal_view, completed=self.open_completed())
-                result = mapfunc(mal_media)
-                
-                if result:
-                    # Add episode info to the title if available
-                    if 'episode' in schedule and schedule['episode']:
-                        result['info']['title'] = f"{result['info']['title']} - Episode {schedule['episode']}"
-                    unique_results.append(result)
-                    seen_ids.add(mal_id)
-                    
-                    # Stop if we've reached the target count (24 items per page)
-                    if len(unique_results) >= target_count:
-                        # If we hit the limit, there might be more items
-                        hasNextPage = True
-                        break
-        
-        # Add pagination
-        unique_results += self.handle_paging(hasNextPage, "recently_aired_shows?page=%d", page)
-        
-        return unique_results
+        genre_display_list = []
+        for selection in multiselect:
+            if selection < len(genres_list):
+                genre_display_list.append(str(genre[selection]['mal_id']))
+        return self.genres_payload(genre_display_list, [], page, format)
+
+    def genres_payload(self, genre_list, tag_list, page, format, prefix=None):
+        if not isinstance(genre_list, list):
+            genre_list = ast.literal_eval(genre_list)
+
+        genre = ','.join(genre_list)
+        params = {
+            'page': page,
+            'limit': self.perpage,
+            'genres': genre,
+            'sfw': self.adult,
+            'order_by': 'popularity'
+        }
+
+        if format:
+            params['type'] = format
+
+        if self.format_in_type:
+            params['type'] = self.format_in_type
+
+        if self.status:
+            params['status'] = self.status
+
+        if self.rating:
+            params['rating'] = self.rating
+
+        genres = database.get(self.get_base_res, 24, f'{self._BASE_URL}/anime', params)
+
+        try:
+            from resources.lib import Main
+            prefix = Main.plugin_url.split('/', 1)[0]
+            base_plugin_url = f"{prefix}/{genre_list}/{tag_list}?page=%d"
+        except Exception:
+            base_plugin_url = f"genres/{genre_list}/{tag_list}?page=%d"
+
+        return self.process_mal_view(genres, base_plugin_url, page)
+
+    @div_flavor
+    def base_mal_view(self, res, completed=None, mal_dub=None):
+        if not completed:
+            completed = {}
+
+        mal_id = res['mal_id']
+
+        if not database.get_show(mal_id):
+            self.database_update_show(res)
+
+        show_meta = database.get_show_meta(mal_id)
+        kodi_meta = pickle.loads(show_meta.get('art')) if show_meta else {}
+
+        title = res[self.title_lang] or res['title']
+        rating = res.get('rating')
+        if rating == 'Rx - Hentai':
+            title += ' - ' + control.colorstr("Adult", 'red')
+        if res.get('relation'):
+            title += ' [I]%s[/I]' % control.colorstr(res['relation'], 'limegreen')
+
+        info = {
+            'UniqueIDs': {
+                'mal_id': str(mal_id),
+                **database.get_mapping_ids(mal_id, 'mal_id')
+            },
+            'title': title,
+            'plot': res.get('synopsis'),
+            'mpaa': rating,
+            'duration': self.duration_to_seconds(res.get('duration')),
+            'genre': [x['name'] for x in res.get('genres', [])],
+            'studio': [x['name'] for x in res.get('studios', [])],
+            'status': res.get('status'),
+            'mediatype': 'tvshow'
+        }
+
+        if completed.get(str(mal_id)):
+            info['playcount'] = 1
+
+        try:
+            start_date = res['aired']['from']
+            info['premiered'] = start_date[:10]
+            info['year'] = res.get('year', int(start_date[:3]))
+        except TypeError:
+            pass
+
+        if isinstance(res.get('score'), float):
+            info['rating'] = {'score': res['score']}
+            if isinstance(res.get('scored_by'), int):
+                info['rating']['votes'] = res['scored_by']
+
+        if res.get('trailer'):
+            info['trailer'] = f"plugin://plugin.video.youtube/play/?video_id={res['trailer']['youtube_id']}"
+
+        dub = True if mal_dub and mal_dub.get(str(mal_id)) else False
+
+        image = res['images']['webp']['large_image_url']
+        base = {
+            "name": title,
+            "url": f'animes/{mal_id}/',
+            "image": image,
+            "poster": image,
+            'fanart': kodi_meta['fanart'] if kodi_meta.get('fanart') else image,
+            "banner": image,
+            "info": info
+        }
+
+        if kodi_meta.get('thumb'):
+            base['landscape'] = random.choice(kodi_meta['thumb'])
+        if kodi_meta.get('clearart'):
+            base['clearart'] = random.choice(kodi_meta['clearart'])
+        if kodi_meta.get('clearlogo'):
+            base['clearlogo'] = random.choice(kodi_meta['clearlogo'])
+
+        if res.get('type') in ['Movie', 'ONA', 'OVA', 'Special', 'TV Special'] and res['episodes'] == 1:
+            base['url'] = f'play_movie/{mal_id}/'
+            base['info']['mediatype'] = 'movie'
+            return utils.parse_view(base, False, True, dub)
+        return utils.parse_view(base, True, False, dub)
