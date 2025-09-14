@@ -1523,7 +1523,7 @@ class MalBrowser(BrowserBase):
         results = self.get_base_res(url)
         return results
 
-    def get_recently_aired_shows(self, page=1):
+    def get_recently_aired(self, page=1):
         """
         Get recently aired shows using Jikan API directly.
         Uses currently airing shows sorted by popularity with score filtering.
@@ -1588,7 +1588,7 @@ class MalBrowser(BrowserBase):
         
         # Handle pagination
         hasNextPage = json_res.get('pagination', {}).get('has_next_page', False)
-        all_results += self.handle_paging(hasNextPage, "recently_aired_shows?page=%d", page)
+        all_results += self.handle_paging(hasNextPage, "recently_aired?page=%d", page)
         
         return all_results
 

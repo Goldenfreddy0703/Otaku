@@ -2729,7 +2729,7 @@ class AniListBrowser(BrowserBase):
 
         return selected_genres_mal, selected_genres_anilist, selected_tags
 
-    def get_recently_aired_shows(self, page=1):
+    def get_recently_aired(self, page=1):
         import datetime
         import time
         
@@ -2750,13 +2750,13 @@ class AniListBrowser(BrowserBase):
         }
         
         # Fetch the requested page
-        page_result = self.get_recently_aired_shows_res(variables)
+        page_result = self.get_recently_aired_res(variables)
         
         # Pass the page number to process_recently_aired_view
         # It will handle filtering and limiting to 24 items
         return self.process_recently_aired_view(page_result, page)
 
-    def get_recently_aired_shows_res(self, variables):
+    def get_recently_aired_res(self, variables):
         query = '''
         query (
             $page: Int=1,
@@ -2934,6 +2934,6 @@ class AniListBrowser(BrowserBase):
                         break
         
         # Always add pagination
-        unique_results += self.handle_paging(hasNextPage, "recently_aired_shows?page=%d", page)
+        unique_results += self.handle_paging(hasNextPage, "recently_aired?page=%d", page)
         
         return unique_results
