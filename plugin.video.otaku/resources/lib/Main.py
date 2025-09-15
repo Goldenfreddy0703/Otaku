@@ -160,7 +160,7 @@ def save_to_watch_history(mal_id):
             'thumb': kodi_meta.get('thumb', ''),
             'fanart': kodi_meta.get('fanart', ''),
             'landscape': kodi_meta.get('landscape', ''),
-            'banner': kodi_meta.get('poster', ''),  # Use poster as fallback for banner
+            'banner': kodi_meta.get('banner', ''),
             'clearart': kodi_meta.get('clearart', ''),
             'clearlogo': kodi_meta.get('clearlogo', '')
         }
@@ -992,7 +992,7 @@ def GENRES(payload, params):
     genres, tags = payload.rsplit("/")
     page = int(params.get('page', 1))
     format = None
-    base_key = plugin_url.split('/', 1)[0]
+    base_key = plugin_url.split('/', 1)[0] + '//'
     if base_key in mapping:
         format = mapping[base_key][0] if control.settingids.browser_api == 'mal' else mapping[base_key][1]
     if genres or tags:
@@ -3901,7 +3901,7 @@ def PLAYBACK_OPTIONS(payload, params):
             'thumb': '',
             'fanart': '',
             'landscape': '',
-            'banner': '',  # Use poster as fallback for banner
+            'banner': '',
             'clearart': '',
             'clearlogo': ''
         }
@@ -3909,7 +3909,7 @@ def PLAYBACK_OPTIONS(payload, params):
 
     # Ask the user which playback option they want to use
     # Here the button labels are:
-    # Button 0: "Cancel"   | Button 1: "Rescrape" | Button 2 (or -1): "Source Select"
+    # Button 0: "Cancel"   | Button 1: "Rescrape" | Button 2: "Source Select"
     yesnocustom = control.yesnocustom_dialog(
         control.ADDON_NAME + " - Playback Options",
         "Please choose a playback option:",
