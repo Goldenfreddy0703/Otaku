@@ -160,7 +160,7 @@ def save_to_watch_history(mal_id):
             'thumb': kodi_meta.get('thumb', ''),
             'fanart': kodi_meta.get('fanart', ''),
             'landscape': kodi_meta.get('landscape', ''),
-            'banner': kodi_meta.get('poster', ''),  # Use poster as fallback for banner
+            'banner': kodi_meta.get('banner', ''),
             'clearart': kodi_meta.get('clearart', ''),
             'clearlogo': kodi_meta.get('clearlogo', '')
         }
@@ -375,6 +375,33 @@ def AIRING_NEXT_SEASON(payload, params):
         format = mapping[base_key][0] if control.settingids.browser_api == 'mal' else mapping[base_key][1]
     prefix = plugin_url.split('?', 1)[0]
     control.draw_items(BROWSER.get_airing_next_season(page, format, prefix), 'tvshows')
+
+
+@Route('recently_aired')
+@Route('recently_aired_tv_show')
+@Route('recently_aired_movie')
+@Route('recently_aired_tv_short')
+@Route('recently_aired_special')
+@Route('recently_aired_ova')
+@Route('recently_aired_ona')
+@Route('recently_aired_music')
+def RECENTLY_AIRED(payload, params):
+    mapping = {
+        'recently_aired_tv_show': ('tv', 'TV'),
+        'recently_aired_movie': ('movie', 'MOVIE'),
+        'recently_aired_tv_short': ('tv_special', 'TV_SHORT'),
+        'recently_aired_special': ('special', 'SPECIAL'),
+        'recently_aired_ova': ('ova', 'OVA'),
+        'recently_aired_ona': ('ona', 'ONA'),
+        'recently_aired_music': ('music', 'MUSIC')
+    }
+    page = int(params.get('page', 1))
+    format = None
+    base_key = plugin_url.split('?', 1)[0]
+    if base_key in mapping:
+        format = mapping[base_key][0] if control.settingids.browser_api == 'mal' else mapping[base_key][1]
+    prefix = plugin_url.split('?', 1)[0]
+    control.draw_items(BROWSER.get_recently_aired(page, format, prefix), 'tvshows')
 
 
 @Route('trending_last_year')
@@ -965,7 +992,7 @@ def GENRES(payload, params):
     genres, tags = payload.rsplit("/")
     page = int(params.get('page', 1))
     format = None
-    base_key = plugin_url.split('/', 1)[0]
+    base_key = plugin_url.split('/', 1)[0] + '//'
     if base_key in mapping:
         format = mapping[base_key][0] if control.settingids.browser_api == 'mal' else mapping[base_key][1]
     if genres or tags:
@@ -1882,7 +1909,7 @@ def get_menu_items(menu_type):
             (control.lang(30902), "airing_last_season", 'airing_anime.png', {}),
             (control.lang(30903), "airing_this_season", 'airing_anime.png', {}),
             (control.lang(30904), "airing_next_season", 'airing_anime.png', {}),
-            (control.lang(30969), "recently_aired_shows", 'airing_anime.png', {}),
+            (control.lang(30969), "recently_aired", 'airing_anime.png', {}),
             (control.lang(30905), "movies", 'movies.png', {}),
             (control.lang(30906), "tv_shows", 'tv_shows.png', {}),
             (control.lang(30907), "tv_shorts", 'tv_shorts.png', {}),
@@ -1903,6 +1930,7 @@ def get_menu_items(menu_type):
             (control.lang(30902), "airing_last_season_movie", 'airing_anime.png', {}),
             (control.lang(30903), "airing_this_season_movie", 'airing_anime.png', {}),
             (control.lang(30904), "airing_next_season_movie", 'airing_anime.png', {}),
+            (control.lang(30969), "recently_aired_movie", 'airing_anime.png', {}),
             (control.lang(30912), "trending_movie", 'trending.png', {}),
             (control.lang(30913), "popular_movie", 'popular.png', {}),
             (control.lang(30914), "voted_movie", 'voted.png', {}),
@@ -1915,6 +1943,7 @@ def get_menu_items(menu_type):
             (control.lang(30902), "airing_last_season_tv_show", 'airing_anime.png', {}),
             (control.lang(30903), "airing_this_season_tv_show", 'airing_anime.png', {}),
             (control.lang(30904), "airing_next_season_tv_show", 'airing_anime.png', {}),
+            (control.lang(30969), "recently_aired_tv_show", 'airing_anime.png', {}),
             (control.lang(30912), "trending_tv_show", 'trending.png', {}),
             (control.lang(30913), "popular_tv_show", 'popular.png', {}),
             (control.lang(30914), "voted_tv_show", 'voted.png', {}),
@@ -1927,6 +1956,7 @@ def get_menu_items(menu_type):
             (control.lang(30902), "airing_last_season_tv_short", 'airing_anime.png', {}),
             (control.lang(30903), "airing_this_season_tv_short", 'airing_anime.png', {}),
             (control.lang(30904), "airing_next_season_tv_short", 'airing_anime.png', {}),
+            (control.lang(30969), "recently_aired_tv_short", 'airing_anime.png', {}),
             (control.lang(30912), "trending_tv_short", 'trending.png', {}),
             (control.lang(30913), "popular_tv_short", 'popular.png', {}),
             (control.lang(30914), "voted_tv_short", 'voted.png', {}),
@@ -1939,6 +1969,7 @@ def get_menu_items(menu_type):
             (control.lang(30902), "airing_last_season_special", 'airing_anime.png', {}),
             (control.lang(30903), "airing_this_season_special", 'airing_anime.png', {}),
             (control.lang(30904), "airing_next_season_special", 'airing_anime.png', {}),
+            (control.lang(30969), "recently_aired_special", 'airing_anime.png', {}),
             (control.lang(30912), "trending_special", 'trending.png', {}),
             (control.lang(30913), "popular_special", 'popular.png', {}),
             (control.lang(30914), "voted_special", 'voted.png', {}),
@@ -1951,6 +1982,7 @@ def get_menu_items(menu_type):
             (control.lang(30902), "airing_last_season_ova", 'airing_anime.png', {}),
             (control.lang(30903), "airing_this_season_ova", 'airing_anime.png', {}),
             (control.lang(30904), "airing_next_season_ova", 'airing_anime.png', {}),
+            (control.lang(30969), "recently_aired_ova", 'airing_anime.png', {}),
             (control.lang(30912), "trending_ova", 'trending.png', {}),
             (control.lang(30913), "popular_ova", 'popular.png', {}),
             (control.lang(30914), "voted_ova", 'voted.png', {}),
@@ -1963,6 +1995,7 @@ def get_menu_items(menu_type):
             (control.lang(30902), "airing_last_season_ona", 'airing_anime.png', {}),
             (control.lang(30903), "airing_this_season_ona", 'airing_anime.png', {}),
             (control.lang(30904), "airing_next_season_ona", 'airing_anime.png', {}),
+            (control.lang(30969), "recently_aired_ona", 'airing_anime.png', {}),
             (control.lang(30912), "trending_ona", 'trending.png', {}),
             (control.lang(30913), "popular_ona", 'popular.png', {}),
             (control.lang(30914), "voted_ona", 'voted.png', {}),
@@ -1975,6 +2008,7 @@ def get_menu_items(menu_type):
             (control.lang(30902), "airing_last_season_music", 'airing_anime.png', {}),
             (control.lang(30903), "airing_this_season_music", 'airing_anime.png', {}),
             (control.lang(30904), "airing_next_season_music", 'airing_anime.png', {}),
+            (control.lang(30969), "recently_aired_music", 'airing_anime.png', {}),
             (control.lang(30912), "trending_music", 'trending.png', {}),
             (control.lang(30913), "popular_music", 'popular.png', {}),
             (control.lang(30914), "voted_music", 'voted.png', {}),
@@ -3867,7 +3901,7 @@ def PLAYBACK_OPTIONS(payload, params):
             'thumb': '',
             'fanart': '',
             'landscape': '',
-            'banner': '',  # Use poster as fallback for banner
+            'banner': '',
             'clearart': '',
             'clearlogo': ''
         }
@@ -3875,7 +3909,7 @@ def PLAYBACK_OPTIONS(payload, params):
 
     # Ask the user which playback option they want to use
     # Here the button labels are:
-    # Button 0: "Cancel"   | Button 1: "Rescrape" | Button 2 (or -1): "Source Select"
+    # Button 0: "Cancel"   | Button 1: "Rescrape" | Button 2: "Source Select"
     yesnocustom = control.yesnocustom_dialog(
         control.ADDON_NAME + " - Playback Options",
         "Please choose a playback option:",
@@ -4202,56 +4236,3 @@ def TOGGLE_HTTP2(payload, params):
 def UPDATE_NETWORK_STATUS(payload, params):
     """Update network status settings when settings are opened"""
     _update_network_status()
-
-@Route('recently_aired_shows')
-def RECENTLY_AIRED_SHOWS(payload, params):
-    page = int(params.get('page', 1))
-    if control.settingids.browser_api == 'mal':
-        # Use AniList API to get the data but process for MAL
-        from resources.lib.AniListBrowser import AniListBrowser
-        anilist_browser = AniListBrowser()
-        
-        # Get the recently aired shows data from AniList
-        results = anilist_browser.get_recently_aired_shows(page)
-        
-        # Convert AniList results to use MAL URLs
-        mal_results = []
-        for item in results:
-            # Skip the "Next Page" item
-            if item.get('is_dir') and 'Next Page' in item.get('info', {}).get('title', ''):
-                mal_results.append(item)
-                continue
-                
-            # Get MAL ID from the item
-            # The URL format for AniList is 'anime_all/{anilist_id}/', we need to convert it
-            if 'url' in item and item['url']:
-                # Extract the AniList ID from the URL
-                url_parts = item['url'].strip('/').split('/')
-                if url_parts and url_parts[0] == 'anime_all' and len(url_parts) > 1:
-                    # Need to get the MAL ID from the AniList data
-                    # The item should have the mal_id in its metadata if available
-                    # We'll need to query the database or use the mapping
-                    try:
-                        anilist_id = int(url_parts[1])
-                        # Try to get MAL ID from database mapping
-                        mal_mapping = database.get_mappings(anilist_id, 'anilist_id')
-                        if mal_mapping and mal_mapping.get('mal_id'):
-                            mal_id = mal_mapping['mal_id']
-                            # Update URL to use MAL format
-                            item['url'] = f'anime_all/{mal_id}/'
-                            mal_results.append(item)
-                        else:
-                            # If no MAL ID found, skip this item or keep AniList URL
-                            # For now, skip items without MAL ID
-                            continue
-                    except (ValueError, TypeError):
-                        continue
-                else:
-                    mal_results.append(item)
-            else:
-                mal_results.append(item)
-        
-        control.draw_items(mal_results, 'tvshows')
-    else:
-        # Original AniList behavior
-        control.draw_items(BROWSER.get_recently_aired_shows(page), 'tvshows')
