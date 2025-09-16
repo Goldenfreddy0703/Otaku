@@ -377,6 +377,33 @@ def AIRING_NEXT_SEASON(payload, params):
     control.draw_items(BROWSER.get_airing_next_season(page, format, prefix), 'tvshows')
 
 
+@Route('recently_aired')
+@Route('recently_aired_tv_show')
+@Route('recently_aired_movie')
+@Route('recently_aired_tv_short')
+@Route('recently_aired_special')
+@Route('recently_aired_ova')
+@Route('recently_aired_ona')
+@Route('recently_aired_music')
+def RECENTLY_AIRED(payload, params):
+    mapping = {
+        'recently_aired_tv_show': ('tv', 'TV'),
+        'recently_aired_movie': ('movie', 'MOVIE'),
+        'recently_aired_tv_short': ('tv_special', 'TV_SHORT'),
+        'recently_aired_special': ('special', 'SPECIAL'),
+        'recently_aired_ova': ('ova', 'OVA'),
+        'recently_aired_ona': ('ona', 'ONA'),
+        'recently_aired_music': ('music', 'MUSIC')
+    }
+    page = int(params.get('page', 1))
+    format = None
+    base_key = plugin_url.split('?', 1)[0]
+    if base_key in mapping:
+        format = mapping[base_key][0] if control.settingids.browser_api == 'mal' else mapping[base_key][1]
+    prefix = plugin_url.split('?', 1)[0]
+    control.draw_items(BROWSER.get_recently_aired(page, format, prefix), 'tvshows')
+
+
 @Route('trending_last_year')
 @Route('trending_last_year_tv_show')
 @Route('trending_last_year_movie')
@@ -1854,13 +1881,13 @@ def FANART(payload: str, params: dict):
     fanart = pickle.loads(episode['kodi_meta'])['image']['fanart'] or []
     fanart_display = fanart + ["None", "Random"]
     fanart += ["None", ""]
-    
+
     # Set fanart selection using string lists
     mal_ids = control.getStringList('fanart.mal_ids')
     fanart_selections = control.getStringList('fanart.selections')
     mal_id_str = str(mal_id)
     fanart_url = fanart[int(select)]
-    
+
     try:
         # Update existing entry
         index = mal_ids.index(mal_id_str)
@@ -1869,7 +1896,7 @@ def FANART(payload: str, params: dict):
         # Add new entry
         mal_ids.append(mal_id_str)
         fanart_selections.append(fanart_url)
-    
+
     control.setStringList('fanart.mal_ids', mal_ids)
     control.setStringList('fanart.selections', fanart_selections)
     control.ok_dialog(control.ADDON_NAME, f"Fanart Set to {fanart_display[int(select)]}")
@@ -1882,6 +1909,7 @@ def get_menu_items(menu_type):
             (control.lang(30902), "airing_last_season", 'airing_anime.png', {}),
             (control.lang(30903), "airing_this_season", 'airing_anime.png', {}),
             (control.lang(30904), "airing_next_season", 'airing_anime.png', {}),
+            (control.lang(30969), "recently_aired", 'airing_anime.png', {}),
             (control.lang(30905), "movies", 'movies.png', {}),
             (control.lang(30906), "tv_shows", 'tv_shows.png', {}),
             (control.lang(30907), "tv_shorts", 'tv_shorts.png', {}),
@@ -1902,6 +1930,7 @@ def get_menu_items(menu_type):
             (control.lang(30902), "airing_last_season_movie", 'airing_anime.png', {}),
             (control.lang(30903), "airing_this_season_movie", 'airing_anime.png', {}),
             (control.lang(30904), "airing_next_season_movie", 'airing_anime.png', {}),
+            (control.lang(30969), "recently_aired_movie", 'airing_anime.png', {}),
             (control.lang(30912), "trending_movie", 'trending.png', {}),
             (control.lang(30913), "popular_movie", 'popular.png', {}),
             (control.lang(30914), "voted_movie", 'voted.png', {}),
@@ -1914,6 +1943,7 @@ def get_menu_items(menu_type):
             (control.lang(30902), "airing_last_season_tv_show", 'airing_anime.png', {}),
             (control.lang(30903), "airing_this_season_tv_show", 'airing_anime.png', {}),
             (control.lang(30904), "airing_next_season_tv_show", 'airing_anime.png', {}),
+            (control.lang(30969), "recently_aired_tv_show", 'airing_anime.png', {}),
             (control.lang(30912), "trending_tv_show", 'trending.png', {}),
             (control.lang(30913), "popular_tv_show", 'popular.png', {}),
             (control.lang(30914), "voted_tv_show", 'voted.png', {}),
@@ -1926,6 +1956,7 @@ def get_menu_items(menu_type):
             (control.lang(30902), "airing_last_season_tv_short", 'airing_anime.png', {}),
             (control.lang(30903), "airing_this_season_tv_short", 'airing_anime.png', {}),
             (control.lang(30904), "airing_next_season_tv_short", 'airing_anime.png', {}),
+            (control.lang(30969), "recently_aired_tv_short", 'airing_anime.png', {}),
             (control.lang(30912), "trending_tv_short", 'trending.png', {}),
             (control.lang(30913), "popular_tv_short", 'popular.png', {}),
             (control.lang(30914), "voted_tv_short", 'voted.png', {}),
@@ -1938,6 +1969,7 @@ def get_menu_items(menu_type):
             (control.lang(30902), "airing_last_season_special", 'airing_anime.png', {}),
             (control.lang(30903), "airing_this_season_special", 'airing_anime.png', {}),
             (control.lang(30904), "airing_next_season_special", 'airing_anime.png', {}),
+            (control.lang(30969), "recently_aired_special", 'airing_anime.png', {}),
             (control.lang(30912), "trending_special", 'trending.png', {}),
             (control.lang(30913), "popular_special", 'popular.png', {}),
             (control.lang(30914), "voted_special", 'voted.png', {}),
@@ -1950,6 +1982,7 @@ def get_menu_items(menu_type):
             (control.lang(30902), "airing_last_season_ova", 'airing_anime.png', {}),
             (control.lang(30903), "airing_this_season_ova", 'airing_anime.png', {}),
             (control.lang(30904), "airing_next_season_ova", 'airing_anime.png', {}),
+            (control.lang(30969), "recently_aired_ova", 'airing_anime.png', {}),
             (control.lang(30912), "trending_ova", 'trending.png', {}),
             (control.lang(30913), "popular_ova", 'popular.png', {}),
             (control.lang(30914), "voted_ova", 'voted.png', {}),
@@ -1962,6 +1995,7 @@ def get_menu_items(menu_type):
             (control.lang(30902), "airing_last_season_ona", 'airing_anime.png', {}),
             (control.lang(30903), "airing_this_season_ona", 'airing_anime.png', {}),
             (control.lang(30904), "airing_next_season_ona", 'airing_anime.png', {}),
+            (control.lang(30969), "recently_aired_ona", 'airing_anime.png', {}),
             (control.lang(30912), "trending_ona", 'trending.png', {}),
             (control.lang(30913), "popular_ona", 'popular.png', {}),
             (control.lang(30914), "voted_ona", 'voted.png', {}),
@@ -1974,6 +2008,7 @@ def get_menu_items(menu_type):
             (control.lang(30902), "airing_last_season_music", 'airing_anime.png', {}),
             (control.lang(30903), "airing_this_season_music", 'airing_anime.png', {}),
             (control.lang(30904), "airing_next_season_music", 'airing_anime.png', {}),
+            (control.lang(30969), "recently_aired_music", 'airing_anime.png', {}),
             (control.lang(30912), "trending_music", 'trending.png', {}),
             (control.lang(30913), "popular_music", 'popular.png', {}),
             (control.lang(30914), "voted_music", 'voted.png', {}),
@@ -4077,7 +4112,7 @@ def _get_advancedsettings_status(element_name):
     """Helper function to get current status of advancedsettings.xml elements"""
     import os
     import xml.etree.ElementTree as ET
-    
+
     try:
         if os.path.exists(control.kodi_advancedsettings_path):
             tree = ET.parse(control.kodi_advancedsettings_path)
@@ -4095,7 +4130,7 @@ def _update_network_status():
     # Get current states
     ipv6_disabled = _get_advancedsettings_status('disableipv6')
     http2_disabled = _get_advancedsettings_status('disablehttp2')
-    
+
     # Update status settings (remember: disabled=true means the protocol is OFF)
     control.setSetting('ipv6.status', 'Disabled' if ipv6_disabled else 'Enabled')
     control.setSetting('http2.status', 'Disabled' if http2_disabled else 'Enabled')
@@ -4106,7 +4141,7 @@ def TOGGLE_IPV6(payload, params):
     """Toggle IPv6 setting in Kodi's advancedsettings.xml"""
     import os
     import xml.etree.ElementTree as ET
-    
+
     try:
         # Check if advancedsettings.xml exists
         if os.path.exists(control.kodi_advancedsettings_path):
@@ -4117,24 +4152,24 @@ def TOGGLE_IPV6(payload, params):
             # Create new advancedsettings.xml
             root = ET.Element('advancedsettings')
             tree = ET.ElementTree(root)
-        
+
         # Find or create disableipv6 element
         disableipv6_elem = root.find('disableipv6')
         if disableipv6_elem is None:
             disableipv6_elem = ET.SubElement(root, 'disableipv6')
             disableipv6_elem.text = 'false'
-        
+
         # Toggle the value
         current_value = disableipv6_elem.text.lower() == 'true'
         new_value = not current_value
         disableipv6_elem.text = 'true' if new_value else 'false'
-        
+
         # Write back to file
         tree.write(control.kodi_advancedsettings_path, encoding='utf-8', xml_declaration=True)
-        
+
         # Update status settings
         _update_network_status()
-        
+
         # Show notification
         status = "disabled" if new_value else "enabled"
         control.notify(
@@ -4142,7 +4177,7 @@ def TOGGLE_IPV6(payload, params):
             text=f"IPv6 {status}. Please restart Kodi for changes to take effect.",
             time=5000
         )
-        
+
     except Exception as e:
         control.notify(
             title=control.ADDON_NAME,
@@ -4157,7 +4192,7 @@ def TOGGLE_HTTP2(payload, params):
     """Toggle HTTP/2 setting in Kodi's advancedsettings.xml"""
     import os
     import xml.etree.ElementTree as ET
-    
+
     try:
         # Check if advancedsettings.xml exists
         if os.path.exists(control.kodi_advancedsettings_path):
@@ -4168,24 +4203,24 @@ def TOGGLE_HTTP2(payload, params):
             # Create new advancedsettings.xml
             root = ET.Element('advancedsettings')
             tree = ET.ElementTree(root)
-        
+
         # Find or create disablehttp2 element
         disablehttp2_elem = root.find('disablehttp2')
         if disablehttp2_elem is None:
             disablehttp2_elem = ET.SubElement(root, 'disablehttp2')
             disablehttp2_elem.text = 'false'
-        
+
         # Toggle the value
         current_value = disablehttp2_elem.text.lower() == 'true'
         new_value = not current_value
         disablehttp2_elem.text = 'true' if new_value else 'false'
-        
+
         # Write back to file
         tree.write(control.kodi_advancedsettings_path, encoding='utf-8', xml_declaration=True)
-        
+
         # Update status settings
         _update_network_status()
-        
+
         # Show notification
         status = "disabled" if new_value else "enabled"
         control.notify(
@@ -4193,7 +4228,7 @@ def TOGGLE_HTTP2(payload, params):
             text=f"HTTP/2 {status}. Please restart Kodi for changes to take effect.",
             time=5000
         )
-        
+
     except Exception as e:
         control.notify(
             title=control.ADDON_NAME,

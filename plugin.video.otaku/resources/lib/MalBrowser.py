@@ -45,6 +45,25 @@ class MalBrowser(BrowserBase):
         all_results += self.handle_paging(hasNextPage, base_plugin_url, page)
         return all_results
 
+    def process_recently_aired_mal_view(self, res, base_plugin_url, page):
+        get_meta.collect_meta(res['data'])
+        mapfunc = partial(self.base_mal_view, completed=self.open_completed())
+        all_results = []
+
+        for anime in res['data']:                
+            result = mapfunc(anime)
+            if result:
+                # Add airing status to title if available
+                if anime.get('status') == 'Currently Airing':
+                    # Could potentially add episode count if available
+                    if anime.get('episodes'):
+                        result['info']['title'] = f"{result['info']['title']} (Airing)"
+                all_results.append(result)
+
+        hasNextPage = res['pagination']['has_next_page']
+        all_results += self.handle_paging(hasNextPage, base_plugin_url, page)
+        return all_results
+
     def process_airing_view(self, json_res):
         ts = int(time.time())
         mapfunc = partial(self.base_airing_view, ts=ts)
@@ -391,6 +410,32 @@ class MalBrowser(BrowserBase):
         airing = database.get(self.get_base_res, 24, f"{self._BASE_URL}/seasons/{year}/{season}", params)
         base_plugin_url = f"{prefix}?page=%d" if prefix else "airing_next_season?page=%d"
         return self.process_mal_view(airing, base_plugin_url, page)
+
+    def get_recently_aired(self, page, format, prefix=None):
+        params = {
+            'page': page,
+            'limit': self.perpage,
+            'sfw': self.adult,
+            'status': 'airing',
+            'order_by': 'popularity',
+            'sort': 'asc'
+        }
+
+        if format:
+            params['type'] = format
+
+        if self.format_in_type:
+            params['type'] = self.format_in_type
+
+        if self.rating:
+            params['rating'] = self.rating
+
+        if self.genre:
+            params['genres'] = self.genre
+
+        recently_aired = database.get(self.get_base_res, 24, f"{self._BASE_URL}/anime", params)
+        base_plugin_url = f"{prefix}?page=%d" if prefix else "recently_aired?page=%d"
+        return self.process_recently_aired_mal_view(recently_aired, base_plugin_url, page)
 
     def get_trending_last_year(self, page, format, prefix=None):
         _, _, _, _, _, _, _, _, year_start_date_last, year_end_date_last, _, _, _, _ = self.get_season_year('last')
