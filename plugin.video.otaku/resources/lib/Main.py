@@ -30,6 +30,55 @@ BROWSER = MetaBrowser.BROWSER
 plugin_url = control.get_plugin_url(sys.argv[0])
 
 
+def _trigger_calendar_preload():
+    """Trigger background calendar preload if cache is empty or expired."""
+    import threading
+    import time
+    import os
+    
+    def _check_and_preload():
+        try:
+            # Check if calendars need preloading
+            needs_preload = False
+            
+            # Check AniList cache
+            if os.path.exists(control.anilist_calendar_json):
+                with open(control.anilist_calendar_json, 'r') as f:
+                    cached = json.load(f)
+                    if isinstance(cached, dict) and 'timestamp' in cached:
+                        cache_age = time.time() - cached.get('timestamp', 0)
+                        if cache_age >= 1800:  # 30 minutes
+                            needs_preload = True
+                    else:
+                        needs_preload = True
+            else:
+                needs_preload = True
+            
+            # Check MAL cache
+            if os.path.exists(control.mal_calendar_json):
+                with open(control.mal_calendar_json, 'r') as f:
+                    cached = json.load(f)
+                    if isinstance(cached, dict) and 'timestamp' in cached:
+                        cache_age = time.time() - cached.get('timestamp', 0)
+                        if cache_age >= 1800:  # 30 minutes
+                            needs_preload = True
+                    else:
+                        needs_preload = True
+            else:
+                needs_preload = True
+            
+            if needs_preload:
+                control.log("### Triggering background calendar preload from main menu")
+                from resources.lib import service
+                service.preload_calendars_background()
+        except Exception as e:
+            control.log(f"### Calendar preload check error: {e}")
+    
+    # Run check in background thread
+    thread = threading.Thread(target=_check_and_preload, daemon=True)
+    thread.start()
+
+
 def add_last_watched(items):
     # # Check if last watched feature is enabled
     # if not control.getBool("interface.show_last_watched"):
@@ -161,7 +210,7 @@ def save_to_watch_history(mal_id):
             'thumb': kodi_meta.get('thumb', ''),
             'fanart': kodi_meta.get('fanart', ''),
             'landscape': kodi_meta.get('landscape', ''),
-            'banner': kodi_meta.get('poster', ''),  # Use poster as fallback for banner
+            'banner': kodi_meta.get('banner', ''),
             'clearart': kodi_meta.get('clearart', ''),
             'clearlogo': kodi_meta.get('clearlogo', '')
         }
@@ -292,8 +341,15 @@ def AIRING_CALENDAR(payload: str, params: dict):
     page = int(params.get('page', 1))
     calendar = BROWSER.get_airing_calendar(page)
     if calendar:
+        # Set window property for browser type to enable dynamic labels in skin
+        browser_type = control.settingids.browser_api
+        control.setGlobalProp('otaku.calendar.browser_type', browser_type)
+        
         from resources.lib.windows.anichart import Anichart
         Anichart('anichart.xml', control.ADDON_PATH, calendar=calendar).doModal()
+        
+        # Clear property after window closes
+        control.clearGlobalProp('otaku.calendar.browser_type')
     control.exit_code()
 
 
@@ -966,7 +1022,7 @@ def GENRES(payload, params):
     genres, tags = payload.rsplit("/")
     page = int(params.get('page', 1))
     format = None
-    base_key = plugin_url.split('/', 1)[0]
+    base_key = plugin_url.split('/', 1)[0] + '//'
     if base_key in mapping:
         format = mapping[base_key][0] if control.settingids.browser_api in ['mal', 'otaku'] else mapping[base_key][1]
     if genres or tags:
@@ -2161,7 +2217,7 @@ def get_menu_items(menu_type):
             (control.lang(30902), "airing_last_season", 'airing_anime.png', {}),
             (control.lang(30903), "airing_this_season", 'airing_anime.png', {}),
             (control.lang(30904), "airing_next_season", 'airing_anime.png', {}),
-            (control.lang(30969), "recently_aired_shows", 'airing_anime.png', {}),
+            (control.lang(30969), "recently_aired", 'airing_anime.png', {}),
             (control.lang(30905), "movies", 'movies.png', {}),
             (control.lang(30906), "tv_shows", 'tv_shows.png', {}),
             (control.lang(30907), "tv_shorts", 'tv_shorts.png', {}),
@@ -2182,6 +2238,7 @@ def get_menu_items(menu_type):
             (control.lang(30902), "airing_last_season_movie", 'airing_anime.png', {}),
             (control.lang(30903), "airing_this_season_movie", 'airing_anime.png', {}),
             (control.lang(30904), "airing_next_season_movie", 'airing_anime.png', {}),
+            (control.lang(30969), "recently_aired_movie", 'airing_anime.png', {}),
             (control.lang(30912), "trending_movie", 'trending.png', {}),
             (control.lang(30913), "popular_movie", 'popular.png', {}),
             (control.lang(30914), "voted_movie", 'voted.png', {}),
@@ -2194,6 +2251,7 @@ def get_menu_items(menu_type):
             (control.lang(30902), "airing_last_season_tv_show", 'airing_anime.png', {}),
             (control.lang(30903), "airing_this_season_tv_show", 'airing_anime.png', {}),
             (control.lang(30904), "airing_next_season_tv_show", 'airing_anime.png', {}),
+            (control.lang(30969), "recently_aired_tv_show", 'airing_anime.png', {}),
             (control.lang(30912), "trending_tv_show", 'trending.png', {}),
             (control.lang(30913), "popular_tv_show", 'popular.png', {}),
             (control.lang(30914), "voted_tv_show", 'voted.png', {}),
@@ -2206,6 +2264,7 @@ def get_menu_items(menu_type):
             (control.lang(30902), "airing_last_season_tv_short", 'airing_anime.png', {}),
             (control.lang(30903), "airing_this_season_tv_short", 'airing_anime.png', {}),
             (control.lang(30904), "airing_next_season_tv_short", 'airing_anime.png', {}),
+            (control.lang(30969), "recently_aired_tv_short", 'airing_anime.png', {}),
             (control.lang(30912), "trending_tv_short", 'trending.png', {}),
             (control.lang(30913), "popular_tv_short", 'popular.png', {}),
             (control.lang(30914), "voted_tv_short", 'voted.png', {}),
@@ -2218,6 +2277,7 @@ def get_menu_items(menu_type):
             (control.lang(30902), "airing_last_season_special", 'airing_anime.png', {}),
             (control.lang(30903), "airing_this_season_special", 'airing_anime.png', {}),
             (control.lang(30904), "airing_next_season_special", 'airing_anime.png', {}),
+            (control.lang(30969), "recently_aired_special", 'airing_anime.png', {}),
             (control.lang(30912), "trending_special", 'trending.png', {}),
             (control.lang(30913), "popular_special", 'popular.png', {}),
             (control.lang(30914), "voted_special", 'voted.png', {}),
@@ -2230,6 +2290,7 @@ def get_menu_items(menu_type):
             (control.lang(30902), "airing_last_season_ova", 'airing_anime.png', {}),
             (control.lang(30903), "airing_this_season_ova", 'airing_anime.png', {}),
             (control.lang(30904), "airing_next_season_ova", 'airing_anime.png', {}),
+            (control.lang(30969), "recently_aired_ova", 'airing_anime.png', {}),
             (control.lang(30912), "trending_ova", 'trending.png', {}),
             (control.lang(30913), "popular_ova", 'popular.png', {}),
             (control.lang(30914), "voted_ova", 'voted.png', {}),
@@ -2242,6 +2303,7 @@ def get_menu_items(menu_type):
             (control.lang(30902), "airing_last_season_ona", 'airing_anime.png', {}),
             (control.lang(30903), "airing_this_season_ona", 'airing_anime.png', {}),
             (control.lang(30904), "airing_next_season_ona", 'airing_anime.png', {}),
+            (control.lang(30969), "recently_aired_ona", 'airing_anime.png', {}),
             (control.lang(30912), "trending_ona", 'trending.png', {}),
             (control.lang(30913), "popular_ona", 'popular.png', {}),
             (control.lang(30914), "voted_ona", 'voted.png', {}),
@@ -2254,6 +2316,7 @@ def get_menu_items(menu_type):
             (control.lang(30902), "airing_last_season_music", 'airing_anime.png', {}),
             (control.lang(30903), "airing_this_season_music", 'airing_anime.png', {}),
             (control.lang(30904), "airing_next_season_music", 'airing_anime.png', {}),
+            (control.lang(30969), "recently_aired_music", 'airing_anime.png', {}),
             (control.lang(30912), "trending_music", 'trending.png', {}),
             (control.lang(30913), "popular_music", 'popular.png', {}),
             (control.lang(30914), "voted_music", 'voted.png', {}),
@@ -2696,6 +2759,9 @@ def LIST_MENU(payload, params):
     if control.getGlobalProp('otaku.menu.needs_refresh') == 'true':
         control.clearGlobalProp('otaku.menu.needs_refresh')
         control.log('Menu refresh flag detected - rebuilding menu items')
+    
+    # Trigger background calendar preload if not already cached
+    _trigger_calendar_preload()
 
     MENU_ITEMS = get_menu_items('main')
 
@@ -4186,14 +4252,14 @@ def PLAYBACK_OPTIONS(payload, params):
             'thumb': '',
             'fanart': '',
             'landscape': '',
-            'banner': '',  # Use poster as fallback for banner
+            'banner': '',
             'clearart': '',
             'clearlogo': ''
         }
 
     # Ask the user which playback option they want to use
     # Here the button labels are:
-    # Button 0: "Cancel"   | Button 1: "Rescrape" | Button 2 (or -1): "Source Select"
+    # Button 0: "Cancel"   | Button 1: "Rescrape" | Button 2: "Source Select"
     yesnocustom = control.yesnocustom_dialog(
         control.ADDON_NAME + " - Playback Options",
         "Please choose a playback option:",
