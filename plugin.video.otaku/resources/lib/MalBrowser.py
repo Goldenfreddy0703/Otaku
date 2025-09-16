@@ -1,1414 +1,279 @@
-import ast
+import time
 import json
-import pickle
 import random
+import pickle
+import ast
 import re
 import os
+import datetime
 
 from bs4 import BeautifulSoup
 from functools import partial
-from resources.lib.ui import database, get_meta, utils, control, client
+from resources.lib.endpoints.simkl import Simkl
+from resources.lib.ui import database, control, client, utils, get_meta
 from resources.lib.ui.BrowserBase import BrowserBase
 from resources.lib.ui.divide_flavors import div_flavor
 
 
-class AniListBrowser(BrowserBase):
-    _BASE_URL = "https://graphql.anilist.co"
+class MalBrowser(BrowserBase):
+    _BASE_URL = "https://api.jikan.moe/v4"
 
     def __init__(self):
-        self.title_lang = ["romaji", 'english'][control.getInt("titlelanguage")]
-        self.perpage = control.getInt('interface.perpage.general.anilist')
+        self.title_lang = ['title', 'title_english'][control.getInt("titlelanguage")]
+        self.perpage = control.getInt('interface.perpage.general.mal')
         self.year_type = control.getInt('contentyear.menu') if control.getBool('contentyear.bool') else 0
-        self.season_type = control.getInt('contentseason.menu') if control.getBool('contentseason.bool') else -1
-        self.format_in_type = ['TV', 'MOVIE', 'TV_SHORT', 'SPECIAL', 'OVA', 'ONA', 'MUSIC'][control.getInt('contentformat.menu')] if control.getBool('contentformat.bool') else ''
-        self.status = ['RELEASING', 'FINISHED', 'NOT_YET_RELEASED', 'CANCELLED'][control.getInt('contentstatus.menu.anilist')] if control.getBool('contentstatus.bool') else ''
-        self.countryOfOrigin_type = ['JP', 'KR', 'CN', 'TW'][control.getInt('contentorigin.menu')] if control.getBool('contentorigin.bool') else ''
+        self.season_type = control.getInt('contentseason.menu') if control.getBool('contentseason.bool') else ''
+        self.format_in_type = ['tv', 'movie', 'tv_special', 'special', 'ova', 'ona', 'music'][control.getInt('contentformat.menu')] if control.getBool('contentformat.bool') else ''
+        self.status = ['airing', 'complete', 'upcoming'][control.getInt('contentstatus.menu.mal')] if control.getBool('contentstatus.bool') else ''
+        self.rating = ['g', 'pg', 'pg13', 'r17', 'r', 'rx'][control.getInt('contentrating.menu.mal')] if control.getBool('contentrating.bool') else ''
+        self.adult = 'false' if control.getBool('search.adult') else 'true'
         self.genre = self.load_genres_from_json() if control.getBool('contentgenre.bool') else ''
-        self.tag = self.load_tags_from_json() if control.getBool('contentgenre.bool') else ''
-
-        if self.genre == ('',):
-            self.genre = ''
-
-        if self.tag == ('',):
-            self.tag = ''
 
     def load_genres_from_json(self):
         if os.path.exists(control.genre_json):
             with open(control.genre_json, 'r') as f:
                 settings = json.load(f)
-                return tuple(settings.get('selected_genres_anilist', []))
+                genres = settings.get('selected_genres_mal', [])
+                return (', '.join(genres))
         return ()
 
-    def load_tags_from_json(self):
-        if os.path.exists(control.genre_json):
-            with open(control.genre_json, 'r') as f:
-                settings = json.load(f)
-                return tuple(settings.get('selected_tags', []))
-        return ()
+    def process_mal_view(self, res, base_plugin_url, page):
+        get_meta.collect_meta(res['data'])
+        mapfunc = partial(self.base_mal_view, completed=self.open_completed())
+        all_results = list(map(mapfunc, res['data']))
+        hasNextPage = res['pagination']['has_next_page']
+        all_results += self.handle_paging(hasNextPage, base_plugin_url, page)
+        return all_results
+
+    def process_airing_view(self, json_res):
+        ts = int(time.time())
+        mapfunc = partial(self.base_airing_view, ts=ts)
+        all_results = list(map(mapfunc, json_res['data']))
+        return all_results
+
+    def process_res(self, res):
+        self.database_update_show(res)
+        get_meta.collect_meta([res])
+        return database.get_show(res['mal_id'])
 
     def get_season_year(self, period='current'):
-        import datetime
         date = datetime.datetime.today()
         year = date.year
         month = date.month
         seasons = ['WINTER', 'SPRING', 'SUMMER', 'FALL']
+        season_start_dates = {
+            'WINTER': datetime.date(year, 1, 1),
+            'SPRING': datetime.date(year, 4, 1),
+            'SUMMER': datetime.date(year, 7, 1),
+            'FALL': datetime.date(year, 10, 1)
+        }
+        season_end_dates = {
+            'WINTER': datetime.date(year, 3, 31),
+            'SPRING': datetime.date(year, 6, 30),
+            'SUMMER': datetime.date(year, 9, 30),
+            'FALL': datetime.date(year, 12, 31)
+        }
 
         if self.year_type:
             if 1916 < self.year_type <= year + 1:
                 year = self.year_type
             else:
                 control.notify(control.ADDON_NAME, "Invalid year. Please select a year between 1916 and {0}.".format(year + 1))
-                return None, None
+                return None, None, None, None, None, None, None, None, None, None, None, None, None, None
 
-        if self.season_type > -1:
-            season_id = self.season_type
+        if self.season_type:
+            if 0 <= self.season_type < 4:
+                season = seasons[self.season_type]
+                if period == "next":
+                    next_season_index = (self.season_type + 1) % 4
+                    season = seasons[next_season_index]
+                    if season == 'WINTER':
+                        year += 1
+                elif period == "last":
+                    last_season_index = (self.season_type - 1) % 4
+                    season = seasons[last_season_index]
+                    if season == 'FALL' and month <= 3:
+                        year -= 1
         else:
-            season_id = int((month - 1) / 3)
+            if period == "next":
+                season = seasons[int((month - 1) / 3 + 1) % 4]
+                if season == 'WINTER':
+                    year += 1
+            elif period == "last":
+                season = seasons[int((month - 1) / 3 - 1) % 4]
+                if season == 'FALL' and month <= 3:
+                    year -= 1
+            else:
+                season = seasons[int((month - 1) / 3)]
 
-        if period == "next":
-            season = seasons[(season_id + 1) % 4]
-            if season == 'WINTER':
-                year += 1
-        elif period == "last":
-            season = seasons[(season_id - 1) % 4]
-            if season == 'FALL' and month <= 3:
-                year -= 1
-        else:
-            season = seasons[season_id]
+        # Adjust the start and end dates for this season
+        season_start_date = season_start_dates[season]
+        season_end_date = season_end_dates[season]
 
-        return season, year
+        # Adjust the start and end dates for this year
+        year_start_date = datetime.date(year, 1, 1)
+        year_end_date = datetime.date(year, 12, 31)
+
+        # Adjust the start and end dates for last season
+        last_season_index = (seasons.index(season) - 1) % 4
+        last_season = seasons[last_season_index]
+        last_season_year = year if last_season != 'FALL' or month > 3 else year - 1
+        season_start_date_last = season_start_dates[last_season].replace(year=last_season_year)
+        season_end_date_last = season_end_dates[last_season].replace(year=last_season_year)
+
+        # Adjust the start and end dates for last year
+        year_start_date_last = datetime.date(year - 1, 1, 1)
+        year_end_date_last = datetime.date(year - 1, 12, 31)
+
+        # Adjust the start and end dates for next season
+        next_season_index = (seasons.index(season) + 1) % 4
+        next_season = seasons[next_season_index]
+        next_season_year = year if next_season != 'WINTER' else year + 1
+        season_start_date_next = season_start_dates[next_season].replace(year=next_season_year)
+        season_end_date_next = season_end_dates[next_season].replace(year=next_season_year)
+
+        # Adjust the start and end dates for next year
+        year_start_date_next = datetime.date(year + 1, 1, 1)
+        year_end_date_next = datetime.date(year + 1, 12, 31)
+
+        return (season, year, year_start_date, year_end_date, season_start_date, season_end_date,
+                season_start_date_last, season_end_date_last, year_start_date_last, year_end_date_last,
+                season_start_date_next, season_end_date_next, year_start_date_next, year_end_date_next)
 
     def get_airing_calendar(self, page=1):
-        import datetime
-        import time
-        import itertools
+        days_of_week = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
+        list_ = []
 
-        anilist_cache = self.get_cached_data()
-        if anilist_cache:
-            list_ = anilist_cache
+        mal_cache = self.get_cached_data()
+        if mal_cache:
+            list_ = mal_cache
         else:
-            today = datetime.date.today()
-            today_ts = int(time.mktime(today.timetuple()))
-            weekStart = today_ts - 86400
-            weekEnd = today_ts + (86400 * 6)
-            variables = {
-                'weekStart': weekStart,
-                'weekEnd': weekEnd,
-                'page': page
-            }
+            for day in days_of_week:
+                day_results = []
+                current_page = page
+                request_count = 0
 
-            list_ = []
+                while True:
+                    retries = 3
+                    popular = None
+                    while retries > 0:
+                        popular = self.get_airing_calendar_res(day, current_page)
+                        if popular and 'data' in popular:
+                            break
+                        retries -= 1
+                        time.sleep(1)  # Add delay before retrying
 
-            for i in range(0, 4):
-                popular = self.get_airing_calendar_res(variables, page)
-                list_.append(popular)
+                    if not popular or 'data' not in popular:
+                        break
 
-                if not popular['pageInfo']['hasNextPage']:
-                    break
+                    day_results.extend(popular['data'])
 
-                page += 1
-                variables['page'] = page
+                    if not popular['pagination']['has_next_page']:
+                        break
 
-            self.set_cached_data(anilist_cache)
+                    current_page += 1
+                    request_count += 1
 
-        results = list(map(self.process_airing_view, list_))
-        results = list(itertools.chain(*results))
-        return results
+                    if request_count >= 3:
+                        time.sleep(1)  # Add delay to respect API rate limit
+                        request_count = 0
+
+                day_results.reverse()
+                list_.extend(day_results)
+                self.set_cached_data(list_)
+
+        # Wrap the results in a dictionary that mimics the API response structure
+        wrapped_results = {
+            "pagination": {
+                "last_visible_page": 1,
+                "has_next_page": False,
+                "current_page": 1,
+                "items": {
+                    "count": len(list_),
+                    "total": len(list_),
+                    "per_page": 25
+                }
+            },
+            "data": list_
+        }
+
+        airing = self.process_airing_view(wrapped_results)
+        return airing
 
     def get_cached_data(self):
-        if os.path.exists(control.anilist_calendar_json):
-            with open(control.anilist_calendar_json, 'r') as f:
+        if os.path.exists(control.mal_calendar_json):
+            with open(control.mal_calendar_json, 'r') as f:
                 return json.load(f)
         return None
 
     def set_cached_data(self, data):
-        with open(control.anilist_calendar_json, 'w') as f:
+        with open(control.mal_calendar_json, 'w') as f:
             json.dump(data, f)
 
-    def get_airing_last_season(self, page, format, prefix=None):
-        season, year = self.get_season_year('last')
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'season': season,
-            'year': f'{year}%',
-            'sort': "TRENDING_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        if self.genre:
-            variables['includedGenres'] = self.genre
-
-        if self.tag:
-            variables['includedTags'] = self.tag
-
-        airing = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "airing_last_season?page=%d"
-        return self.process_anilist_view(airing, base_plugin_url, page)
-
-    def get_airing_this_season(self, page, format, prefix=None):
-        season, year = self.get_season_year('this')
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'season': season,
-            'year': f'{year}%',
-            'sort': "POPULARITY_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        if self.genre:
-            variables['includedGenres'] = self.genre
-
-        if self.tag:
-            variables['includedTags'] = self.tag
-
-        airing = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "airing_this_season?page=%d"
-        return self.process_anilist_view(airing, base_plugin_url, page)
-
-    def get_airing_next_season(self, page, format, prefix=None):
-        season, year = self.get_season_year('next')
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'season': season,
-            'year': f'{year}%',
-            'sort': "POPULARITY_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        if self.genre:
-            variables['includedGenres'] = self.genre
-
-        if self.tag:
-            variables['includedTags'] = self.tag
-
-        airing = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "airing_next_season?page=%d"
-        return self.process_anilist_view(airing, base_plugin_url, page)
-
-    def get_trending_last_year(self, page, format, prefix=None):
-        season, year = self.get_season_year('')
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'year': f'{year - 1}%',
-            'sort': "TRENDING_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        if self.genre:
-            variables['includedGenres'] = self.genre
-
-        if self.tag:
-            variables['includedTags'] = self.tag
-
-        trending = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "trending_last_year?page=%d"
-        return self.process_anilist_view(trending, base_plugin_url, page)
-
-    def get_trending_this_year(self, page, format, prefix=None):
-        season, year = self.get_season_year('')
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'year': f'{year}%',
-            'sort': "TRENDING_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        if self.genre:
-            variables['includedGenres'] = self.genre
-
-        if self.tag:
-            variables['includedTags'] = self.tag
-
-        trending = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "trending_this_year?page=%d"
-        return self.process_anilist_view(trending, base_plugin_url, page)
-
-    def get_trending_last_season(self, page, format, prefix=None):
-        season, year = self.get_season_year('last')
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'season': season,
-            'year': f'{year}%',
-            'sort': "TRENDING_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        if self.genre:
-            variables['includedGenres'] = self.genre
-
-        if self.tag:
-            variables['includedTags'] = self.tag
-
-        trending = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "trending_last_season?page=%d"
-        return self.process_anilist_view(trending, base_plugin_url, page)
-
-    def get_trending_this_season(self, page, format, prefix=None):
-        season, year = self.get_season_year('this')
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'season': season,
-            'year': f'{year}%',
-            'sort': "TRENDING_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        if self.genre:
-            variables['includedGenres'] = self.genre
-
-        if self.tag:
-            variables['includedTags'] = self.tag
-
-        trending = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "trending_this_season?page=%d"
-        return self.process_anilist_view(trending, base_plugin_url, page)
-
-    def get_all_time_trending(self, page, format, prefix=None):
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'sort': "TRENDING_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        if self.genre:
-            variables['includedGenres'] = self.genre
-
-        if self.tag:
-            variables['includedTags'] = self.tag
-
-        trending = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "all_time_trending?page=%d"
-        return self.process_anilist_view(trending, base_plugin_url, page)
-
-    def get_popular_last_year(self, page, format, prefix=None):
-        season, year = self.get_season_year('')
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'year': f'{year - 1}%',
-            'sort': "POPULARITY_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        if self.genre:
-            variables['includedGenres'] = self.genre
-
-        if self.tag:
-            variables['includedTags'] = self.tag
-
-        popular = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "popular_last_year?page=%d"
-        return self.process_anilist_view(popular, base_plugin_url, page)
-
-    def get_popular_this_year(self, page, format, prefix=None):
-        season, year = self.get_season_year('')
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'year': f'{year}%',
-            'sort': "POPULARITY_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        if self.genre:
-            variables['includedGenres'] = self.genre
-
-        if self.tag:
-            variables['includedTags'] = self.tag
-
-        popular = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "popular_this_year?page=%d"
-        return self.process_anilist_view(popular, base_plugin_url, page)
-
-    def get_popular_last_season(self, page, format, prefix=None):
-        season, year = self.get_season_year('last')
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'season': season,
-            'year': f'{year}%',
-            'sort': "POPULARITY_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        if self.genre:
-            variables['includedGenres'] = self.genre
-
-        if self.tag:
-            variables['includedTags'] = self.tag
-
-        popular = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "popular_last_season?page=%d"
-        return self.process_anilist_view(popular, base_plugin_url, page)
-
-    def get_popular_this_season(self, page, format, prefix=None):
-        season, year = self.get_season_year('this')
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'season': season,
-            'year': f'{year}%',
-            'sort': "POPULARITY_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        if self.genre:
-            variables['includedGenres'] = self.genre
-
-        if self.tag:
-            variables['includedTags'] = self.tag
-
-        popular = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "popular_this_season?page=%d"
-        return self.process_anilist_view(popular, base_plugin_url, page)
-
-    def get_all_time_popular(self, page, format, prefix=None):
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'sort': "POPULARITY_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        if self.genre:
-            variables['includedGenres'] = self.genre
-
-        if self.tag:
-            variables['includedTags'] = self.tag
-
-        popular = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "all_time_popular?page=%d"
-        return self.process_anilist_view(popular, base_plugin_url, page)
-
-    def get_voted_last_year(self, page, format, prefix=None):
-        season, year = self.get_season_year('')
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'year': f'{year - 1}%',
-            'sort': "SCORE_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        if self.genre:
-            variables['includedGenres'] = self.genre
-
-        if self.tag:
-            variables['includedTags'] = self.tag
-
-        voted = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "voted_last_year?page=%d"
-        return self.process_anilist_view(voted, base_plugin_url, page)
-
-    def get_voted_this_year(self, page, format, prefix=None):
-        season, year = self.get_season_year('')
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'year': f'{year}%',
-            'sort': "SCORE_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        if self.genre:
-            variables['includedGenres'] = self.genre
-
-        if self.tag:
-            variables['includedTags'] = self.tag
-
-        voted = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "voted_this_year?page=%d"
-        return self.process_anilist_view(voted, base_plugin_url, page)
-
-    def get_voted_last_season(self, page, format, prefix=None):
-        season, year = self.get_season_year('last')
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'season': season,
-            'year': f'{year}%',
-            'sort': "SCORE_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        if self.genre:
-            variables['includedGenres'] = self.genre
-
-        if self.tag:
-            variables['includedTags'] = self.tag
-
-        voted = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "voted_last_season?page=%d"
-        return self.process_anilist_view(voted, base_plugin_url, page)
-
-    def get_voted_this_season(self, page, format, prefix=None):
-        season, year = self.get_season_year('this')
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'season': season,
-            'year': f'{year}%',
-            'sort': "SCORE_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        if self.genre:
-            variables['includedGenres'] = self.genre
-
-        if self.tag:
-            variables['includedTags'] = self.tag
-
-        voted = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "voted_this_season?page=%d"
-        return self.process_anilist_view(voted, base_plugin_url, page)
-
-    def get_all_time_voted(self, page, format, prefix=None):
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'sort': "SCORE_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        if self.genre:
-            variables['includedGenres'] = self.genre
-
-        if self.tag:
-            variables['includedTags'] = self.tag
-
-        voted = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "all_time_voted?page=%d"
-        return self.process_anilist_view(voted, base_plugin_url, page)
-
-    def get_favourites_last_year(self, page, format, prefix=None):
-        season, year = self.get_season_year('')
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'year': f'{year - 1}%',
-            'sort': "FAVOURITES_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        if self.genre:
-            variables['includedGenres'] = self.genre
-
-        if self.tag:
-            variables['includedTags'] = self.tag
-
-        favourites = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "favourites_last_year?page=%d"
-        return self.process_anilist_view(favourites, base_plugin_url, page)
-
-    def get_favourites_this_year(self, page, format, prefix=None):
-        season, year = self.get_season_year('')
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'year': f'{year}%',
-            'sort': "FAVOURITES_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        if self.genre:
-            variables['includedGenres'] = self.genre
-
-        if self.tag:
-            variables['includedTags'] = self.tag
-
-        favourites = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "favourites_this_year?page=%d"
-        return self.process_anilist_view(favourites, base_plugin_url, page)
-
-    def get_favourites_last_season(self, page, format, prefix=None):
-        season, year = self.get_season_year('last')
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'season': season,
-            'year': f'{year}%',
-            'sort': "FAVOURITES_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        if self.genre:
-            variables['includedGenres'] = self.genre
-
-        if self.tag:
-            variables['includedTags'] = self.tag
-
-        favourites = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "favourites_last_season?page=%d"
-        return self.process_anilist_view(favourites, base_plugin_url, page)
-
-    def get_favourites_this_season(self, page, format, prefix=None):
-        season, year = self.get_season_year('this')
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'season': season,
-            'year': f'{year}%',
-            'sort': "FAVOURITES_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        if self.genre:
-            variables['includedGenres'] = self.genre
-
-        if self.tag:
-            variables['includedTags'] = self.tag
-
-        favourites = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "favourites_this_season?page=%d"
-        return self.process_anilist_view(favourites, base_plugin_url, page)
-
-    def get_all_time_favourites(self, page, format, prefix=None):
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'sort': "FAVOURITES_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        if self.genre:
-            variables['includedGenres'] = self.genre
-
-        if self.tag:
-            variables['includedTags'] = self.tag
-
-        favourites = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "all_time_favourites?page=%d"
-        return self.process_anilist_view(favourites, base_plugin_url, page)
-
-    def get_top_100(self, page, format, prefix=None):
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'sort': "SCORE_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        if self.genre:
-            variables['includedGenres'] = self.genre
-
-        if self.tag:
-            variables['includedTags'] = self.tag
-
-        top_100 = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "top_100?page=%d"
-        return self.process_anilist_view(top_100, base_plugin_url, page)
-
-    def get_genre_action(self, page, format, prefix=None):
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'includedGenres': "Action",
-            'sort': "POPULARITY_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        genre = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_action?page=%d"
-        return self.process_anilist_view(genre, base_plugin_url, page)
-
-    def get_genre_adventure(self, page, format, prefix=None):
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'includedGenres': "Adventure",
-            'sort': "POPULARITY_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        genre = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_adventure?page=%d"
-        return self.process_anilist_view(genre, base_plugin_url, page)
-
-    def get_genre_comedy(self, page, format, prefix=None):
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'includedGenres': "Comedy",
-            'sort': "POPULARITY_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        genre = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_comedy?page=%d"
-        return self.process_anilist_view(genre, base_plugin_url, page)
-
-    def get_genre_drama(self, page, format, prefix=None):
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'includedGenres': "Drama",
-            'sort': "POPULARITY_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        genre = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_drama?page=%d"
-        return self.process_anilist_view(genre, base_plugin_url, page)
-
-    def get_genre_ecchi(self, page, format, prefix=None):
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'includedGenres': "Ecchi",
-            'sort': "POPULARITY_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        genre = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_ecchi?page=%d"
-        return self.process_anilist_view(genre, base_plugin_url, page)
-
-    def get_genre_fantasy(self, page, format, prefix=None):
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'includedGenres': "Fantasy",
-            'sort': "POPULARITY_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        genre = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_fantasy?page=%d"
-        return self.process_anilist_view(genre, base_plugin_url, page)
-
-    def get_genre_hentai(self, page, format, prefix=None):
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'includedGenres': "Hentai",
-            'sort': "POPULARITY_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        genre = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_hentai?page=%d"
-        return self.process_anilist_view(genre, base_plugin_url, page)
-
-    def get_genre_horror(self, page, format, prefix=None):
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'includedGenres': "Horror",
-            'sort': "POPULARITY_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        genre = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_horror?page=%d"
-        return self.process_anilist_view(genre, base_plugin_url, page)
-
-    def get_genre_shoujo(self, page, format, prefix=None):
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'includedGenres': "Shoujo",
-            'sort': "POPULARITY_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        genre = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_shoujo?page=%d"
-        return self.process_anilist_view(genre, base_plugin_url, page)
-
-    def get_genre_mecha(self, page, format, prefix=None):
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'includedGenres': "Mecha",
-            'sort': "POPULARITY_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        genre = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_mecha?page=%d"
-        return self.process_anilist_view(genre, base_plugin_url, page)
-
-    def get_genre_music(self, page, format, prefix=None):
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'includedGenres': "Music",
-            'sort': "POPULARITY_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        genre = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_music?page=%d"
-        return self.process_anilist_view(genre, base_plugin_url, page)
-
-    def get_genre_mystery(self, page, format, prefix=None):
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'includedGenres': "Mystery",
-            'sort': "POPULARITY_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        genre = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_mystery?page=%d"
-        return self.process_anilist_view(genre, base_plugin_url, page)
-
-    def get_genre_psychological(self, page, format, prefix=None):
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'includedGenres': "Psychological",
-            'sort': "POPULARITY_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        genre = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_psychological?page=%d"
-        return self.process_anilist_view(genre, base_plugin_url, page)
-
-    def get_genre_romance(self, page, format, prefix=None):
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'includedGenres': "Romance",
-            'sort': "POPULARITY_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        genre = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_romance?page=%d"
-        return self.process_anilist_view(genre, base_plugin_url, page)
-
-    def get_genre_sci_fi(self, page, format, prefix=None):
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'includedGenres': "Sci-Fi",
-            'sort': "POPULARITY_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        genre = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_sci_fi?page=%d"
-        return self.process_anilist_view(genre, base_plugin_url, page)
-
-    def get_genre_slice_of_life(self, page, format, prefix=None):
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'includedGenres': "Slice of Life",
-            'sort': "POPULARITY_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        genre = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_slice_of_life?page=%d"
-        return self.process_anilist_view(genre, base_plugin_url, page)
-
-    def get_genre_sports(self, page, format, prefix=None):
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'includedGenres': "Sports",
-            'sort': "POPULARITY_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        genre = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_sports?page=%d"
-        return self.process_anilist_view(genre, base_plugin_url, page)
-
-    def get_genre_supernatural(self, page, format, prefix=None):
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'includedGenres': "Supernatural",
-            'sort': "POPULARITY_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        genre = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_supernatural?page=%d"
-        return self.process_anilist_view(genre, base_plugin_url, page)
-
-    def get_genre_thriller(self, page, format, prefix=None):
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'includedGenres': "Thriller",
-            'sort': "POPULARITY_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        genre = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_thriller?page=%d"
-        return self.process_anilist_view(genre, base_plugin_url, page)
-
-    def get_search(self, query, page, format, prefix=None):
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'search': query,
-            'sort': "SEARCH_MATCH",
-            'type': "ANIME"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        search = self.get_search_res(variables)
-        if control.getBool('search.adult'):
-            variables['isAdult'] = True
-            search_adult = self.get_search_res(variables)
-            for i in search_adult["ANIME"]:
-                i['title']['english'] = f'{i["title"]["english"]} - {control.colorstr("Adult", "red")}'
-            search['ANIME'] += search_adult['ANIME']
-        base_plugin_url = f"{prefix}/{query}?page=%d" if prefix else f"search_anime/{query}?page=%d"
-        return self.process_anilist_view(search, base_plugin_url, page)
+    def get_anime(self, mal_id):
+        res = database.get(self.get_base_res, 24, f"{self._BASE_URL}/anime/{mal_id}")
+        return self.process_res(res['data'])
 
     def get_recommendations(self, mal_id, page):
-        variables = {
-            'page': page,
-            'perPage': self.perpage,
-            'idMal': mal_id
-        }
-        recommendations = database.get(self.get_recommendations_res, 24, variables)
-        return self.process_recommendations_view(recommendations, f'find_recommendations/{mal_id}?page=%d', page)
+        recommendations = database.get(self.get_base_res, 24, f'{self._BASE_URL}/anime/{mal_id}/recommendations')
+        get_meta.collect_meta(recommendations['data'])
+
+        recommendation_res = []
+        count = 0
+        retry_limit = 3
+
+        for recommendation in recommendations['data']:
+            entry = recommendation.get('entry')
+            if entry and entry.get('mal_id'):
+                retries = 0
+                while retries < retry_limit:
+                    res_data = database.get(self.get_base_res, 24, f"{self._BASE_URL}/anime/{entry['mal_id']}")
+                    if res_data is not None and 'data' in res_data:
+                        res_data['data']['votes'] = recommendation.get('votes')
+                        recommendation_res.append(res_data['data'])
+                        break
+                    else:
+                        retries += 1
+                        control.sleep(int(100 * retries))  # Reduced linear backoff
+
+                count += 1
+                if count % 3 == 0:
+                    control.sleep(1000)  # Ensure we do not exceed 3 requests per second
+
+        mapfunc = partial(self.base_mal_view, completed=self.open_completed())
+        all_results = list(map(mapfunc, recommendation_res))
+        return all_results
 
     def get_relations(self, mal_id):
-        variables = {
-            'idMal': mal_id
-        }
-        relations = database.get(self.get_relations_res, 24, variables)
-        return self.process_relations_view(relations)
+        relations = database.get(self.get_base_res, 24, f'{self._BASE_URL}/anime/{mal_id}/relations')
+        meta_ids = [{'mal_id': entry['mal_id']} for relation in relations['data'] for entry in relation['entry']]
+        get_meta.collect_meta(meta_ids)
+
+        relation_res = []
+        count = 0
+        retry_limit = 3
+
+        for relation in relations['data']:
+            for entry in relation['entry']:
+                if entry['type'] == 'anime':
+                    retries = 0
+                    while retries < retry_limit:
+                        res_data = database.get(self.get_base_res, 24, f"{self._BASE_URL}/anime/{entry['mal_id']}")
+                        if res_data is not None and 'data' in res_data:
+                            res_data['data']['relation'] = relation['relation']
+                            relation_res.append(res_data['data'])
+                            break
+                        else:
+                            retries += 1
+                            control.sleep(int(100 * retries))  # Reduced linear backoff
+
+                    count += 1
+                    if count % 3 == 0:
+                        control.sleep(1000)  # Ensure we do not exceed 3 requests per second
+
+        mapfunc = partial(self.base_mal_view, completed=self.open_completed())
+        all_results = list(map(mapfunc, relation_res))
+        return all_results
 
     def get_watch_order(self, mal_id):
         url = 'https://chiaki.site/?/tools/watch_order/id/{}'.format(mal_id)
@@ -1428,747 +293,1346 @@ class AniListBrowser(BrowserBase):
 
             # Extract the MAL IDs from these tags
             mal_ids = [re.search(r'\d+', link['href']).group() for link in mal_links]
+            meta_ids = [{'mal_id': mal_id} for mal_id in mal_ids]
+            get_meta.collect_meta(meta_ids)
 
             watch_order_list = []
+            count = 0
+            retry_limit = 3
+
             for idmal in mal_ids:
-                variables = {
-                    'idMal': int(idmal),
-                    'type': "ANIME"
-                }
+                retries = 0
+                while retries < retry_limit:
+                    mal_item = database.get(self.get_base_res, 24, f'{self._BASE_URL}/anime/{idmal}')
 
-                anilist_item = database.get(self.get_anilist_res_with_mal_id, 24, variables)
-                if anilist_item is not None:
-                    watch_order_list.append(anilist_item)
+                    if mal_item is not None and 'data' in mal_item:
+                        watch_order_list.append(mal_item['data'])
+                        break
+                    else:
+                        retries += 1
+                        control.sleep(int(100 * retries))  # Reduced linear backoff
 
-        return self.process_watch_order_view(watch_order_list)
+                count += 1
+                if count % 3 == 0:
+                    control.sleep(1000)  # Ensure we do not exceed 3 requests per second
 
-    def get_anime(self, mal_id):
-        variables = {
-            'idMal': mal_id,
-            'type': "ANIME"
-        }
-        anilist_res = database.get(self.get_anilist_res, 24, variables)
-        return self.process_res(anilist_res)
-
-    def get_base_res(self, variables):
-        query = '''
-        query (
-            $page: Int=1,
-            $perpage: Int=20,
-            $type: MediaType,
-            $isAdult: Boolean = false,
-            $format: [MediaFormat],
-            $countryOfOrigin: CountryCode,
-            $season: MediaSeason,
-            $includedGenres: [String],
-            $includedTags: [String],
-            $year: String,
-            $status: MediaStatus,
-            $sort: [MediaSort] = [POPULARITY_DESC, SCORE_DESC]
-        ) {
-            Page (page: $page, perPage: $perpage) {
-                pageInfo {
-                    hasNextPage
-                }
-                ANIME: media (
-                    format_in: $format,
-                    type: $type,
-                    genre_in: $includedGenres,
-                    tag_in: $includedTags,
-                    season: $season,
-                    startDate_like: $year,
-                    sort: $sort,
-                    status: $status,
-                    isAdult: $isAdult,
-                    countryOfOrigin: $countryOfOrigin
-                ) {
-                    id
-                    idMal
-                    title {
-                        romaji,
-                        english
-                    }
-                    coverImage {
-                        extraLarge
-                    }
-                    bannerImage
-                    startDate {
-                        year,
-                        month,
-                        day
-                    }
-                    description
-                    synonyms
-                    format
-                    episodes
-                    status
-                    genres
-                    duration
-                    countryOfOrigin
-                    averageScore
-                    stats {
-                        scoreDistribution {
-                            score
-                            amount
-                        }
-                    }
-                    trailer {
-                        id
-                        site
-                    }
-                    characters (
-                        page: 1,
-                        sort: ROLE,
-                        perPage: 10,
-                    ) {
-                        edges {
-                            node {
-                                name {
-                                    userPreferred
-                                }
-                            }
-                            voiceActors (language: JAPANESE) {
-                                name {
-                                    userPreferred
-                                }
-                                image {
-                                    large
-                                }
-                            }
-                        }
-                    }
-                    studios {
-                        edges {
-                            node {
-                                name
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        '''
-
-        result = client.request(self._BASE_URL, post={'query': query, 'variables': variables}, jpost=True)
-        results = json.loads(result)
-
-        if "errors" in results.keys():
-            return
-
-        json_res = results.get('data', {}).get('Page')
-
-        if control.getBool('general.malposters'):
-            try:
-                for anime in json_res['ANIME']:
-                    anilist_id = anime['id']
-                    mal_mapping = database.get_mappings(anilist_id, 'anilist_id')
-                    if mal_mapping and 'mal_picture' in mal_mapping:
-                        mal_picture = mal_mapping['mal_picture']
-                        mal_picture_url = mal_picture.rsplit('.', 1)[0] + 'l.' + mal_picture.rsplit('.', 1)[1]
-                        mal_picture_url = 'https://cdn.myanimelist.net/images/anime/' + mal_picture_url
-                        anime['coverImage']['extraLarge'] = mal_picture_url
-            except Exception:
-                pass
-
-        if json_res:
-            return json_res
-
-    def get_search_res(self, variables):
-        query = '''
-        query (
-            $page: Int=1,
-            $perpage: Int=20
-            $type: MediaType,
-            $isAdult: Boolean = false,
-            $format: [MediaFormat],
-            $search: String,
-            $sort: [MediaSort] = [SCORE_DESC, POPULARITY_DESC]
-        ) {
-            Page (page: $page, perPage: $perpage) {
-                pageInfo {
-                    hasNextPage
-                }
-                ANIME: media (
-                    format_in: $format,
-                    type: $type,
-                    search: $search,
-                    sort: $sort,
-                    isAdult: $isAdult
-                ) {
-                    id
-                    idMal
-                    title {
-                        romaji,
-                        english
-                    }
-                    coverImage {
-                        extraLarge
-                    }
-                    bannerImage
-                    startDate {
-                        year,
-                        month,
-                        day
-                    }
-                    description
-                    synonyms
-                    format
-                    episodes
-                    status
-                    genres
-                    duration
-                    countryOfOrigin
-                    averageScore
-                    stats {
-                        scoreDistribution {
-                            score
-                            amount
-                        }
-                    }
-                    trailer {
-                        id
-                        site
-                    }
-                    characters (
-                        page: 1,
-                        sort: ROLE,
-                        perPage: 10,
-                    ) {
-                        edges {
-                            node {
-                                name {
-                                    userPreferred
-                                }
-                            }
-                            voiceActors (language: JAPANESE) {
-                                name {
-                                    userPreferred
-                                }
-                                image {
-                                    large
-                                }
-                            }
-                        }
-                    }
-                    studios {
-                        edges {
-                            node {
-                                name
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        '''
-
-        result = client.request(self._BASE_URL, post={'query': query, 'variables': variables}, jpost=True)
-        results = json.loads(result)
-
-        if "errors" in results.keys():
-            return
-
-        json_res = results.get('data', {}).get('Page')
-
-        if control.getBool('general.malposters'):
-            try:
-                for anime in json_res['ANIME']:
-                    anilist_id = anime['id']
-                    mal_mapping = database.get_mappings(anilist_id, 'anilist_id')
-                    if mal_mapping and 'mal_picture' in mal_mapping:
-                        mal_picture = mal_mapping['mal_picture']
-                        mal_picture_url = mal_picture.rsplit('.', 1)[0] + 'l.' + mal_picture.rsplit('.', 1)[1]
-                        mal_picture_url = 'https://cdn.myanimelist.net/images/anime/' + mal_picture_url
-                        anime['coverImage']['extraLarge'] = mal_picture_url
-            except Exception:
-                pass
-
-        if json_res:
-            return json_res
-
-    def get_recommendations_res(self, variables):
-        query = '''
-        query ($idMal: Int, $page: Int, $perpage: Int=20) {
-          Media(idMal: $idMal, type: ANIME) {
-            id
-            recommendations(page: $page, perPage: $perpage, sort: [RATING_DESC, ID]) {
-              pageInfo {
-                hasNextPage
-              }
-              edges {
-                node {
-                  id
-                  rating
-                  mediaRecommendation {
-                    id
-                    idMal
-                    title {
-                      romaji
-                      english
-                    }
-                    genres
-                    averageScore
-                    description(asHtml: false)
-                    coverImage {
-                      extraLarge
-                    }
-                    bannerImage
-                    startDate {
-                      year
-                      month
-                      day
-                    }
-                    format
-                    episodes
-                    duration
-                    status
-                    studios {
-                      edges {
-                        node {
-                          name
-                        }
-                      }
-                    }
-                    trailer {
-                        id
-                        site
-                    }
-                    stats {
-                        scoreDistribution {
-                            score
-                            amount
-                        }
-                    }
-                    characters (perPage: 10) {
-                      edges {
-                        node {
-                          name {
-                            full
-                            native
-                            userPreferred
-                          }
-                        }
-                        voiceActors(language: JAPANESE) {
-                          id
-                          name {
-                            full
-                            native
-                            userPreferred
-                          }
-                          image {
-                            large
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-        '''
-
-        result = client.request(self._BASE_URL, post={'query': query, 'variables': variables}, jpost=True)
-        results = json.loads(result)
-
-        if "errors" in results.keys():
-            return
-
-        json_res = results.get('data', {}).get('Media', {}).get('recommendations')
-
-        if control.getBool('general.malposters'):
-            try:
-                for recommendation in json_res['edges']:
-                    anime = recommendation['node']['mediaRecommendation']
-                    anilist_id = anime['id']
-                    mal_mapping = database.get_mappings(anilist_id, 'anilist_id')
-                    if mal_mapping and 'mal_picture' in mal_mapping:
-                        mal_picture = mal_mapping['mal_picture']
-                        mal_picture_url = mal_picture.rsplit('.', 1)[0] + 'l.' + mal_picture.rsplit('.', 1)[1]
-                        mal_picture_url = 'https://cdn.myanimelist.net/images/anime/' + mal_picture_url
-                        anime['coverImage']['extraLarge'] = mal_picture_url
-            except Exception:
-                pass
-
-        if json_res:
-            return json_res
-
-    def get_relations_res(self, variables):
-        query = '''
-        query ($idMal: Int) {
-          Media(idMal: $idMal, type: ANIME) {
-            relations {
-              edges {
-                relationType
-                node {
-                  id
-                  idMal
-                  title {
-                    romaji
-                    english
-                  }
-                  genres
-                  averageScore
-                  description(asHtml: false)
-                  coverImage {
-                    extraLarge
-                  }
-                  bannerImage
-                  startDate {
-                    year
-                    month
-                    day
-                  }
-                  format
-                  episodes
-                  duration
-                  status
-                  studios {
-                    edges {
-                      node {
-                        name
-                      }
-                    }
-                  }
-                  trailer {
-                    id
-                    site
-                  }
-                  stats {
-                    scoreDistribution {
-                        score
-                        amount
-                    }
-                  }
-                  characters (perPage: 10) {
-                    edges {
-                      node {
-                        name {
-                          full
-                          native
-                          userPreferred
-                        }
-                      }
-                      voiceActors(language: JAPANESE) {
-                        id
-                        name {
-                          full
-                          native
-                          userPreferred
-                        }
-                        image {
-                          large
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-        '''
-
-        r = client.request(self._BASE_URL, post={'query': query, 'variables': variables}, jpost=True)
-        results = json.loads(r)
-
-        if "errors" in results.keys():
-            return
-
-        json_res = results.get('data', {}).get('Media', {}).get('relations')
-
-        if control.getBool('general.malposters'):
-            try:
-                for relation in json_res['edges']:
-                    anime = relation['node']
-                    anilist_id = anime['id']
-                    mal_mapping = database.get_mappings(anilist_id, 'anilist_id')
-                    if mal_mapping and 'mal_picture' in mal_mapping:
-                        mal_picture = mal_mapping['mal_picture']
-                        mal_picture_url = mal_picture.rsplit('.', 1)[0] + 'l.' + mal_picture.rsplit('.', 1)[1]
-                        mal_picture_url = 'https://cdn.myanimelist.net/images/anime/' + mal_picture_url
-                        anime['coverImage']['extraLarge'] = mal_picture_url
-            except Exception:
-                pass
-
-        if json_res:
-            return json_res
-
-    def get_anilist_res(self, variables):
-        query = '''
-        query($idMal: Int, $type: MediaType){
-            Media(idMal: $idMal, type: $type) {
-                id
-                idMal
-                title {
-                    romaji,
-                    english
-                }
-                coverImage {
-                    extraLarge
-                }
-                bannerImage
-                startDate {
-                    year,
-                    month,
-                    day
-                }
-                description
-                synonyms
-                format
-                episodes
-                status
-                genres
-                duration
-                countryOfOrigin
-                averageScore
-                characters (
-                    page: 1,
-                    sort: ROLE,
-                    perPage: 10,
-                ) {
-                    edges {
-                        node {
-                            name {
-                                userPreferred
-                            }
-                        }
-                        voiceActors (language: JAPANESE) {
-                            name {
-                                userPreferred
-                            }
-                            image {
-                                large
-                            }
-                        }
-                    }
-                }
-                studios {
-                    edges {
-                        node {
-                            name
-                        }
-                    }
-                }
-                trailer {
-                    id
-                    site
-                }
-                stats {
-                    scoreDistribution {
-                        score
-                        amount
-                    }
-                }
-            }
-        }
-        '''
-
-        r = client.request(self._BASE_URL, post={'query': query, 'variables': variables}, jpost=True)
-        results = json.loads(r)
-
-        if "errors" in results.keys():
-            return
-
-        json_res = results.get('data', {}).get('Media')
-
-        if json_res:
-            return json_res
-
-    def get_airing_calendar_res(self, variables, page=1):
-        query = '''
-        query (
-                $weekStart: Int,
-                $weekEnd: Int,
-                $page: Int,
-        ){
-            Page(page: $page) {
-                pageInfo {
-                        hasNextPage
-                        total
-                }
-
-                airingSchedules(
-                        airingAt_greater: $weekStart
-                        airingAt_lesser: $weekEnd
-                ) {
-                    id
-                    episode
-                    airingAt
-                    media {
-                        id
-                        idMal
-                        title {
-                                romaji
-                                userPreferred
-                                english
-                        }
-                        description
-                        countryOfOrigin
-                        genres
-                        averageScore
-                        isAdult
-                        rankings {
-                                rank
-                                type
-                                season
-                        }
-                        coverImage {
-                                extraLarge
-                        }
-                        bannerImage
-                    }
-                }
-            }
-        }
-        '''
-
-        r = client.request(self._BASE_URL, post={'query': query, 'variables': variables}, jpost=True)
-        results = json.loads(r)
-
-        if "errors" in results.keys():
-            return
-
-        json_res = results.get('data', {}).get('Page')
-
-        if json_res:
-            return json_res
-
-    def get_anilist_res_with_mal_id(self, variables):
-        query = '''
-        query($idMal: Int, $type: MediaType){Media(idMal: $idMal, type: $type) {
-            id
-            idMal
-            title {
-                userPreferred,
-                romaji,
-                english
-            }
-            coverImage {
-                extraLarge
-            }
-            bannerImage
-            startDate {
-                year,
-                month,
-                day
-            }
-            description
-            synonyms
-            format
-            episodes
-            status
-            genres
-            duration
-            countryOfOrigin
-            averageScore
-            stats {
-                scoreDistribution {
-                    score
-                    amount
-                }
-            }
-            characters (
-                page: 1,
-                sort: ROLE,
-                perPage: 10,
-            ) {
-                edges {
-                    node {
-                        name {
-                            userPreferred
-                        }
-                    }
-                    voiceActors (language: JAPANESE) {
-                        name {
-                            userPreferred
-                        }
-                        image {
-                            large
-                        }
-                    }
-                }
-            }
-            studios {
-                edges {
-                    node {
-                        name
-                    }
-                }
-            }
-            }
-        }
-        '''
-        r = client.request(self._BASE_URL, post={'query': query, 'variables': variables}, jpost=True)
-        results = json.loads(r)
-
-        if "errors" in results.keys():
-            return
-
-        json_res = results.get('data', {}).get('Media')
-
-        if json_res:
-            return json_res
-
-    def process_anilist_view(self, json_res, base_plugin_url, page):
-        hasNextPage = json_res['pageInfo']['hasNextPage']
-        get_meta.collect_meta(json_res['ANIME'])
-        mapfunc = partial(self.base_anilist_view, completed=self.open_completed())
-        all_results = list(filter(lambda x: True if x else False, map(mapfunc, json_res['ANIME'])))
-        all_results += self.handle_paging(hasNextPage, base_plugin_url, page)
+        mapfunc = partial(self.base_mal_view, completed=self.open_completed())
+        all_results = list(map(mapfunc, watch_order_list))
         return all_results
 
-    def process_recommendations_view(self, json_res, base_plugin_url, page):
-        hasNextPage = json_res['pageInfo']['hasNextPage']
-        res = [edge['node']['mediaRecommendation'] for edge in json_res['edges'] if edge['node']['mediaRecommendation']]
-        get_meta.collect_meta(res)
-        mapfunc = partial(self.base_anilist_view, completed=self.open_completed())
-        all_results = list(filter(lambda x: True if x else False, map(mapfunc, res)))
-        all_results += self.handle_paging(hasNextPage, base_plugin_url, page)
-        return all_results
+    def get_search(self, query, page, format, prefix=None):
+        params = {
+            "q": query,
+            "page": page,
+            "limit": self.perpage,
+            'sfw': self.adult
+        }
 
-    def process_relations_view(self, json_res):
-        res = []
-        for edge in json_res['edges']:
-            if edge['relationType'] != 'ADAPTATION':
-                tnode = edge['node']
-                tnode['relationType'] = edge['relationType']
-                res.append(tnode)
-        get_meta.collect_meta(res)
-        mapfunc = partial(self.base_anilist_view, completed=self.open_completed())
-        all_results = list(filter(lambda x: True if x else False, map(mapfunc, res)))
-        return all_results
+        if format:
+            params['type'] = format
 
-    def process_watch_order_view(self, json_res):
-        res = json_res
-        get_meta.collect_meta(res)
-        mapfunc = partial(self.base_anilist_view, completed=self.open_completed())
-        all_results = list(filter(lambda x: True if x else False, map(mapfunc, res)))
-        return all_results
+        if self.format_in_type:
+            params['type'] = self.format_in_type
 
-    def process_airing_view(self, json_res):
-        import time
-        filter_json = [x for x in json_res['airingSchedules'] if x['media']['isAdult'] is False]
-        ts = int(time.time())
-        mapfunc = partial(self.base_airing_view, ts=ts)
-        all_results = list(map(mapfunc, filter_json))
-        return all_results
+        search = database.get(self.get_base_res, 24, f"{self._BASE_URL}/anime", params)
+        base_plugin_url = f"{prefix}/{query}?page=%d" if prefix else f"search_anime/{query}?page=%d"
+        return self.process_mal_view(search, base_plugin_url, page)
 
-    def process_res(self, res):
-        self.database_update_show(res)
-        get_meta.collect_meta([res])
-        return database.get_show(res['idMal'])
+    def get_airing_last_season(self, page, format, prefix=None):
+        season, year, _, _, _, _, _, _, _, _, _, _, _, _ = self.get_season_year('last')
+        params = {
+            'page': page,
+            'limit': self.perpage,
+            'sfw': self.adult,
+        }
+
+        if format:
+            params['filter'] = format
+
+        if self.format_in_type:
+            params['filter'] = self.format_in_type
+
+        airing = database.get(self.get_base_res, 24, f"{self._BASE_URL}/seasons/{year}/{season}", params)
+        base_plugin_url = f"{prefix}?page=%d" if prefix else "airing_last_season?page=%d"
+        return self.process_mal_view(airing, base_plugin_url, page)
+
+    def get_airing_this_season(self, page, format, prefix=None):
+        season, year, _, _, _, _, _, _, _, _, _, _, _, _ = self.get_season_year('this')
+        params = {
+            'page': page,
+            'limit': self.perpage,
+            'sfw': self.adult
+        }
+
+        if format:
+            params['filter'] = format
+
+        if self.format_in_type:
+            params['filter'] = self.format_in_type
+
+        airing = database.get(self.get_base_res, 24, f"{self._BASE_URL}/seasons/{year}/{season}", params)
+        base_plugin_url = f"{prefix}?page=%d" if prefix else "airing_this_season?page=%d"
+        return self.process_mal_view(airing, base_plugin_url, page)
+
+    def get_airing_next_season(self, page, format, prefix=None):
+        season, year, _, _, _, _, _, _, _, _, _, _, _, _ = self.get_season_year('next')
+        params = {
+            'page': page,
+            'limit': self.perpage,
+            'sfw': self.adult
+        }
+
+        if format:
+            params['filter'] = format
+
+        if self.format_in_type:
+            params['filter'] = self.format_in_type
+
+        airing = database.get(self.get_base_res, 24, f"{self._BASE_URL}/seasons/{year}/{season}", params)
+        base_plugin_url = f"{prefix}?page=%d" if prefix else "airing_next_season?page=%d"
+        return self.process_mal_view(airing, base_plugin_url, page)
+
+    def get_trending_last_year(self, page, format, prefix=None):
+        _, _, _, _, _, _, _, _, year_start_date_last, year_end_date_last, _, _, _, _ = self.get_season_year('last')
+        params = {
+            'page': page,
+            'limit': self.perpage,
+            'sfw': self.adult,
+            'start_date': year_start_date_last,
+            'end_date': year_end_date_last,
+            'order_by': 'members',
+            'sort': 'desc'
+        }
+
+        if format:
+            params['type'] = format
+
+        if self.format_in_type:
+            params['type'] = self.format_in_type
+
+        if self.status:
+            params['status'] = self.status
+
+        if self.rating:
+            params['rating'] = self.rating
+
+        if self.genre:
+            params['genres'] = self.genre
+
+        trending = database.get(self.get_base_res, 24, f"{self._BASE_URL}/anime", params)
+        base_plugin_url = f"{prefix}?page=%d" if prefix else "trending_last_year?page=%d"
+        return self.process_mal_view(trending, base_plugin_url, page)
+
+    def get_trending_this_year(self, page, format, prefix=None):
+        _, _, year_start_date, _, _, _, _, _, _, _, _, _, _, _ = self.get_season_year('')
+        params = {
+            'page': page,
+            'limit': self.perpage,
+            'sfw': self.adult,
+            'start_date': year_start_date,
+            'order_by': 'members',
+            'sort': 'desc'
+        }
+
+        if format:
+            params['type'] = format
+
+        if self.format_in_type:
+            params['type'] = self.format_in_type
+
+        if self.status:
+            params['status'] = self.status
+
+        if self.rating:
+            params['rating'] = self.rating
+
+        if self.genre:
+            params['genres'] = self.genre
+
+        trending = database.get(self.get_base_res, 24, f"{self._BASE_URL}/anime", params)
+        base_plugin_url = f"{prefix}?page=%d" if prefix else "trending_this_year?page=%d"
+        return self.process_mal_view(trending, base_plugin_url, page)
+
+    def get_trending_last_season(self, page, format, prefix=None):
+        _, _, _, _, _, _, season_start_date_last, season_end_date_last, _, _, _, _, _, _ = self.get_season_year('')
+        params = {
+            'page': page,
+            'limit': self.perpage,
+            'sfw': self.adult,
+            'start_date': season_start_date_last,
+            'end_date': season_end_date_last,
+            'order_by': 'members',
+            'sort': 'desc'
+        }
+
+        if format:
+            params['type'] = format
+
+        if self.format_in_type:
+            params['type'] = self.format_in_type
+
+        if self.status:
+            params['status'] = self.status
+
+        if self.rating:
+            params['rating'] = self.rating
+
+        if self.genre:
+            params['genres'] = self.genre
+
+        trending = database.get(self.get_base_res, 24, f"{self._BASE_URL}/anime", params)
+        base_plugin_url = f"{prefix}?page=%d" if prefix else "trending_last_season?page=%d"
+        return self.process_mal_view(trending, base_plugin_url, page)
+
+    def get_trending_this_season(self, page, format, prefix=None):
+        _, _, _, _, season_start_date, _, _, _, _, _, _, _, _, _ = self.get_season_year('')
+        params = {
+            'page': page,
+            'limit': self.perpage,
+            'sfw': self.adult,
+            'start_date': season_start_date,
+            'order_by': 'members',
+            'sort': 'desc'
+        }
+
+        if format:
+            params['type'] = format
+
+        if self.format_in_type:
+            params['type'] = self.format_in_type
+
+        if self.status:
+            params['status'] = self.status
+
+        if self.rating:
+            params['rating'] = self.rating
+
+        if self.genre:
+            params['genres'] = self.genre
+
+        trending = database.get(self.get_base_res, 24, f"{self._BASE_URL}/anime", params)
+        base_plugin_url = f"{prefix}?page=%d" if prefix else "trending_this_season?page=%d"
+        return self.process_mal_view(trending, base_plugin_url, page)
+
+    def get_all_time_trending(self, page, format, prefix=None):
+        params = {
+            'page': page,
+            'limit': self.perpage,
+            'sfw': self.adult,
+            'order_by': 'members',
+            'sort': 'desc'
+        }
+
+        if format:
+            params['type'] = format
+
+        if self.format_in_type:
+            params['type'] = self.format_in_type
+
+        if self.status:
+            params['status'] = self.status
+
+        if self.rating:
+            params['rating'] = self.rating
+
+        if self.genre:
+            params['genres'] = self.genre
+
+        trending = database.get(self.get_base_res, 24, f"{self._BASE_URL}/anime", params)
+        base_plugin_url = f"{prefix}?page=%d" if prefix else "all_time_trending?page=%d"
+        return self.process_mal_view(trending, base_plugin_url, page)
+
+    def get_popular_last_year(self, page, format, prefix=None):
+        _, _, _, _, _, _, _, _, year_start_date_last, year_end_date_last, _, _, _, _ = self.get_season_year('')
+        params = {
+            'page': page,
+            'limit': self.perpage,
+            'sfw': self.adult,
+            'start_date': year_start_date_last,
+            'end_date': year_end_date_last,
+            'order_by': 'popularity',
+            'sort': 'asc'
+        }
+
+        if format:
+            params['type'] = format
+
+        if self.format_in_type:
+            params['type'] = self.format_in_type
+
+        if self.status:
+            params['status'] = self.status
+
+        if self.rating:
+            params['rating'] = self.rating
+
+        if self.genre:
+            params['genres'] = self.genre
+
+        popular = database.get(self.get_base_res, 24, f"{self._BASE_URL}/anime", params)
+        base_plugin_url = f"{prefix}?page=%d" if prefix else "popular_last_year?page=%d"
+        return self.process_mal_view(popular, base_plugin_url, page)
+
+    def get_popular_this_year(self, page, format, prefix=None):
+        _, _, year_start_date, _, _, _, _, _, _, _, _, _, _, _ = self.get_season_year('')
+        params = {
+            'page': page,
+            'limit': self.perpage,
+            'sfw': self.adult,
+            'start_date': year_start_date,
+            'order_by': 'popularity',
+            'sort': 'asc'
+        }
+
+        if format:
+            params['type'] = format
+
+        if self.format_in_type:
+            params['type'] = self.format_in_type
+
+        if self.status:
+            params['status'] = self.status
+
+        if self.rating:
+            params['rating'] = self.rating
+
+        if self.genre:
+            params['genres'] = self.genre
+
+        popular = database.get(self.get_base_res, 24, f"{self._BASE_URL}/anime", params)
+        base_plugin_url = f"{prefix}?page=%d" if prefix else "popular_this_year?page=%d"
+        return self.process_mal_view(popular, base_plugin_url, page)
+
+    def get_popular_last_season(self, page, format, prefix=None):
+        _, _, _, _, _, _, season_start_date_last, season_end_date_last, _, _, _, _, _, _ = self.get_season_year('')
+        params = {
+            'page': page,
+            'limit': self.perpage,
+            'sfw': self.adult,
+            'start_date': season_start_date_last,
+            'end_date': season_end_date_last,
+            'order_by': 'popularity',
+            'sort': 'asc'
+        }
+
+        if format:
+            params['type'] = format
+
+        if self.format_in_type:
+            params['type'] = self.format_in_type
+
+        if self.status:
+            params['status'] = self.status
+
+        if self.rating:
+            params['rating'] = self.rating
+
+        if self.genre:
+            params['genres'] = self.genre
+
+        popular = database.get(self.get_base_res, 24, f"{self._BASE_URL}/anime", params)
+        base_plugin_url = f"{prefix}?page=%d" if prefix else "popular_last_season?page=%d"
+        return self.process_mal_view(popular, base_plugin_url, page)
+
+    def get_popular_this_season(self, page, format, prefix=None):
+        _, _, _, _, season_start_date, _, _, _, _, _, _, _, _, _ = self.get_season_year('')
+        params = {
+            'page': page,
+            'limit': self.perpage,
+            'sfw': self.adult,
+            'start_date': season_start_date,
+            'order_by': 'popularity',
+            'sort': 'asc'
+        }
+
+        if format:
+            params['type'] = format
+
+        if self.format_in_type:
+            params['type'] = self.format_in_type
+
+        if self.status:
+            params['status'] = self.status
+
+        if self.rating:
+            params['rating'] = self.rating
+
+        if self.genre:
+            params['genres'] = self.genre
+
+        popular = database.get(self.get_base_res, 24, f"{self._BASE_URL}/anime", params)
+        base_plugin_url = f"{prefix}?page=%d" if prefix else "popular_this_season?page=%d"
+        return self.process_mal_view(popular, base_plugin_url, page)
+
+    def get_all_time_popular(self, page, format, prefix=None):
+        params = {
+            'page': page,
+            'limit': self.perpage,
+            'sfw': self.adult,
+            'order_by': 'popularity',
+            'sort': 'asc'
+        }
+
+        if format:
+            params['type'] = format
+
+        if self.format_in_type:
+            params['type'] = self.format_in_type
+
+        if self.status:
+            params['status'] = self.status
+
+        if self.rating:
+            params['rating'] = self.rating
+
+        if self.genre:
+            params['genres'] = self.genre
+
+        popular = database.get(self.get_base_res, 24, f"{self._BASE_URL}/anime", params)
+        base_plugin_url = f"{prefix}?page=%d" if prefix else "all_time_popular?page=%d"
+        return self.process_mal_view(popular, base_plugin_url, page)
+
+    def get_voted_last_year(self, page, format, prefix=None):
+        _, _, _, _, _, _, _, _, year_start_date_last, year_end_date_last, _, _, _, _ = self.get_season_year('')
+        params = {
+            'page': page,
+            'limit': self.perpage,
+            'sfw': self.adult,
+            'start_date': year_start_date_last,
+            'end_date': year_end_date_last,
+            'order_by': 'score',
+            'sort': 'desc'
+        }
+
+        if format:
+            params['type'] = format
+
+        if self.format_in_type:
+            params['type'] = self.format_in_type
+
+        if self.status:
+            params['status'] = self.status
+
+        if self.rating:
+            params['rating'] = self.rating
+
+        if self.genre:
+            params['genres'] = self.genre
+
+        voted = database.get(self.get_base_res, 24, f"{self._BASE_URL}/anime", params)
+        base_plugin_url = f"{prefix}?page=%d" if prefix else "voted_last_year?page=%d"
+        return self.process_mal_view(voted, base_plugin_url, page)
+
+    def get_voted_this_year(self, page, format, prefix=None):
+        _, _, year_start_date, _, _, _, _, _, _, _, _, _, _, _ = self.get_season_year('')
+        params = {
+            'page': page,
+            'limit': self.perpage,
+            'sfw': self.adult,
+            'start_date': year_start_date,
+            'order_by': 'score',
+            'sort': 'desc'
+        }
+
+        if format:
+            params['type'] = format
+
+        if self.format_in_type:
+            params['type'] = self.format_in_type
+
+        if self.status:
+            params['status'] = self.status
+
+        if self.rating:
+            params['rating'] = self.rating
+
+        if self.genre:
+            params['genres'] = self.genre
+
+        if self.genre:
+            params['genres'] = self.genre
+
+        voted = database.get(self.get_base_res, 24, f"{self._BASE_URL}/anime", params)
+        base_plugin_url = f"{prefix}?page=%d" if prefix else "voted_this_year?page=%d"
+        return self.process_mal_view(voted, base_plugin_url, page)
+
+    def get_voted_last_season(self, page, format, prefix=None):
+        _, _, _, _, _, _, season_start_date_last, season_end_date_last, _, _, _, _, _, _ = self.get_season_year('')
+        params = {
+            'page': page,
+            'limit': self.perpage,
+            'sfw': self.adult,
+            'start_date': season_start_date_last,
+            'end_date': season_end_date_last,
+            'order_by': 'score',
+            'sort': 'desc'
+        }
+
+        if format:
+            params['type'] = format
+
+        if self.format_in_type:
+            params['type'] = self.format_in_type
+
+        if self.status:
+            params['status'] = self.status
+
+        if self.rating:
+            params['rating'] = self.rating
+
+        if self.genre:
+            params['genres'] = self.genre
+
+        voted = database.get(self.get_base_res, 24, f"{self._BASE_URL}/anime", params)
+        base_plugin_url = f"{prefix}?page=%d" if prefix else "voted_last_season?page=%d"
+        return self.process_mal_view(voted, base_plugin_url, page)
+
+    def get_voted_this_season(self, page, format, prefix=None):
+        _, _, _, _, season_start_date, _, _, _, _, _, _, _, _, _ = self.get_season_year('')
+        params = {
+            'page': page,
+            'limit': self.perpage,
+            'sfw': self.adult,
+            'start_date': season_start_date,
+            'order_by': 'score',
+            'sort': 'desc'
+        }
+
+        if format:
+            params['type'] = format
+
+        if self.format_in_type:
+            params['type'] = self.format_in_type
+
+        if self.status:
+            params['status'] = self.status
+
+        if self.rating:
+            params['rating'] = self.rating
+
+        if self.genre:
+            params['genres'] = self.genre
+
+        voted = database.get(self.get_base_res, 24, f"{self._BASE_URL}/anime", params)
+        base_plugin_url = f"{prefix}?page=%d" if prefix else "voted_this_season?page=%d"
+        return self.process_mal_view(voted, base_plugin_url, page)
+
+    def get_all_time_voted(self, page, format, prefix=None):
+        params = {
+            'page': page,
+            'limit': self.perpage,
+            'sfw': self.adult,
+            'order_by': 'score',
+            'sort': 'desc'
+        }
+
+        if format:
+            params['type'] = format
+
+        if self.format_in_type:
+            params['type'] = self.format_in_type
+
+        if self.status:
+            params['status'] = self.status
+
+        if self.rating:
+            params['rating'] = self.rating
+
+        if self.genre:
+            params['genres'] = self.genre
+
+        voted = database.get(self.get_base_res, 24, f"{self._BASE_URL}/anime", params)
+        base_plugin_url = f"{prefix}?page=%d" if prefix else "all_time_voted?page=%d"
+        return self.process_mal_view(voted, base_plugin_url, page)
+
+    def get_favourites_last_year(self, page, format, prefix=None):
+        _, _, _, _, _, _, _, _, year_start_date_last, year_end_date_last, _, _, _, _ = self.get_season_year('')
+        params = {
+            'page': page,
+            'limit': self.perpage,
+            'sfw': self.adult,
+            'start_date': year_start_date_last,
+            'end_date': year_end_date_last,
+            'order_by': 'favorites',
+            'sort': 'desc'
+        }
+
+        if format:
+            params['type'] = format
+
+        if self.format_in_type:
+            params['type'] = self.format_in_type
+
+        if self.status:
+            params['status'] = self.status
+
+        if self.rating:
+            params['rating'] = self.rating
+
+        if self.genre:
+            params['genres'] = self.genre
+
+        favourites = database.get(self.get_base_res, 24, f"{self._BASE_URL}/anime", params)
+        base_plugin_url = f"{prefix}?page=%d" if prefix else "favourites_last_year?page=%d"
+        return self.process_mal_view(favourites, base_plugin_url, page)
+
+    def get_favourites_this_year(self, page, format, prefix=None):
+        _, _, year_start_date, _, _, _, _, _, _, _, _, _, _, _ = self.get_season_year('')
+        params = {
+            'page': page,
+            'limit': self.perpage,
+            'sfw': self.adult,
+            'start_date': year_start_date,
+            'order_by': 'favorites',
+            'sort': 'desc'
+        }
+
+        if format:
+            params['type'] = format
+
+        if self.format_in_type:
+            params['type'] = self.format_in_type
+
+        if self.status:
+            params['status'] = self.status
+
+        if self.rating:
+            params['rating'] = self.rating
+
+        if self.genre:
+            params['genres'] = self.genre
+
+        favourites = database.get(self.get_base_res, 24, f"{self._BASE_URL}/anime", params)
+        base_plugin_url = f"{prefix}?page=%d" if prefix else "favourites_this_year?page=%d"
+        return self.process_mal_view(favourites, base_plugin_url, page)
+
+    def get_favourites_last_season(self, page, format, prefix=None):
+        _, _, _, _, _, _, season_start_date_last, season_end_date_last, _, _, _, _, _, _ = self.get_season_year('')
+        params = {
+            'page': page,
+            'limit': self.perpage,
+            'sfw': self.adult,
+            'start_date': season_start_date_last,
+            'end_date': season_end_date_last,
+            'order_by': 'favorites',
+            'sort': 'desc'
+        }
+
+        if format:
+            params['type'] = format
+
+        if self.format_in_type:
+            params['type'] = self.format_in_type
+
+        if self.status:
+            params['status'] = self.status
+
+        if self.rating:
+            params['rating'] = self.rating
+
+        if self.genre:
+            params['genres'] = self.genre
+
+        favourites = database.get(self.get_base_res, 24, f"{self._BASE_URL}/anime", params)
+        base_plugin_url = f"{prefix}?page=%d" if prefix else "favourites_last_season?page=%d"
+        return self.process_mal_view(favourites, base_plugin_url, page)
+
+    def get_favourites_this_season(self, page, format, prefix=None):
+        _, _, _, _, season_start_date, _, _, _, _, _, _, _, _, _ = self.get_season_year('')
+        params = {
+            'page': page,
+            'limit': self.perpage,
+            'sfw': self.adult,
+            'start_date': season_start_date,
+            'order_by': 'favorites',
+            'sort': 'desc'
+        }
+
+        if format:
+            params['type'] = format
+
+        if self.format_in_type:
+            params['type'] = self.format_in_type
+
+        if self.status:
+            params['status'] = self.status
+
+        if self.rating:
+            params['rating'] = self.rating
+
+        if self.genre:
+            params['genres'] = self.genre
+
+        favourites = database.get(self.get_base_res, 24, f"{self._BASE_URL}/anime", params)
+        base_plugin_url = f"{prefix}?page=%d" if prefix else "favourites_this_season?page=%d"
+        return self.process_mal_view(favourites, base_plugin_url, page)
+
+    def get_all_time_favourites(self, page, format, prefix=None):
+        params = {
+            'page': page,
+            'limit': self.perpage,
+            'sfw': self.adult,
+            'order_by': 'favorites',
+            'sort': 'desc'
+        }
+
+        if format:
+            params['type'] = format
+
+        if self.format_in_type:
+            params['type'] = self.format_in_type
+
+        if self.status:
+            params['status'] = self.status
+
+        if self.rating:
+            params['rating'] = self.rating
+
+        if self.genre:
+            params['genres'] = self.genre
+
+        favourites = database.get(self.get_base_res, 24, f"{self._BASE_URL}/anime", params)
+        base_plugin_url = f"{prefix}?page=%d" if prefix else "all_time_favourites?page=%d"
+        return self.process_mal_view(favourites, base_plugin_url, page)
+
+    def get_top_100(self, page, format, prefix=None):
+        params = {
+            'page': page,
+            'limit': self.perpage,
+            'sfw': self.adult
+        }
+
+        if format:
+            params['type'] = format
+
+        if self.format_in_type:
+            params['type'] = self.format_in_type
+
+        if self.status:
+            params['status'] = self.status
+
+        if self.rating:
+            params['rating'] = self.rating
+
+        if self.genre:
+            params['genres'] = self.genre
+
+        top_100 = database.get(self.get_base_res, 24, f"{self._BASE_URL}/top/anime", params)
+        base_plugin_url = f"{prefix}?page=%d" if prefix else "top_100?page=%d"
+        return self.process_mal_view(top_100, base_plugin_url, page)
+
+    def get_genre_action(self, page, format, prefix=None):
+        params = {
+            'page': page,
+            'limit': self.perpage,
+            'sfw': self.adult,
+            'order_by': 'members',
+            "genres": "1",
+            'sort': 'desc'
+        }
+
+        if format:
+            params['type'] = format
+
+        if self.format_in_type:
+            params['type'] = self.format_in_type
+
+        if self.status:
+            params['status'] = self.status
+
+        if self.rating:
+            params['rating'] = self.rating
+
+        genre = database.get(self.get_base_res, 24, f"{self._BASE_URL}/anime", params)
+        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_action?page=%d"
+        return self.process_mal_view(genre, base_plugin_url, page)
+
+    def get_genre_adventure(self, page, format, prefix=None):
+        params = {
+            'page': page,
+            'limit': self.perpage,
+            'sfw': self.adult,
+            'order_by': 'members',
+            "genres": "2",
+            'sort': 'desc'
+        }
+
+        if format:
+            params['type'] = format
+
+        if self.format_in_type:
+            params['type'] = self.format_in_type
+
+        if self.status:
+            params['status'] = self.status
+
+        if self.rating:
+            params['rating'] = self.rating
+
+        genre = database.get(self.get_base_res, 24, f"{self._BASE_URL}/anime", params)
+        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_adventure?page=%d"
+        return self.process_mal_view(genre, base_plugin_url, page)
+
+    def get_genre_comedy(self, page, format, prefix=None):
+        params = {
+            'page': page,
+            'limit': self.perpage,
+            'sfw': self.adult,
+            'order_by': 'members',
+            "genres": "4",
+            'sort': 'desc'
+        }
+
+        if format:
+            params['type'] = format
+
+        if self.format_in_type:
+            params['type'] = self.format_in_type
+
+        if self.status:
+            params['status'] = self.status
+
+        if self.rating:
+            params['rating'] = self.rating
+
+        genre = database.get(self.get_base_res, 24, f"{self._BASE_URL}/anime", params)
+        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_comedy?page=%d"
+        return self.process_mal_view(genre, base_plugin_url, page)
+
+    def get_genre_drama(self, page, format, prefix=None):
+        params = {
+            'page': page,
+            'limit': self.perpage,
+            'sfw': self.adult,
+            'order_by': 'members',
+            "genres": "8",
+            'sort': 'desc'
+        }
+
+        if format:
+            params['type'] = format
+
+        if self.format_in_type:
+            params['type'] = self.format_in_type
+
+        if self.status:
+            params['status'] = self.status
+
+        if self.rating:
+            params['rating'] = self.rating
+
+        genre = database.get(self.get_base_res, 24, f"{self._BASE_URL}/anime", params)
+        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_drama?page=%d"
+        return self.process_mal_view(genre, base_plugin_url, page)
+
+    def get_genre_ecchi(self, page, format, prefix=None):
+        params = {
+            'page': page,
+            'limit': self.perpage,
+            'sfw': self.adult,
+            'order_by': 'members',
+            "genres": "9",
+            'sort': 'desc'
+        }
+
+        if format:
+            params['type'] = format
+
+        if self.format_in_type:
+            params['type'] = self.format_in_type
+
+        if self.status:
+            params['status'] = self.status
+
+        if self.rating:
+            params['rating'] = self.rating
+
+        genre = database.get(self.get_base_res, 24, f"{self._BASE_URL}/anime", params)
+        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_ecchi?page=%d"
+        return self.process_mal_view(genre, base_plugin_url, page)
+
+    def get_genre_fantasy(self, page, format, prefix=None):
+        params = {
+            'page': page,
+            'limit': self.perpage,
+            'sfw': self.adult,
+            'order_by': 'members',
+            "genres": "10",
+            'sort': 'desc'
+        }
+
+        if format:
+            params['type'] = format
+
+        if self.format_in_type:
+            params['type'] = self.format_in_type
+
+        if self.status:
+            params['status'] = self.status
+
+        if self.rating:
+            params['rating'] = self.rating
+
+        genre = database.get(self.get_base_res, 24, f"{self._BASE_URL}/anime", params)
+        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_fantasy?page=%d"
+        return self.process_mal_view(genre, base_plugin_url, page)
+
+    def get_genre_hentai(self, page, format, prefix=None):
+        params = {
+            'page': page,
+            'limit': self.perpage,
+            'sfw': self.adult,
+            'order_by': 'members',
+            "genres": "12",
+            'sort': 'desc'
+        }
+
+        if format:
+            params['type'] = format
+
+        if self.format_in_type:
+            params['type'] = self.format_in_type
+
+        if self.status:
+            params['status'] = self.status
+
+        if self.rating:
+            params['rating'] = self.rating
+
+        genre = database.get(self.get_base_res, 24, f"{self._BASE_URL}/anime", params)
+        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_hentai?page=%d"
+        return self.process_mal_view(genre, base_plugin_url, page)
+
+    def get_genre_horror(self, page, format, prefix=None):
+        params = {
+            'page': page,
+            'limit': self.perpage,
+            'sfw': self.adult,
+            'order_by': 'members',
+            "genres": "14",
+            'sort': 'desc'
+        }
+
+        if format:
+            params['type'] = format
+
+        if self.format_in_type:
+            params['type'] = self.format_in_type
+
+        if self.status:
+            params['status'] = self.status
+
+        if self.rating:
+            params['rating'] = self.rating
+
+        genre = database.get(self.get_base_res, 24, f"{self._BASE_URL}/anime", params)
+        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_horror?page=%d"
+        return self.process_mal_view(genre, base_plugin_url, page)
+
+    def get_genre_shoujo(self, page, format, prefix=None):
+        params = {
+            'page': page,
+            'limit': self.perpage,
+            'sfw': self.adult,
+            'order_by': 'members',
+            "genres": "25",
+            'sort': 'desc'
+        }
+
+        if format:
+            params['type'] = format
+
+        if self.format_in_type:
+            params['type'] = self.format_in_type
+
+        if self.status:
+            params['status'] = self.status
+
+        if self.rating:
+            params['rating'] = self.rating
+
+        genre = database.get(self.get_base_res, 24, f"{self._BASE_URL}/anime", params)
+        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_shoujo?page=%d"
+        return self.process_mal_view(genre, base_plugin_url, page)
+
+    def get_genre_mecha(self, page, format, prefix=None):
+        params = {
+            'page': page,
+            'limit': self.perpage,
+            'sfw': self.adult,
+            'order_by': 'members',
+            "genres": "18",
+            'sort': 'desc'
+        }
+
+        if format:
+            params['type'] = format
+
+        if self.format_in_type:
+            params['type'] = self.format_in_type
+
+        if self.status:
+            params['status'] = self.status
+
+        if self.rating:
+            params['rating'] = self.rating
+
+        genre = database.get(self.get_base_res, 24, f"{self._BASE_URL}/anime", params)
+        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_mecha?page=%d"
+        return self.process_mal_view(genre, base_plugin_url, page)
+
+    def get_genre_music(self, page, format, prefix=None):
+        params = {
+            'page': page,
+            'limit': self.perpage,
+            'sfw': self.adult,
+            'order_by': 'members',
+            "genres": "19",
+            'sort': 'desc'
+        }
+
+        if format:
+            params['type'] = format
+
+        if self.format_in_type:
+            params['type'] = self.format_in_type
+
+        if self.status:
+            params['status'] = self.status
+
+        if self.rating:
+            params['rating'] = self.rating
+
+        genre = database.get(self.get_base_res, 24, f"{self._BASE_URL}/anime", params)
+        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_music?page=%d"
+        return self.process_mal_view(genre, base_plugin_url, page)
+
+    def get_genre_mystery(self, page, format, prefix=None):
+        params = {
+            'page': page,
+            'limit': self.perpage,
+            'sfw': self.adult,
+            'order_by': 'members',
+            "genres": "7",
+            'sort': 'desc'
+        }
+
+        if format:
+            params['type'] = format
+
+        if self.format_in_type:
+            params['type'] = self.format_in_type
+
+        if self.status:
+            params['status'] = self.status
+
+        if self.rating:
+            params['rating'] = self.rating
+
+        genre = database.get(self.get_base_res, 24, f"{self._BASE_URL}/anime", params)
+        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_mystery?page=%d"
+        return self.process_mal_view(genre, base_plugin_url, page)
+
+    def get_genre_psychological(self, page, format, prefix=None):
+        params = {
+            'page': page,
+            'limit': self.perpage,
+            'sfw': self.adult,
+            'order_by': 'members',
+            "genres": "40",
+            'sort': 'desc'
+        }
+
+        if format:
+            params['type'] = format
+
+        if self.format_in_type:
+            params['type'] = self.format_in_type
+
+        if self.status:
+            params['status'] = self.status
+
+        if self.rating:
+            params['rating'] = self.rating
+
+        genre = database.get(self.get_base_res, 24, f"{self._BASE_URL}/anime", params)
+        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_psychological?page=%d"
+        return self.process_mal_view(genre, base_plugin_url, page)
+
+    def get_genre_romance(self, page, format, prefix=None):
+        params = {
+            'page': page,
+            'limit': self.perpage,
+            'sfw': self.adult,
+            'order_by': 'members',
+            "genres": "22",
+            'sort': 'desc'
+        }
+
+        if format:
+            params['type'] = format
+
+        if self.format_in_type:
+            params['type'] = self.format_in_type
+
+        if self.status:
+            params['status'] = self.status
+
+        if self.rating:
+            params['rating'] = self.rating
+
+        genre = database.get(self.get_base_res, 24, f"{self._BASE_URL}/anime", params)
+        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_romance?page=%d"
+        return self.process_mal_view(genre, base_plugin_url, page)
+
+    def get_genre_sci_fi(self, page, format, prefix=None):
+        params = {
+            'page': page,
+            'limit': self.perpage,
+            'sfw': self.adult,
+            'order_by': 'members',
+            "genres": "24",
+            'sort': 'desc'
+        }
+
+        if format:
+            params['type'] = format
+
+        if self.format_in_type:
+            params['type'] = self.format_in_type
+
+        if self.status:
+            params['status'] = self.status
+
+        if self.rating:
+            params['rating'] = self.rating
+
+        genre = database.get(self.get_base_res, 24, f"{self._BASE_URL}/anime", params)
+        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_sci_fi?page=%d"
+        return self.process_mal_view(genre, base_plugin_url, page)
+
+    def get_genre_slice_of_life(self, page, format, prefix=None):
+        params = {
+            'page': page,
+            'limit': self.perpage,
+            'sfw': self.adult,
+            'order_by': 'members',
+            "genres": "36",
+            'sort': 'desc'
+        }
+
+        if format:
+            params['type'] = format
+
+        if self.format_in_type:
+            params['type'] = self.format_in_type
+
+        if self.status:
+            params['status'] = self.status
+
+        if self.rating:
+            params['rating'] = self.rating
+
+        genre = database.get(self.get_base_res, 24, f"{self._BASE_URL}/anime", params)
+        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_slice_of_life?page=%d"
+        return self.process_mal_view(genre, base_plugin_url, page)
+
+    def get_genre_sports(self, page, format, prefix=None):
+        params = {
+            'page': page,
+            'limit': self.perpage,
+            'sfw': self.adult,
+            'order_by': 'members',
+            "genres": "30",
+            'sort': 'desc'
+        }
+
+        if format:
+            params['type'] = format
+
+        if self.format_in_type:
+            params['type'] = self.format_in_type
+
+        if self.status:
+            params['status'] = self.status
+
+        if self.rating:
+            params['rating'] = self.rating
+
+        genre = database.get(self.get_base_res, 24, f"{self._BASE_URL}/anime", params)
+        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_sports?page=%d"
+        return self.process_mal_view(genre, base_plugin_url, page)
+
+    def get_genre_supernatural(self, page, format, prefix=None):
+        params = {
+            'page': page,
+            'limit': self.perpage,
+            'sfw': self.adult,
+            'order_by': 'members',
+            "genres": "37",
+            'sort': 'desc'
+        }
+
+        if format:
+            params['type'] = format
+
+        if self.format_in_type:
+            params['type'] = self.format_in_type
+
+        if self.status:
+            params['status'] = self.status
+
+        if self.rating:
+            params['rating'] = self.rating
+
+        genre = database.get(self.get_base_res, 24, f"{self._BASE_URL}/anime", params)
+        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_supernatural?page=%d"
+        return self.process_mal_view(genre, base_plugin_url, page)
+
+    def get_genre_thriller(self, page, format, prefix=None):
+        params = {
+            'page': page,
+            'limit': self.perpage,
+            'sfw': self.adult,
+            'order_by': 'members',
+            "genres": "41",
+            'sort': 'desc'
+        }
+
+        if format:
+            params['type'] = format
+
+        if self.format_in_type:
+            params['type'] = self.format_in_type
+
+        if self.status:
+            params['status'] = self.status
+
+        if self.rating:
+            params['rating'] = self.rating
+
+        genre = database.get(self.get_base_res, 24, f"{self._BASE_URL}/anime", params)
+        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_thriller?page=%d"
+        return self.process_mal_view(genre, base_plugin_url, page)
+
+    @staticmethod
+    def get_base_res(url, params=None):
+        r = client.request(url, params=params)
+        if r:
+            return json.loads(r)
+
+    def get_airing_calendar_res(self, day, page=1):
+        url = f'{self._BASE_URL}/schedules?kids=false&sfw=false&limit=25&page={page}&filter={day}'
+        results = self.get_base_res(url)
+        return results
+
+    # @div_flavor
+    # def recommendation_relation_view(self, res, completed=None, mal_dub=None):
+    #     if res.get('entry'):
+    #         res = res['entry']
+    #     if not completed:
+    #         completed = {}
+
+    #     mal_id = res['mal_id']
+    #     meta_ids = database.get_mappings(mal_id, 'mal_id')
+
+    #     title = res['title']
+    #     if res.get('relation'):
+    #         title += ' [I]%s[/I]' % control.colorstr(res['relation'], 'limegreen')
+
+    #     info = {
+    #         'UniqueIDs': {
+    #             'mal_id': str(mal_id),
+    #             **database.get_mapping_ids(mal_id, 'mal_id')
+    #         },
+    #         'title': title,
+    #         'mediatype': 'tvshow'
+    #     }
+
+    #     if completed.get(str(mal_id)):
+    #         info['playcount'] = 1
+
+    #     dub = True if mal_dub and mal_dub.get(str(res.get('idMal'))) else False
+
+    #     image = res['images']['webp']['large_image_url'] if res.get('images') else None
+
+    #     base = {
+    #         "name": title,
+    #         "url": f'animes/{mal_id}/',
+    #         "image": image,
+    #         "poster": image,
+    #         'fanart': image,
+    #         "banner": image,
+    #         "info": info
+    #     }
+
+    #     anime_media_episodes = meta_ids.get('anime_media_episodes', '0')
+    #     total_episodes = int(anime_media_episodes.split('-')[-1].strip())
+
+    #     if meta_ids.get('anime_media_type') in ['MOVIE', 'ONA', 'OVA', 'SPECIAL'] and total_episodes == 1:
+    #         base['url'] = f'play_movie/{mal_id}/'
+    #         base['info']['mediatype'] = 'movie'
+    #         return utils.parse_view(base, False, True, dub)
+    #     return utils.parse_view(base, True, False, dub)
+
+    def get_genres(self, page, format):
+        res = database.get(self.get_base_res, 24, f'{self._BASE_URL}/genres/anime')
+
+        genre = res['data']
+        genres_list = []
+        for x in genre:
+            genres_list.append(x['name'])
+        multiselect = control.multiselect_dialog(control.lang(30940), genres_list, preselect=[])
+        if not multiselect:
+            return []
+        genre_display_list = []
+        for selection in multiselect:
+            if selection < len(genres_list):
+                genre_display_list.append(str(genre[selection]['mal_id']))
+        return self.genres_payload(genre_display_list, [], page, format)
+
+    def genres_payload(self, genre_list, tag_list, page, format, prefix=None):
+        if not isinstance(genre_list, list):
+            genre_list = ast.literal_eval(genre_list)
+
+        genre = ','.join(genre_list)
+        params = {
+            'page': page,
+            'limit': self.perpage,
+            'genres': genre,
+            'sfw': self.adult,
+            'order_by': 'popularity'
+        }
+
+        if format:
+            params['type'] = format
+
+        if self.format_in_type:
+            params['type'] = self.format_in_type
+
+        if self.status:
+            params['status'] = self.status
+
+        if self.rating:
+            params['rating'] = self.rating
+
+        genres = database.get(self.get_base_res, 24, f'{self._BASE_URL}/anime', params)
+
+        try:
+            from resources.lib import Main
+            prefix = Main.plugin_url.split('/', 1)[0]
+            base_plugin_url = f"{prefix}/{genre_list}/{tag_list}?page=%d"
+        except Exception:
+            base_plugin_url = f"genres/{genre_list}/{tag_list}?page=%d"
+
+        return self.process_mal_view(genres, base_plugin_url, page)
 
     @div_flavor
-    def base_anilist_view(self, res, completed=None, mal_dub=None):
+    def base_mal_view(self, res, completed=None, mal_dub=None):
         if not completed:
             completed = {}
-        anilist_id = res['id']
-        mal_id = res.get('idMal')
 
-        if not mal_id:
-            return
+        mal_id = res['mal_id']
 
         if not database.get_show(mal_id):
             self.database_update_show(res)
@@ -2176,86 +1640,56 @@ class AniListBrowser(BrowserBase):
         show_meta = database.get_show_meta(mal_id)
         kodi_meta = pickle.loads(show_meta.get('art')) if show_meta else {}
 
-        title = res['title'][self.title_lang] or res['title']['romaji']
-
-        if res.get('relationType'):
-            title += ' [I]%s[/I]' % control.colorstr(res['relationType'], 'limegreen')
-
-        if desc := res.get('description'):
-            desc = desc.replace('<i>', '[I]').replace('</i>', '[/I]')
-            desc = desc.replace('<b>', '[B]').replace('</b>', '[/B]')
-            desc = desc.replace('<br>', '[CR]')
-            desc = desc.replace('\n', '')
+        title = res[self.title_lang] or res['title']
+        rating = res.get('rating')
+        if rating == 'Rx - Hentai':
+            title += ' - ' + control.colorstr("Adult", 'red')
+        if res.get('relation'):
+            title += ' [I]%s[/I]' % control.colorstr(res['relation'], 'limegreen')
 
         info = {
             'UniqueIDs': {
-                'anilist_id': str(anilist_id),
                 'mal_id': str(mal_id),
-                **database.get_mapping_ids(anilist_id, 'anilist_id'),
                 **database.get_mapping_ids(mal_id, 'mal_id')
             },
-            'genre': res.get('genres'),
             'title': title,
-            'plot': desc,
+            'plot': res.get('synopsis'),
+            'mpaa': rating,
+            'duration': self.duration_to_seconds(res.get('duration')),
+            'genre': [x['name'] for x in res.get('genres', [])],
+            'studio': [x['name'] for x in res.get('studios', [])],
             'status': res.get('status'),
-            'mediatype': 'tvshow',
-            'country': [res.get('countryOfOrigin', '')]
+            'mediatype': 'tvshow'
         }
 
         if completed.get(str(mal_id)):
             info['playcount'] = 1
 
         try:
-            start_date = res.get('startDate')
-            info['premiered'] = '{}-{:02}-{:02}'.format(start_date['year'], start_date['month'], start_date['day'])
-            info['year'] = start_date['year']
+            start_date = res['aired']['from']
+            info['premiered'] = start_date[:10]
+            info['year'] = res.get('year', int(start_date[:3]))
         except TypeError:
             pass
 
-        try:
-            cast = []
-            for i, x in enumerate(res['characters']['edges']):
-                role = x['node']['name']['userPreferred']
-                actor = x['voiceActors'][0]['name']['userPreferred']
-                actor_hs = x['voiceActors'][0]['image']['large']
-                cast.append({'name': actor, 'role': role, 'thumbnail': actor_hs, 'index': i})
-            info['cast'] = cast
-        except IndexError:
-            pass
+        if isinstance(res.get('score'), float):
+            info['rating'] = {'score': res['score']}
+            if isinstance(res.get('scored_by'), int):
+                info['rating']['votes'] = res['scored_by']
 
-        info['studio'] = [x['node'].get('name') for x in res['studios']['edges']]
-
-        try:
-            info['rating'] = {'score': res.get('averageScore') / 10.0}
-            if res.get('stats') and res['stats'].get('scoreDistribution'):
-                total_votes = sum([score['amount'] for score in res['stats']['scoreDistribution']])
-                info['rating']['votes'] = total_votes
-        except TypeError:
-            pass
-
-        try:
-            info['duration'] = res['duration'] * 60
-        except TypeError:
-            pass
-
-        try:
-            if res['trailer']['site'] == 'youtube':
-                info['trailer'] = f"plugin://plugin.video.youtube/play/?video_id={res['trailer']['id']}"
-            else:
-                info['trailer'] = f"plugin://plugin.video.dailymotion_com/?url={res['trailer']['id']}&mode=playVideo"
-        except (KeyError, TypeError):
-            pass
+        if res.get('trailer'):
+            info['trailer'] = f"plugin://plugin.video.youtube/play/?video_id={res['trailer']['youtube_id']}"
 
         dub = True if mal_dub and mal_dub.get(str(mal_id)) else False
 
-        image = res['coverImage']['extraLarge']
+        image = res['images']['webp']['large_image_url']
         base = {
             "name": title,
             "url": f'animes/{mal_id}/',
             "image": image,
             "poster": image,
             'fanart': kodi_meta['fanart'] if kodi_meta.get('fanart') else image,
-            "banner": res.get('bannerImage'),
+            "banner": image,
             "info": info
         }
 
@@ -2265,78 +1699,71 @@ class AniListBrowser(BrowserBase):
             base['clearart'] = random.choice(kodi_meta['clearart'])
         if kodi_meta.get('clearlogo'):
             base['clearlogo'] = random.choice(kodi_meta['clearlogo'])
-        if res['format'] in ['MOVIE', 'ONA', 'OVA', 'SPECIAL'] and res['episodes'] == 1:
+
+        if res.get('type') in ['Movie', 'ONA', 'OVA', 'Special', 'TV Special'] and res['episodes'] == 1:
             base['url'] = f'play_movie/{mal_id}/'
             base['info']['mediatype'] = 'movie'
             return utils.parse_view(base, False, True, dub)
         return utils.parse_view(base, True, False, dub)
 
     def base_airing_view(self, res, ts):
-        import datetime
-
-        mal_id = res['media']['idMal']
-        if not mal_id:
-            return
-
-        airingAt = datetime.datetime.fromtimestamp(res['airingAt'])
+        airingAt = datetime.datetime.fromisoformat(res['aired']['from'].replace('Z', '+00:00'))
         airingAt_day = airingAt.strftime('%A')
         airingAt_time = airingAt.strftime('%I:%M %p')
-        airing_status = 'airing' if res['airingAt'] > ts else 'aired'
-        rank = None
-        rankings = res['media']['rankings']
-        if rankings and rankings[-1]['season']:
-            rank = rankings[-1]['rank']
-        genres = res['media']['genres']
+        airing_status = 'airing' if airingAt.timestamp() > ts else 'aired'
+        simkl_rank = None
+        genres = [genre['name'] for genre in res['genres']]
         if genres:
             genres = ' | '.join(genres[:3])
         else:
             genres = 'Genres Not Found'
-        title = res['media']['title'][self.title_lang]
-        if not title:
-            title = res['media']['title']['userPreferred']
+        title = res['title']
+        episode = res.get('episode', 'N/A')
+        rating = res['score']
+
+        # Find Simkl entry
+        simkl_entry = Simkl().fetch_and_find_simkl_entry(res['mal_id'])
+        if simkl_entry:
+            episode = simkl_entry['episode']['episode']
+            rating = simkl_entry['ratings']['simkl']['rating']
+            simkl_rank = simkl_entry['rank']
+            airingAt = datetime.datetime.fromisoformat(simkl_entry['date'].replace('Z', '+00:00'))
+            airingAt_day = airingAt.strftime('%A')
+            airingAt_time = airingAt.strftime('%I:%M %p')
+            airing_status = 'airing' if airingAt.timestamp() > ts else 'aired'
+
+        if rating is not None:
+            score = f"{rating * 10:.0f}"
+        else:
+            score = 'N/A'
 
         base = {
             'release_title': title,
-            'poster': res['media']['coverImage']['extraLarge'],
-            'ep_title': '{} {} {}'.format(res['episode'], airing_status, airingAt_day),
+            'poster': res['images']['jpg']['image_url'],
+            'ep_title': '{} {} {}'.format(episode, airing_status, airingAt_day),
             'ep_airingAt': airingAt_time,
-            'averageScore': res['media']['averageScore'],
-            'rank': rank,
-            'plot': res['media']['description'].replace('<br><br>', '[CR]').replace('<br>', '').replace('<i>', '[I]').replace('</i>', '[/I]') if res['media']['description'] else res['media']['description'],
+            'rating': score,
+            'simkl_rank': simkl_rank,
+            'plot': res['synopsis'].replace('<br><br>', '[CR]').replace('<br>', '').replace('<i>', '[I]').replace('</i>', '[/I]') if res['synopsis'] else res['synopsis'],
             'genres': genres,
-            'id': res['media']['idMal']
+            'id': res['mal_id']
         }
 
         return base
 
     def database_update_show(self, res):
-        mal_id = res.get('idMal')
-
-        if not mal_id:
-            return
+        mal_id = res['mal_id']
 
         try:
-            start_date = res['startDate']
-            start_date = '{}-{:02}-{:02}'.format(start_date['year'], start_date['month'], start_date['day'])
+            start_date = res['aired']['from']
         except TypeError:
             start_date = None
 
-        try:
-            duration = res['duration'] * 60
-        except (KeyError, TypeError):
-            duration = 0
+        title_userPreferred = res[self.title_lang] or res['title']
 
-        title_userPreferred = res['title'][self.title_lang] or res['title']['romaji']
-
-        name = res['title']['romaji']
-        ename = res['title']['english']
+        name = res['title']
+        ename = res['title_english']
         titles = f"({name})|({ename})"
-
-        if desc := res.get('description'):
-            desc = desc.replace('<i>', '[I]').replace('</i>', '[/I]')
-            desc = desc.replace('<b>', '[B]').replace('</b>', '[/B]')
-            desc = desc.replace('<br>', '[CR]')
-            desc = desc.replace('\n', '')
 
         kodi_meta = {
             'name': name,
@@ -2345,499 +1772,205 @@ class AniListBrowser(BrowserBase):
             'start_date': start_date,
             'query': titles,
             'episodes': res['episodes'],
-            'poster': res['coverImage']['extraLarge'],
+            'poster': res['images']['webp']['large_image_url'],
             'status': res.get('status'),
-            'format': res.get('format', ''),
-            'plot': desc,
-            'duration': duration,
-            'genre': res.get('genres'),
-            'country': [res.get('countryOfOrigin', '')],
+            'format': res.get('type'),
+            'plot': res.get('synopsis'),
+            'duration': self.duration_to_seconds(res.get('duration')),
+            'genre': [x['name'] for x in res.get('genres', [])],
+            'studio': [x['name'] for x in res.get('studios', [])],
+            'mpaa': res.get('rating'),
         }
 
+
         try:
-            start_date = res.get('startDate')
-            kodi_meta['premiered'] = '{}-{:02}-{:02}'.format(start_date['year'], start_date['month'], start_date['day'])
-            kodi_meta['year'] = start_date['year']
+            start_date = res['aired']['from']
+            kodi_meta['premiered'] = start_date[:10]
+            kodi_meta['year'] = res.get('year', int(start_date[:3]))
         except TypeError:
             pass
 
-        try:
-            cast = []
-            for i, x in enumerate(res['characters']['edges']):
-                role = x['node']['name']['userPreferred']
-                actor = x['voiceActors'][0]['name']['userPreferred']
-                actor_hs = x['voiceActors'][0]['image']['large']
-                cast.append({'name': actor, 'role': role, 'thumbnail': actor_hs, 'index': i})
-            kodi_meta['cast'] = cast
-        except IndexError:
-            pass
+        if isinstance(res.get('score'), float):
+            kodi_meta['rating'] = {'score': res['score']}
+            if isinstance(res.get('scored_by'), int):
+                kodi_meta['rating']['votes'] = res['scored_by']
 
-        kodi_meta['studio'] = [x['node'].get('name') for x in res['studios']['edges']]
-
-        try:
-            kodi_meta['rating'] = {'score': res.get('averageScore') / 10.0}
-            if res.get('stats') and res['stats'].get('scoreDistribution'):
-                total_votes = sum([score['amount'] for score in res['stats']['scoreDistribution']])
-                kodi_meta['rating']['votes'] = total_votes
-        except TypeError:
-            pass
-
-        try:
-            if res['trailer']['site'] == 'youtube':
-                kodi_meta['trailer'] = f"plugin://plugin.video.youtube/play/?video_id={res['trailer']['id']}"
-            else:
-                kodi_meta['trailer'] = f"plugin://plugin.video.dailymotion_com/?url={res['trailer']['id']}&mode=playVideo"
-        except (KeyError, TypeError):
-            pass
+        if res.get('trailer'):
+            kodi_meta['trailer'] = f"plugin://plugin.video.youtube/play/?video_id={res['trailer']['youtube_id']}"
 
         database.update_show(mal_id, pickle.dumps(kodi_meta))
 
-    def get_genres(self, page, format):
-        query = '''
-        query {
-            genres: GenreCollection,
-            tags: MediaTagCollection {
-                name
-                isAdult
-            }
-        }
-        '''
+    def update_genre_settings(self):
+        res = database.get(self.get_base_res, 24, f'{self._BASE_URL}/genres/anime')
 
-        r = client.request(self._BASE_URL, post={'query': query}, jpost=True)
-        results = json.loads(r)
-        if not results:
-            # genres_list = ['Action', 'Adventure', 'Comedy', 'Drama', 'Ecchi', 'Fantasy', 'Hentai', "Horror", 'Mahou Shoujo', 'Mecha', 'Music', 'Mystery', 'Psychological', 'Romance', 'Sci-Fi', 'Slice of Life', 'Sports', 'Supernatural', 'Thriller']
-            genres_list = ['error']
-        else:
-            genres_list = results['data']['genres']
-        # if 'Hentai' in genres_list:
-        #     genres_list.remove('Hentai')
-        try:
-            tags_list = [x['name'] for x in results['data']['tags'] if not x['isAdult']]
-        except KeyError:
-            tags_list = []
-        multiselect = control.multiselect_dialog(control.lang(30940), genres_list + tags_list, preselect=[])
+        genre = res['data']
+        genres_list = [x['name'] for x in genre]
+
+        multiselect = control.multiselect_dialog(control.lang(30940), genres_list, preselect=[])
         if not multiselect:
             return []
-        genre_display_list = []
-        tag_display_list = []
-        for selection in multiselect:
-            if selection < len(genres_list):
-                genre_display_list.append(genres_list[selection])
-            else:
-                tag_display_list.append(tags_list[selection - len(genres_list)])
-        return self.genres_payload(genre_display_list, tag_display_list, page, format)
 
-    def genres_payload(self, genre_list, tag_list, page, format, prefix=None):
-        query = '''
-        query (
-            $page: Int=1,
-            $perpage: Int=20,
-            $type: MediaType,
-            $isAdult: Boolean = false,
-            $format: [MediaFormat],
-            $countryOfOrigin: CountryCode,
-            $season: MediaSeason,
-            $status: MediaStatus,
-            $genre_in: [String],
-            $tag_in: [String],
-            $sort: [MediaSort] = [POPULARITY_DESC]
-        ) {
-            Page (page: $page, perPage: $perpage) {
-                pageInfo {
-                    hasNextPage
-                }
-                ANIME: media (
-                    format_in: $format,
-                    type: $type,
-                    genre_in: $genre_in,
-                    tag_in: $tag_in,
-                    season: $season,
-                    status: $status,
-                    isAdult: $isAdult,
-                    countryOfOrigin: $countryOfOrigin,
-                    sort: $sort
-                ) {
-                    id
-                    idMal
-                    title {
-                        romaji,
-                        english
-                    }
-                    coverImage {
-                        extraLarge
-                    }
-                    bannerImage
-                    startDate {
-                        year,
-                        month,
-                        day
-                    }
-                    description
-                    synonyms
-                    format
-                    episodes
-                    status
-                    genres
-                    duration
-                    isAdult
-                    countryOfOrigin
-                    averageScore
-                    stats {
-                        scoreDistribution {
-                            score
-                            amount
-                        }
-                    }
-                    trailer {
-                        id
-                        site
-                    }
-                    characters (
-                        page: 1,
-                        sort: ROLE,
-                        perPage: 10,
-                    ) {
-                        edges {
-                            node {
-                                name {
-                                    userPreferred
-                                }
-                            }
-                            voiceActors (language: JAPANESE) {
-                                name {
-                                    userPreferred
-                                }
-                                image {
-                                    large
-                                }
-                            }
-                        }
-                    }
-                    studios {
-                        edges {
-                            node {
-                                name
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        '''
-
-        if not isinstance(genre_list, list):
-            genre_list = ast.literal_eval(genre_list)
-        if not isinstance(tag_list, list):
-            tag_list = ast.literal_eval(tag_list)
-
-        variables = {
-            'page': page,
-            'perPage': self.perpage,
-            'type': "ANIME",
-            'genre_in': genre_list if genre_list else None,
-            'tag_in': tag_list if tag_list else None,
-            'isAdult': 'Hentai' in genre_list,
-            'sort': "POPULARITY_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        if format:
-            variables['format'] = format
-
-        try:
-            from resources.lib import Main
-            prefix = Main.plugin_url.split('/', 1)[0]
-            base_plugin_url = f"{prefix}/{genre_list}/{tag_list}?page=%d"
-        except Exception:
-            base_plugin_url = f"genres/{genre_list}/{tag_list}?page=%d"
-
-        return self.process_genre_view(query, variables, base_plugin_url, page)
-
-    def process_genre_view(self, query, variables, base_plugin_url, page):
-        r = client.request(self._BASE_URL, post={'query': query, 'variables': variables}, jpost=True)
-        results = json.loads(r)
-        anime_res = results['data']['Page']['ANIME']
-        hasNextPage = results['data']['Page']['pageInfo']['hasNextPage']
-
-        genre_filter = variables.get('genre_in')
-        if genre_filter and isinstance(genre_filter, (list, tuple)) and len(genre_filter) > 1:
-            genre_set = set(genre_filter)
-            anime_res = [a for a in anime_res if genre_set.issubset(set(a.get('genres', [])))]
-
-        if control.getBool('general.malposters'):
-            try:
-                for anime in anime_res:
-                    anilist_id = anime['id']
-                    mal_mapping = database.get_mappings(anilist_id, 'anilist_id')
-                    if mal_mapping and 'mal_picture' in mal_mapping:
-                        mal_picture = mal_mapping['mal_picture']
-                        mal_picture_url = mal_picture.rsplit('.', 1)[0] + 'l.' + mal_picture.rsplit('.', 1)[1]
-                        mal_picture_url = 'https://cdn.myanimelist.net/images/anime/' + mal_picture_url
-                        anime['coverImage']['extraLarge'] = mal_picture_url
-            except Exception:
-                pass
-
-        mapfunc = partial(self.base_anilist_view, completed=self.open_completed())
-        get_meta.collect_meta(anime_res)
-        all_results = list(map(mapfunc, anime_res))
-        all_results += self.handle_paging(hasNextPage, base_plugin_url, page)
-        return all_results
-
-    def update_genre_settings(self):
-        query = '''
-        query {
-            genres: GenreCollection,
-            tags: MediaTagCollection {
-                name
-                isAdult
-            }
-        }
-        '''
-
-        r = client.request(self._BASE_URL, post={'query': query}, jpost=True)
-        results = json.loads(r)
-        if not results:
-            genres_list = ['Action', 'Adventure', 'Comedy', 'Drama', 'Ecchi', 'Fantasy', 'Hentai', "Horror", 'Mahou Shoujo', 'Mecha', 'Music', 'Mystery', 'Psychological', 'Romance', 'Sci-Fi', 'Slice of Life', 'Sports', 'Supernatural', 'Thriller']
-        else:
-            genres_list = results['data']['genres']
-
-        try:
-            tags_list = [x['name'] for x in results['data']['tags'] if not x['isAdult']]
-        except KeyError:
-            tags_list = []
-
-        multiselect = control.multiselect_dialog(control.lang(30940), genres_list + tags_list, preselect=[])
-        if not multiselect:
-            return [], []
+        selected_genres_mal = [str(genre[selection]['mal_id']) for selection in multiselect if selection < len(genres_list)]
 
         selected_genres_anilist = []
-        selected_tags = []
-        selected_genres_mal = []
 
-        for selection in multiselect:
-            if selection < len(genres_list):
-                selected_genre = genres_list[selection]
-                selected_genres_anilist.append(selected_genre)
-            else:
-                selected_tag = tags_list[selection - len(genres_list)]
-                selected_tags.append(selected_tag)
+        selected_tags = []
 
         return selected_genres_mal, selected_genres_anilist, selected_tags
     
+    
     def get_recently_aired(self, page=1, format=None, prefix=None):
-        import datetime
-        import time
+        """
+        Get recently aired shows using Simkl API for MAL provider.
+        Shows TV shows whose latest episode aired in the last 7 days.
+        Supports month boundary crossings via monthly calendar archives.
+        """
+        from datetime import datetime, timedelta, timezone
         
-        # Get current timestamp and calculate 7-day window
-        current_time = int(time.time())
-        seven_days_ago = current_time - (6 * 24 * 60 * 60)  # Last 6 days + today = 7 days
+        # Debug logging (temporary - remove before merge)
+        control.log(f"[DEBUG] Recently Aired MAL - Provider: MAL, Page: {page}", 'debug')
         
-        # Prepare variables for GraphQL query
-        variables = {
-            'page': page,
-            'perPage': 100,  # Fetch more to account for filtering
-            'airingAt_greater': seven_days_ago,
-            'airingAt_lesser': current_time,
-            'sort': 'TIME_DESC'
-        }
+        # Compute 7-day window in UTC
+        now = datetime.now(timezone.utc)
+        window_start = (now - timedelta(days=6)).replace(hour=0, minute=0, second=0, microsecond=0)
+        window_end = now
         
-        # Fetch the requested page
-        page_result = self.get_recently_aired_res(variables)
+        control.log(f"[DEBUG] Time window: {window_start.isoformat()} to {window_end.isoformat()}", 'debug')
         
-        # Pass the page number to process_recently_aired_view
-        # It will handle filtering and limiting to 24 items
-        return self.process_recently_aired_view(page_result, page)
-
-    def get_recently_aired_res(self, variables):
-        query = '''
-        query (
-            $page: Int=1,
-            $perPage: Int=100,
-            $airingAt_greater: Int,
-            $airingAt_lesser: Int,
-            $sort: [AiringSort] = [TIME_DESC]
-        ) {
-            Page (page: $page, perPage: $perPage) {
-                pageInfo {
-                    hasNextPage
-                    total
-                }
-                airingSchedules (
-                    airingAt_greater: $airingAt_greater,
-                    airingAt_lesser: $airingAt_lesser,
-                    sort: $sort
-                ) {
-                    id
-                    episode
-                    airingAt
-                    media {
-                        id
-                        idMal
-                        title {
-                            romaji,
-                            english
-                        }
-                        coverImage {
-                            extraLarge
-                        }
-                        bannerImage
-                        startDate {
-                            year
-                            month
-                            day
-                        }
-                        description
-                        synonyms
-                        format
-                        episodes
-                        status
-                        genres
-                        duration
-                        countryOfOrigin
-                        averageScore
-                        popularity
-                        nextAiringEpisode {
-                            episode
-                            airingAt
-                        }
-                        stats {
-                            scoreDistribution {
-                                score
-                                amount
-                            }
-                        }
-                        trailer {
-                            id
-                            site
-                        }
-                        characters (perPage: 10) {
-                          edges {
-                            node {
-                              name {
-                                full
-                                native
-                                userPreferred
-                              }
-                            }
-                            voiceActors(language: JAPANESE) {
-                              id
-                              name {
-                                full
-                                native
-                                userPreferred
-                              }
-                              image {
-                                large
-                              }
-                            }
-                          }
-                        }
-                        studios {
-                            edges {
-                                node {
-                                    name
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        '''
-
-        result = client.request(self._BASE_URL, post={'query': query, 'variables': variables}, jpost=True)
-        results = json.loads(result)
-
-        if "errors" in results.keys():
-            return
-
-        json_res = results.get('data', {}).get('Page')
-
-        if control.getBool('general.malposters'):
-            try:
-                # Create a dictionary to track unique media items
-                unique_media = {}
-                for airing in json_res['airingSchedules']:
-                    media_id = airing['media']['id']
-                    # Only keep the most recent airing for each unique show
-                    if media_id not in unique_media or airing['airingAt'] > unique_media[media_id]['airingAt']:
-                        unique_media[media_id] = airing
-                        anilist_id = media_id
-                        mal_mapping = database.get_mappings(anilist_id, 'anilist_id')
-                        if mal_mapping and 'mal_picture' in mal_mapping:
-                            mal_picture = mal_mapping['mal_picture']
-                            mal_picture_url = mal_picture.rsplit('.', 1)[0] + 'l.' + mal_picture.rsplit('.', 1)[1]
-                            mal_picture_url = 'https://cdn.myanimelist.net/images/anime/' + mal_picture_url
-                            airing['media']['coverImage']['extraLarge'] = mal_picture_url
-                
-                # Replace the airingSchedules with unique media items sorted by airing time
-                json_res['airingSchedules'] = sorted(unique_media.values(), key=lambda x: x['airingAt'], reverse=True)
-            except Exception:
-                pass
-
-        if json_res:
-            # Remove duplicate media entries
-            unique_media = {}
-            for airing in json_res['airingSchedules']:
-                media_id = airing['media']['id']
-                if media_id not in unique_media or airing['airingAt'] > unique_media[media_id]['airingAt']:
-                    unique_media[media_id] = airing
-            
-            # Sort by most recent airing time
-            json_res['airingSchedules'] = sorted(unique_media.values(), key=lambda x: x['airingAt'], reverse=True)
-            return json_res
-
-    def process_recently_aired_view(self, json_res, page, target_count=24):
-        if not json_res:
+        # Fetch calendar data for the date range (handles month boundaries)
+        simkl = Simkl()
+        simkl_data = simkl.get_calendar_range(window_start, window_end)
+        
+        if not simkl_data:
+            control.log("[DEBUG] No Simkl calendar data available", 'debug')
             return []
         
-        hasNextPage = json_res['pageInfo']['hasNextPage']
-        get_meta.collect_meta([x['media'] for x in json_res['airingSchedules']])
-        mapfunc = partial(self.base_anilist_view, completed=self.open_completed())
+        # Debug first 10 raw Simkl items
+        for idx, item in enumerate(simkl_data[:10]):
+            control.log(f"[DEBUG] Raw item {idx}: simkl_id={item.get('ids', {}).get('simkl')}, "
+                       f"mal_id={item.get('ids', {}).get('mal')}, "
+                       f"title={item.get('title', 'N/A')}, "
+                       f"type={item.get('anime_type') or (item.get('anime') or {}).get('type')}, "
+                       f"date={item.get('date')}", 'debug')
         
-        # Filter to only include TV shows and remove duplicates
-        seen_ids = set()
-        unique_results = []
+        # Filter + collect recent episodes
+        recent_episodes = []
+        raw_count = len(simkl_data)
+        after_window_count = 0
+        after_type_count = 0
         
-        for schedule in json_res['airingSchedules']:
-            media = schedule['media']
-            
-            # Apply quality filters (OR condition: either good score OR popular)
-            average_score = media.get('averageScore', 0) or 0
-            popularity = media.get('popularity', 0) or 0
-            
-            # Skip if both are below thresholds
-            if average_score < 65 and popularity < 10000:
+        for idx, item in enumerate(simkl_data):
+            try:
+                # Parse air timestamp with timezone awareness
+                date_str = item.get('date')
+                if not date_str:
+                    continue
+                
+                air_ts = datetime.fromisoformat(date_str.replace('Z', '+00:00')).astimezone(timezone.utc)
+                
+                # Keep only if within 7-day window
+                if not (window_start <= air_ts <= window_end):
+                    continue
+                
+                after_window_count += 1
+                
+                # Get MAL ID
+                mal_id = (item.get('ids') or {}).get('mal')
+                if not mal_id:
+                    continue
+                
+                # Type filter - support both anime_type and anime.type fields
+                anime_type = (item.get('anime_type') or (item.get('anime') or {}).get('type') or '').lower()
+                
+                if format:
+                    # If specific format requested, filter by it
+                    format_lower = format.lower()
+                    if format_lower == 'tv' and anime_type not in ('tv', 'tv_short'):
+                        continue
+                    elif format_lower != anime_type:
+                        continue
+                else:
+                    # Default: TV only (tv, tv_short, ona)
+                    if anime_type not in ('tv', 'tv_short', 'ona'):
+                        continue
+                
+                after_type_count += 1
+                
+                # Extract episode info
+                episode_number = ((item.get('episode') or {}).get('episode')) or 1
+                
+                recent_episodes.append({
+                    'mal_id': int(mal_id),
+                    'air_ts': air_ts,
+                    'episode_number': int(episode_number)
+                })
+                
+            except (ValueError, TypeError, KeyError) as e:
+                control.log(f"[DEBUG] Error parsing Simkl item {idx}: {e}", 'debug')
                 continue
+        
+        control.log(f"[DEBUG] Counts - raw: {raw_count}, after_window: {after_window_count}, "
+                   f"after_type: {after_type_count}", 'debug')
+        
+        # Dedup per show - keep the latest (max air_ts) record for each mal_id
+        unique_shows = {}
+        for episode in recent_episodes:
+            mal_id = episode['mal_id']
+            if mal_id not in unique_shows or episode['air_ts'] > unique_shows[mal_id]['air_ts']:
+                unique_shows[mal_id] = episode
+        
+        # Sort DESC by air_ts (newest first), tie-break by mal_id for stability
+        sorted_episodes = sorted(unique_shows.values(), 
+                               key=lambda x: (x['air_ts'], x['mal_id']), 
+                               reverse=True)
+        
+        control.log(f"[DEBUG] Counts - unique_by_show: {len(sorted_episodes)}", 'debug')
+        
+        # Debug first 10 final items
+        for idx, ep in enumerate(sorted_episodes[:10]):
+            control.log(f"[DEBUG] Final item {idx}: mal_id={ep['mal_id']}, "
+                       f"air_iso={ep['air_ts'].isoformat()}, "
+                       f"ep={ep['episode_number']}", 'debug')
+        
+        # Pagination - 24 items per page
+        start_idx = (page - 1) * 24
+        end_idx = page * 24
+        page_episodes = sorted_episodes[start_idx:end_idx]
+        
+        control.log(f"[DEBUG] Page {page}: emitted_count={len(page_episodes)}", 'debug')
+        
+        # Fetch MAL details for current page
+        mal_items = []
+        for episode_data in page_episodes:
+            mal_id = episode_data['mal_id']
             
-            if media['id'] not in seen_ids and media.get('format') in ['TV', 'TV_SHORT', None]:
-                result = mapfunc(media)
-                if result:
-                    # Add episode info to the title if available
-                    if 'episode' in schedule and schedule['episode']:
-                        result['info']['title'] = f"{result['info']['title']} - Episode {schedule['episode']}"
-                    unique_results.append(result)
-                    seen_ids.add(media['id'])
-                    
-                    # Stop if we've reached the target count (24 items per page)
-                    if len(unique_results) >= target_count:
-                        # If we hit the limit, there might be more items
-                        hasNextPage = True
-                        break
+            try:
+                # Use same helper all MAL menus use
+                res = database.get(self.get_base_res, 24, f"{self._BASE_URL}/anime/{mal_id}")
+                if not res or 'data' not in res:
+                    continue
+                
+                mal_item = res['data']
+                
+                # Adjust label to include episode number
+                original_title = mal_item.get(self.title_lang) or mal_item.get('title') or ''
+                mal_item['title'] = f"{original_title} - Episode {episode_data['episode_number']}"
+                
+                mal_items.append(mal_item)
+                
+            except Exception as e:
+                control.log(f"[DEBUG] Error fetching MAL data for {mal_id}: {e}", 'debug')
+                continue
         
-        # Always add pagination
-        unique_results += self.handle_paging(hasNextPage, "recently_aired?page=%d", page)
+        # Process through existing MAL artwork pipeline
+        get_meta.collect_meta(mal_items)
+        from functools import partial
+        mapfunc = partial(self.base_mal_view, completed=self.open_completed())
+        all_results = list(map(mapfunc, mal_items))
         
-        return unique_results
+        # Add pagination if there are more items
+        if end_idx < len(sorted_episodes):
+            base_url = f"{prefix}?page=%d" if prefix else "recently_aired?page=%d"
+            all_results += self.handle_paging(True, base_url, page)
+        
+        return all_results
