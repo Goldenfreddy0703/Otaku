@@ -40,13 +40,49 @@ def refresh_apis():
             MyAnimeList.MyAnimeListWLF().refresh_token()
 
 
+def preload_calendars_background():
+    """Preload calendars in background thread to populate cache."""
+    import threading
+    
+    def _preload():
+        try:
+            control.log("### Background calendar preload started")
+            from resources.lib import AniListBrowser, MalBrowser
+            
+            # Preload AniList calendar
+            try:
+                anilist_browser = AniListBrowser.AniListBrowser()
+                anilist_browser.get_airing_calendar()
+                control.log("### AniList calendar preloaded successfully")
+            except Exception as e:
+                control.log(f"### Failed to preload AniList calendar: {e}")
+            
+            # Preload MAL calendar
+            try:
+                mal_browser = MalBrowser.MalBrowser()
+                mal_browser.get_airing_calendar()
+                control.log("### MAL calendar preloaded successfully")
+            except Exception as e:
+                control.log(f"### Failed to preload MAL calendar: {e}")
+            
+            control.log("### Background calendar preload completed")
+        except Exception as e:
+            control.log(f"### Background calendar preload error: {e}")
+    
+    # Run in background thread to not block startup
+    thread = threading.Thread(target=_preload, daemon=True)
+    thread.start()
+
+
 def update_calendars():
+    """Update calendars - now uses background preload."""
     control.log("### Updating Calendars")
-    from resources.lib.endpoints import anilist, mal, simkl
+    # Use the new background preload instead of old methods
+    preload_calendars_background()
+    # Keep simkl update for compatibility
+    from resources.lib.endpoints import simkl
     simkl.Simkl().update_calendar()
-    anilist.Anilist().update_calendar()
-    mal.Mal().update_calendar()
-    control.log("### Calendars updated successfully")
+    control.log("### Calendars update initiated")
 
 
 def update_mappings_db():
@@ -227,6 +263,8 @@ if __name__ == "__main__":
     control.log('##################  RUNNING MAINTENANCE  ######################')
     version_check()
     database_sync.SyncDatabase()
+    # Preload calendars in background for instant access
+    preload_calendars_background()
     refresh_apis()
     if control.getInt('update.time.30') == 0 or control.getInt('update.time.7') == 0:
         update_mappings_db()
