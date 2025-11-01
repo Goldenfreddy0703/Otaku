@@ -434,6 +434,33 @@ def AIRING_NEXT_SEASON(payload, params):
     control.draw_items(BROWSER.get_airing_next_season(page, format, prefix), 'tvshows')
 
 
+@Route('recently_aired')
+@Route('recently_aired_tv_show')
+@Route('recently_aired_movie')
+@Route('recently_aired_tv_short')
+@Route('recently_aired_special')
+@Route('recently_aired_ova')
+@Route('recently_aired_ona')
+@Route('recently_aired_music')
+def RECENTLY_AIRED(payload, params):
+    mapping = {
+        'recently_aired_tv_show': ('tv', 'TV'),
+        'recently_aired_movie': ('movie', 'MOVIE'),
+        'recently_aired_tv_short': ('tv_special', 'TV_SHORT'),
+        'recently_aired_special': ('special', 'SPECIAL'),
+        'recently_aired_ova': ('ova', 'OVA'),
+        'recently_aired_ona': ('ona', 'ONA'),
+        'recently_aired_music': ('music', 'MUSIC')
+    }
+    page = int(params.get('page', 1))
+    format = None
+    base_key = plugin_url.split('?', 1)[0]
+    if base_key in mapping:
+        format = mapping[base_key][0] if control.settingids.browser_api in ['mal', 'otaku'] else mapping[base_key][1]
+    prefix = plugin_url.split('?', 1)[0]
+    control.draw_items(BROWSER.get_recently_aired(page, format, prefix), 'tvshows')
+    
+    
 @Route('trending_last_year')
 @Route('trending_last_year_tv_show')
 @Route('trending_last_year_movie')
