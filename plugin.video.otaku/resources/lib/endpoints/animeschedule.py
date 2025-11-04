@@ -17,25 +17,36 @@ _token_load_attempted = False
 def _get_api_token():
     """Load AnimeSchedule API token from info.db with caching."""
     global _api_info, _api_token, _token_load_attempted
-    
+
     if _token_load_attempted:
         return _api_token
-    
+
     _token_load_attempted = True
-    
+
     try:
         _api_info = database.get_info('AnimeSchedule')
-        if _api_info and isinstance(_api_info, dict):
-            token = _api_info.get('api_key', '').strip()
+        if _api_info:
+            # Handle both dict-like and tuple responses
+            if isinstance(_api_info, dict):
+                token = _api_info.get('client_secret', '').strip()
+            else:
+                # If it's a tuple/namedtuple, convert to dict
+                # Structure: (api_name, api_key, client_id, client_secret, description)
+                if len(_api_info) >= 4:
+                    token = _api_info[3].strip() if _api_info[3] else ''
+                else:
+                    token = ''
+
             if token:
                 _api_token = token
+                control.log("[AnimeSched] API token loaded successfully", "info")
             else:
                 control.log("[AnimeSched] Missing API token. Timetables will not work.", "warning")
         else:
-            control.log("[AnimeSched] Missing API token. Timetables will not work.", "warning")
-    except Exception:
-        pass
-    
+            control.log("[AnimeSched] AnimeSchedule not found in database. Timetables will not work.", "warning")
+    except Exception as e:
+        control.log(f"[AnimeSched] Error loading API token: {str(e)}", "error")
+
     return _api_token
 
 
@@ -145,12 +156,12 @@ def _parse_iso(dt_str: str):
             return None
 
 
-def _iso_week_year(dt_utc: datetime.datetime) -> tuple[int, int]:
+def _iso_week_year(dt_utc):
     iso = dt_utc.isocalendar()
     return iso[0], iso[1]
 
 
-def _fetch_week(air: str, tz: str, year: int | None, week: int | None, token: str, timeout: int = 20) -> list[dict]:
+def _fetch_week(air, tz, year, week, token, timeout=20):
     url = f"{base_url}/timetables/{air}"
     headers = {
         "Authorization": f"Bearer {token}",
@@ -169,11 +180,11 @@ def _fetch_week(air: str, tz: str, year: int | None, week: int | None, token: st
 
 
 def get_recently_aired_raw(
-    exclude_donghua: bool = False,
-    tz: str | None = None,
-    air: str = "all",  # 'raw' | 'sub' | 'dub' | 'all'
-    include_airing_now: bool = True
-) -> list[dict]:
+    exclude_donghua=False,
+    tz=None,
+    air="all",  # 'raw' | 'sub' | 'dub' | 'all'
+    include_airing_now=True
+):
     api_token = _get_api_token()
     if not api_token:
         return []
@@ -205,7 +216,7 @@ def get_recently_aired_raw(
         return []
 
     ALLOWED_PREFIXES = ("tv", "ona", "ova", "special")
-    kept: list[dict] = []
+    kept = []
 
     for ep in episodes:
         ed = _parse_iso(ep.get("episodeDate", ""))
@@ -216,7 +227,7 @@ def get_recently_aired_raw(
             continue
 
         mts = ep.get("mediaTypes") or []
-        names: list[str] = []
+        names = []
         for m in mts:
             if isinstance(m, dict):
                 names.append((m.get("route") or m.get("name") or "").lower())
@@ -268,10 +279,10 @@ def get_recently_aired_raw(
 _MAL_RE = re.compile(r"/anime/(\d+)(?:/|$)")
 _ANILIST_RE = re.compile(r"/anime/(\d+)(?:/|$)")
 
-_AS_ANIME_CACHE: dict[str, dict] = {}
+_AS_ANIME_CACHE = {}
 
 
-def _parse_id_from_url(service: str, url: str) -> int | None:
+def _parse_id_from_url(service, url):
     if not url:
         return None
     u = url.strip()
@@ -293,7 +304,7 @@ def _parse_id_from_url(service: str, url: str) -> int | None:
     return None
 
 
-def _extract_ids_anywhere(anime: dict) -> tuple[int | None, int | None]:
+def _extract_ids_anywhere(anime):
     if not isinstance(anime, dict):
         return (None, None)
 
@@ -376,7 +387,7 @@ def _extract_ids_anywhere(anime: dict) -> tuple[int | None, int | None]:
 
     return (None, None)
 
-def as_get_anime_by_route(route: str, timeout: int = 10) -> dict | None:
+def as_get_anime_by_route(route, timeout=10):
     if not route:
         return None
     if route in _AS_ANIME_CACHE:
@@ -433,9 +444,9 @@ def as_get_anime_by_route(route: str, timeout: int = 10) -> dict | None:
     return None
 
 
-def as_get_anime_by_routes_batch(routes: list[str], timeout_per: int = 8, max_workers: int = 8) -> dict[str, dict]:
+def as_get_anime_by_routes_batch(routes, timeout_per=8, max_workers=8):
     from concurrent.futures import ThreadPoolExecutor, as_completed
-    out: dict[str, dict] = {}
+    out = {}
     to_fetch = []
 
     for r in routes:
@@ -466,10 +477,10 @@ def as_get_anime_by_routes_batch(routes: list[str], timeout_per: int = 8, max_wo
 
 
 def get_airing_calendar(
-    exclude_donghua: bool = False,
-    tz: str | None = None,
-    air: str = "all",  # 'raw' | 'sub' | 'dub' | 'all'
-) -> list[dict]:
+    exclude_donghua=False,
+    tz=None,
+    air="all",  # 'raw' | 'sub' | 'dub' | 'all'
+):
     """
     Fetch weekly airing calendar (7-day window: yesterday to +6 days from today).
     Returns episodes sorted by air date descending (newest first).
@@ -510,7 +521,7 @@ def get_airing_calendar(
         return []
 
     ALLOWED_PREFIXES = ("tv", "ona")
-    kept: list[dict] = []
+    kept = []
 
     for ep in episodes:
         ed = _parse_iso(ep.get("episodeDate", ""))
@@ -521,7 +532,7 @@ def get_airing_calendar(
             continue
 
         mts = ep.get("mediaTypes") or []
-        names: list[str] = []
+        names = []
         for m in mts:
             if isinstance(m, dict):
                 names.append((m.get("route") or m.get("name") or "").lower())
@@ -540,7 +551,7 @@ def get_airing_calendar(
     return kept
 
 
-def as_format_episode_badge(ep: dict) -> str:
+def as_format_episode_badge(ep):
     n = ep.get("episodeNumber", 1)
     ed = ep.get("episodeDate") or ""
     dt = _parse_iso(ed)
