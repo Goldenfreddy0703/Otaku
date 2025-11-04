@@ -10,10 +10,12 @@ from functools import partial
 from resources.lib.ui import database, get_meta, utils, control, client
 from resources.lib.ui.BrowserBase import BrowserBase
 from resources.lib.ui.divide_flavors import div_flavor
+from concurrent.futures import ThreadPoolExecutor
 
 
 class AniListBrowser(BrowserBase):
     _BASE_URL = "https://graphql.anilist.co"
+    _ANILIST_DETAILS_CACHE: dict[int, dict] = {}
 
     def __init__(self):
         self.title_lang = ["romaji", 'english'][control.getInt("titlelanguage")]
@@ -79,40 +81,34 @@ class AniListBrowser(BrowserBase):
         return season, year
 
     def get_airing_calendar(self, page=1):
-        import datetime
         import time
-        import itertools
-
-        anilist_cache = self.get_cached_data()
-        if anilist_cache:
-            list_ = anilist_cache
-        else:
-            today = datetime.date.today()
-            today_ts = int(time.mktime(today.timetuple()))
-            weekStart = today_ts - 86400
-            weekEnd = today_ts + (86400 * 6)
-            variables = {
-                'weekStart': weekStart,
-                'weekEnd': weekEnd,
-                'page': page
-            }
-
-            list_ = []
-
-            for i in range(0, 4):
-                popular = self.get_airing_calendar_res(variables, page)
-                list_.append(popular)
-
-                if not popular['pageInfo']['hasNextPage']:
-                    break
-
-                page += 1
-                variables['page'] = page
-
-            self.set_cached_data(anilist_cache)
-
-        results = list(map(self.process_airing_view, list_))
-        results = list(itertools.chain(*results))
+        from resources.lib.endpoints import animeschedule
+        
+        # Check cache first (30 minute expiry)
+        cached = self.get_cached_data()
+        if cached:
+            # Handle new dict format with timestamp
+            if isinstance(cached, dict) and 'timestamp' in cached:
+                cache_time = cached.get('timestamp', 0)
+                cache_age = time.time() - cache_time
+                if cache_age < 1800:  # 30 minutes
+                    return cached.get('results', [])
+        
+        # Fetch calendar data from animeschedule.net
+        episodes = animeschedule.get_airing_calendar(exclude_donghua=True)
+        
+        if not episodes:
+            return []
+        
+        # Process episodes into calendar view
+        results = self.process_calendar_view(episodes)
+        
+        # Cache the results
+        self.set_cached_data({
+            'timestamp': time.time(),
+            'results': results
+        })
+        
         return results
 
     def get_cached_data(self):
@@ -2147,6 +2143,105 @@ class AniListBrowser(BrowserBase):
         all_results = list(filter(lambda x: True if x else False, map(mapfunc, res)))
         return all_results
 
+    def get_anilist_data_batch(self, anilist_ids):
+        """Batch fetch AniList data (averageScore, popularity) for calendar."""
+        if not anilist_ids:
+            return {}
+        
+        # AniList GraphQL allows up to ~50 IDs per query, so batch them
+        batch_size = 50
+        anilist_data = {}
+        
+        for i in range(0, len(anilist_ids), batch_size):
+            batch_ids = anilist_ids[i:i + batch_size]
+            
+            query = '''
+            query ($ids: [Int]) {
+                Page(perPage: 50) {
+                    media(id_in: $ids, type: ANIME) {
+                        id
+                        idMal
+                        averageScore
+                        popularity
+                    }
+                }
+            }
+            '''
+            
+            variables = {'ids': batch_ids}
+            try:
+                response = client.post(self._BASE_URL, json_data={'query': query, 'variables': variables})
+                if response:
+                    data = response.json()
+                    if data and 'data' in data and 'Page' in data['data']:
+                        for anime in data['data']['Page']['media']:
+                            if anime and anime.get('id'):
+                                anilist_data[anime['id']] = {
+                                    'averageScore': anime.get('averageScore'),
+                                    'popularity': anime.get('popularity')
+                                }
+            except Exception as e:
+                control.log(f"[AniList Calendar] Error fetching AniList data batch: {e}", "error")
+        
+        return anilist_data
+    
+    def process_calendar_view(self, episodes):
+        """Process animeschedule episodes into calendar format."""
+        import time
+        from resources.lib.endpoints import animeschedule
+        
+        # Group episodes by route to fetch anime data in batch
+        routes = list(set(ep.get('route') for ep in episodes if ep.get('route')))
+        anime_data = animeschedule.as_get_anime_by_routes_batch(routes, timeout_per=6, max_workers=16)
+        
+        # Group episodes by route + episode number to deduplicate
+        episode_groups = {}
+        for ep in episodes:
+            route = ep.get('route')
+            ep_num = ep.get('episodeNumber')
+            if not route or not ep_num:
+                continue
+            
+            key = (route, ep_num)
+            if key not in episode_groups:
+                episode_groups[key] = []
+            episode_groups[key].append(ep)
+        
+        results = []
+        ts = int(time.time())
+        
+        # Process each unique anime+episode combination
+        for (route, ep_num), ep_list in episode_groups.items():
+            anime = anime_data.get(route)
+            if not anime:
+                continue
+            
+            mal_id, anilist_id = animeschedule._extract_ids_anywhere(anime)
+            if not mal_id:
+                continue
+            
+            # Sort by air date to get the earliest one
+            ep_list.sort(key=lambda x: animeschedule._parse_iso(x.get('episodeDate', '')) or '')
+            earliest_ep = ep_list[0]
+            
+            # Collect all air types for this episode
+            air_types = []
+            for ep in ep_list:
+                air_type = (ep.get('airType') or '').capitalize()
+                if air_type and air_type not in air_types:
+                    air_types.append(air_type)
+            
+            # Build calendar entry with air types and animeschedule data
+            item = self.base_calendar_view(earliest_ep, anime, mal_id, ts, air_types)
+            if item:
+                results.append(item)
+        
+        # Sort by day of week (Monday to Sunday)
+        weekday_order = {'Monday': 0, 'Tuesday': 1, 'Wednesday': 2, 'Thursday': 3, 'Friday': 4, 'Saturday': 5, 'Sunday': 6}
+        results.sort(key=lambda x: weekday_order.get(x.get('airing_day', 'Monday'), 0))
+        
+        return results
+    
     def process_airing_view(self, json_res):
         import time
         filter_json = [x for x in json_res['airingSchedules'] if x['media']['isAdult'] is False]
@@ -2271,6 +2366,193 @@ class AniListBrowser(BrowserBase):
             return utils.parse_view(base, False, True, dub)
         return utils.parse_view(base, True, False, dub)
 
+    def base_calendar_view(self, ep, anime, mal_id, ts, air_types=None):
+        """Build calendar entry from animeschedule episode data."""
+        import datetime
+        from resources.lib.endpoints import animeschedule
+        
+        ed = animeschedule._parse_iso(ep.get('episodeDate', ''))
+        if not ed:
+            return None
+        
+        if ed.tzinfo:
+            airingAt = ed.astimezone()
+        else:
+            airingAt = ed.replace(tzinfo=datetime.timezone.utc).astimezone()
+        
+        airingAt_day = airingAt.strftime('%A')
+        airingAt_time = airingAt.strftime('%I:%M %p')
+        airing_status = 'airing' if airingAt.timestamp() > ts else 'aired'
+        
+        episode_num = ep.get('episodeNumber', '?')
+        
+        # Add air type info if available
+        air_type_str = ''
+        if air_types:
+            air_type_str = f" ({', '.join(air_types)})"
+        elif ep.get('airType'):
+            air_type_str = f" ({ep.get('airType').capitalize()})"
+        
+        # Get title from anime data
+        title_data = anime.get('title')
+        if isinstance(title_data, dict):
+            title = title_data.get('english') or title_data.get('romaji') or title_data.get('userPreferred') or 'Unknown'
+        elif isinstance(title_data, str):
+            title = title_data
+        else:
+            title = anime.get('name', 'Unknown')
+        
+        # Get poster from animeschedule
+        poster = None
+        image_route = anime.get('imageVersionRoute')
+        if image_route:
+            poster = animeschedule.build_image_url(image_route)
+        
+        # Fallback to other image fields if imageVersionRoute not available
+        if not poster:
+            if isinstance(anime.get('image'), str):
+                poster = anime.get('image')
+            elif isinstance(anime.get('image'), dict):
+                poster = anime.get('image', {}).get('large') or anime.get('image', {}).get('medium')
+        
+        # Get description and clean HTML entities
+        description = anime.get('description', '')
+        if description:
+            import html
+            import re
+            description = html.unescape(description)
+            # First convert specific tags to Kodi format
+            description = description.replace('<br><br>', '[CR]').replace('<br>', '').replace('<i>', '[I]').replace('</i>', '[/I]').replace('<b>', '[B]').replace('</b>', '[/B]')
+            # Then strip all remaining HTML tags (including span with attributes)
+            description = re.sub(r'<[^>]+>', '', description)
+        
+        # Get genres from animeschedule format (list of dicts with 'name' field)
+        genres_list = anime.get('genres', [])
+        if isinstance(genres_list, list) and genres_list:
+            genre_names = []
+            for g in genres_list[:3]:
+                if isinstance(g, dict):
+                    genre_names.append(g.get('name', ''))
+                elif isinstance(g, str):
+                    genre_names.append(g)
+            genres = ' | '.join(filter(None, genre_names)) if genre_names else 'Genres Not Found'
+        else:
+            genres = 'Genres Not Found'
+        
+        # Get score and rank from AnimeSchedule stats
+        # AnimeSchedule provides: stats.averageScore (0-100), stats.trackedRating (rank)
+        average_score = 0
+        rank = 0
+        
+        stats = anime.get('stats', {})
+        if isinstance(stats, dict):
+            # averageScore is already 0-100 scale from AnimeSchedule
+            if stats.get('averageScore') is not None:
+                average_score = round(float(stats['averageScore']))
+            # trackedRating is the rank
+            if stats.get('trackedRating') is not None:
+                rank = stats['trackedRating']
+        
+        base = {
+            'release_title': title,
+            'poster': poster or '',
+            'ep_title': '{} {} {}{}'.format(episode_num, airing_status, airingAt_day, air_type_str),
+            'ep_airingAt': airingAt_time,
+            'airing_day': airingAt_day,
+            'averageScore': average_score,
+            'score': average_score,  # Alias for compatibility
+            'rank': rank,
+            'plot': description,
+            'genres': genres,
+            'id': mal_id,
+            '_sort_timestamp': airingAt.timestamp()
+        }
+        
+        return base
+    
+    def base_recently_aired_view(self, ep, anime, mal_id):
+        """Build recently aired item from animeschedule episode data only."""
+        import html
+        import re
+        from resources.lib.endpoints import animeschedule
+        
+        # Get title from anime data
+        title_data = anime.get('title')
+        if isinstance(title_data, dict):
+            base_title = title_data.get('english') or title_data.get('romaji') or title_data.get('userPreferred') or 'Unknown'
+        elif isinstance(title_data, str):
+            base_title = title_data
+        else:
+            base_title = anime.get('name', 'Unknown')
+        
+        # Build label with episode number
+        ep_num = ep.get('episodeNumber', 1)
+        label = f"{base_title} - Episode {ep_num}"
+        
+        # Get poster from animeschedule
+        poster = ''
+        image_route = anime.get('imageVersionRoute')
+        if image_route:
+            poster = animeschedule.build_image_url(image_route)
+        
+        if not poster:
+            if isinstance(anime.get('image'), str):
+                poster = anime.get('image')
+            elif isinstance(anime.get('image'), dict):
+                poster = anime.get('image', {}).get('large') or anime.get('image', {}).get('medium') or ''
+        
+        # Get description and clean HTML
+        desc = anime.get('description', '')
+        if desc:
+            desc = html.unescape(desc)
+            desc = desc.replace('<br><br>', '\n').replace('<br>', '\n')
+            desc = re.sub(r'<[^>]+>', '', desc)  # Strip HTML tags
+        
+        # Format episode badge
+        badge = animeschedule.as_format_episode_badge(ep)
+        plot = f"{badge}\n{desc}" if desc else badge
+        
+        # Get score and rank from AnimeSchedule stats
+        rating = None
+        stats = anime.get('stats', {})
+        if isinstance(stats, dict) and stats.get('averageScore'):
+            score = round(float(stats['averageScore'])) / 10.0  # Convert 0-100 to 0-10
+            if score > 0:
+                rating = {'score': score}
+        
+        # Get year
+        year = anime.get('year')
+        year = year if isinstance(year, int) else 0
+        
+        item = {
+            'name': label,
+            'url': f'animes/{mal_id}/',
+            'image': {
+                'poster': poster,
+                'icon': poster,
+                'thumb': poster,
+                'fanart': poster,
+                'landscape': None,
+                'banner': poster,
+                'clearart': None,
+                'clearlogo': None
+            },
+            'info': {
+                'title': label,
+                'plot': plot,
+                'year': year,
+                'mediatype': 'tvshow',
+            },
+            'cm': [],
+            'isfolder': True,
+            'isplayable': False
+        }
+        
+        if rating:
+            item['info']['rating'] = rating
+        
+        return item
+    
     def base_airing_view(self, res, ts):
         import datetime
 
@@ -2300,6 +2582,7 @@ class AniListBrowser(BrowserBase):
             'poster': res['media']['coverImage']['extraLarge'],
             'ep_title': '{} {} {}'.format(res['episode'], airing_status, airingAt_day),
             'ep_airingAt': airingAt_time,
+            'airing_day': airingAt_day,
             'averageScore': res['media']['averageScore'],
             'rank': rank,
             'plot': res['media']['description'].replace('<br><br>', '[CR]').replace('<br>', '').replace('<i>', '[I]').replace('</i>', '[/I]') if res['media']['description'] else res['media']['description'],
@@ -2635,3 +2918,505 @@ class AniListBrowser(BrowserBase):
                 selected_tags.append(selected_tag)
 
         return selected_genres_mal, selected_genres_anilist, selected_tags
+
+    @staticmethod
+    def _safe_get_title(media: dict, pref_lang: str) -> str:
+        title_obj = (media or {}).get("title") or {}
+        return title_obj.get(pref_lang) or title_obj.get("romaji") or title_obj.get("english") or ""
+
+    def _anilist_fetch_media(self, anilist_id: int) -> dict | None:
+        """Fetch AniList Media once with in-memory cache."""
+        if anilist_id in self._ANILIST_DETAILS_CACHE:
+            return self._ANILIST_DETAILS_CACHE[anilist_id]
+        try:
+            res = self.get_anime_details(anilist_id)
+            if res and "data" in res and "Media" in res["data"]:
+                media = res["data"]["Media"]
+                self._ANILIST_DETAILS_CACHE[anilist_id] = media
+                return media
+        except Exception:
+            return None
+        return None
+
+    def _anilist_fetch_media_batch(self, ids: list[int]) -> dict[int, dict]:
+        """Fetch multiple AniList Media in a single GraphQL request to avoid rate limits."""
+        if not ids:
+            return {}
+        # De-duplicate while preserving order
+        ids = list(dict.fromkeys([i for i in ids if isinstance(i, int)]))
+
+        query = '''
+        query ($ids: [Int]) {
+          Page(perPage: 50) {
+            media(id_in: $ids, type: ANIME) {
+              id
+              idMal
+              title { romaji english native }
+              coverImage { extraLarge large medium color }
+              bannerImage
+              startDate { year month day }
+              endDate { year month day }
+              description(asHtml: false)
+              synonyms
+              format
+              episodes
+              status
+              genres
+              duration
+              countryOfOrigin
+              averageScore
+              meanScore
+              popularity
+              season
+              seasonYear
+              studios(isMain: true) { nodes { name } }
+              nextAiringEpisode { episode airingAt }
+              trailer { id site thumbnail }
+              stats { scoreDistribution { score amount } }
+              characters(perPage: 25, sort: ROLE) {
+                edges {
+                  role
+                  node { id name { userPreferred full native } image { large medium } }
+                  voiceActors(language: JAPANESE) {
+                    id
+                    name { userPreferred }
+                    image { large }
+                  }
+                }
+              }
+            }
+          }
+        }
+        '''
+        variables = {"ids": ids}
+        headers = {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": "Kodi-Otaku/1.0"
+        }
+        payload = {'query': query, 'variables': variables}
+
+        for attempt in range(3):
+            try:
+                resp = client.request(
+                    self._BASE_URL,
+                    post=payload,
+                    jpost=True,
+                    headers=headers,
+                    timeout=20
+                )
+            except TypeError:
+                resp = client.request(self._BASE_URL, post=payload, jpost=True)
+            except Exception as e:
+                control.log(f"[AniList batch] request error: {e}", "error")
+                resp = None
+
+            if resp:
+                try:
+                    data = json.loads(resp) if isinstance(resp, str) else resp
+                    media_list = (((data.get("data") or {}).get("Page") or {}).get("media")) or []
+                    out: dict[int, dict] = {}
+                    for m in media_list:
+                        # ensure characters.edges exists
+                        if "characters" not in m or not isinstance(m["characters"], dict):
+                            m["characters"] = {"edges": []}
+                        elif "edges" not in m["characters"] or not isinstance(m["characters"]["edges"], list):
+                            m["characters"]["edges"] = []
+                        # transform studios.nodes to studios.edges
+                        if "studios" in m and isinstance(m["studios"], dict):
+                            nodes = m["studios"].get("nodes", [])
+                            if isinstance(nodes, list):
+                                m["studios"]["edges"] = [{"node": node} for node in nodes]
+                        out[m.get("id")] = m
+                    return out
+                except Exception as e:
+                    control.log(f"[AniList batch] decode error: {e}", "error")
+            time.sleep(0.6 * (attempt + 1))
+
+        control.log("[AniList batch] empty response after retries", "warning")
+        return {}
+
+    def _render_paired_anilist(self, pairs: list[tuple[dict, dict]]) -> list[dict]:
+        """Render list of (media, episode_dict) using existing AniList pipeline and inject badge."""
+        items = [m for (m, _) in pairs]
+        if not items:
+            return []
+        get_meta.collect_meta(items)
+        mapfunc = partial(self.base_anilist_view, completed=self.open_completed())
+
+        results: list[dict] = []
+        filtered_pairs: list[tuple[dict, dict]] = []
+
+        for media, ep_obj in pairs:
+            r = mapfunc(media)
+            if r:
+                tover = media.get("title_override")
+                if tover:
+                    try:
+                        r["info"]["title"] = tover
+                    except Exception:
+                        pass
+                results.append(r)
+                filtered_pairs.append((media, ep_obj))
+
+        # inject badge using exact paired episode to avoid misalignment
+        from resources.lib.endpoints import animeschedule as AS
+        for r, (_, ep) in zip(results, filtered_pairs):
+            badge = AS.as_format_episode_badge(ep)
+            plot = r.get("info", {}).get("plot") or ""
+            r["info"]["plot"] = f"{badge}\n{plot}" if plot else f"{badge}"
+
+        return results
+
+    def get_recently_aired(self, page=1, format=None, prefix=None):
+        """
+        Recently aired for the last 7 days from AnimeSchedule,
+        sorted latest-first, 24 items per page, excludes Donghua, using AnimeSchedule data only.
+        """
+        from resources.lib.endpoints import animeschedule as AS
+
+        # 1) Fetch and sort episodes (latest first)
+        episodes = AS.get_recently_aired_raw(
+            exclude_donghua=True,
+            tz=None,
+            air="raw"
+        )
+        if not episodes:
+            return []
+
+        def _dt(e):
+            from datetime import datetime, timezone
+            dt = AS._parse_iso(e.get("episodeDate") or "")
+            if not dt:
+                return datetime.min.replace(tzinfo=timezone.utc)
+            return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+        episodes.sort(key=_dt, reverse=True)
+
+        # 2) Page window (24/page)
+        per_page = 24
+        start_idx = (page - 1) * per_page
+        end_idx = start_idx + per_page
+        if start_idx >= len(episodes):
+            out = []
+            base_url = f"{prefix}?page=%d" if prefix else "recently_aired?page=%d"
+            return out + self.handle_paging(False, base_url, page)
+        page_eps_raw = episodes[start_idx:end_idx]
+
+        # 3) Resolve AnimeSchedule routes -> anime objects to get MAL IDs
+        routes = [e.get("route") for e in page_eps_raw if e.get("route")]
+        route_map = AS.as_get_anime_by_routes_batch(routes, timeout_per=8, max_workers=8)
+
+        # 4) Build items using only AnimeSchedule data
+        seen_mal = set()
+        items = []
+        for ep in page_eps_raw:
+            r = ep.get("route")
+            if not r:
+                continue
+            a = route_map.get(r) or {}
+            mal_id = a.get("malId")
+            if not mal_id or mal_id in seen_mal:
+                continue
+            seen_mal.add(mal_id)
+            
+            # Use helper method to build item from AnimeSchedule data only
+            item = self.base_recently_aired_view(ep, a, mal_id)
+            items.append(item)
+            
+            if len(items) >= per_page:
+                break
+
+        # If some in the page lacked malId, try to pull forward from remaining episodes
+        if len(items) < per_page:
+            for ep in episodes[end_idx:]:
+                if len(items) >= per_page:
+                    break
+                r = ep.get("route")
+                if not r:
+                    continue
+                a = route_map.get(r)
+                if a is None:
+                    a = AS.as_get_anime_by_route(r, timeout=8)
+                if not isinstance(a, dict):
+                    continue
+                mal_id = a.get("malId")
+                if not mal_id or mal_id in seen_mal:
+                    continue
+                seen_mal.add(mal_id)
+                
+                item = self.base_recently_aired_view(ep, a, mal_id)
+                items.append(item)
+
+        # 5) Pager
+        base_url = f"{prefix}?page=%d" if prefix else "recently_aired?page=%d"
+        if end_idx < len(episodes):
+            items += self.handle_paging(True, base_url, page)
+        else:
+            items += self.handle_paging(False, base_url, page)
+
+        return items
+
+    def get_recently_aired_res(self, variables):
+        from resources.lib.endpoints import animeschedule as AS
+
+        episodes = AS.get_recently_aired_raw(exclude_donghua=True, tz=None, air="raw")
+        if not episodes:
+            return []
+
+        page = variables.get("page", 1)
+        start_idx = (page - 1) * 24
+        end_idx = page * 24
+        page_episodes = episodes[start_idx:end_idx]
+
+        routes = [e.get("route") for e in page_episodes if e.get("route")]
+        route_map = AS.as_get_anime_by_routes_batch(routes, timeout_per=8, max_workers=8)
+
+        with_ids: list[dict] = []
+        for e in page_episodes:
+            r = e.get("route")
+            det = route_map.get(r) if r else None
+            aid = det.get("anilistId") if det else None
+            if not aid and det and det.get("malId"):
+                mapping = database.get_mappings(det["malId"], "mal_id") or {}
+                aid = mapping.get("anilist_id")
+            if aid:
+                e["anilistId"] = aid
+                with_ids.append(e)
+
+        if not with_ids:
+            out = []
+            if end_idx < len(episodes):
+                out += self.handle_paging(True, "recently_aired?page=%d", page)
+            return out
+
+        # Batch first, then fallback
+        ids = [e["anilistId"] for e in with_ids if isinstance(e.get("anilistId"), int)]
+        id_to_media = self._anilist_fetch_media_batch(ids) or {}
+
+        missing = [aid for aid in ids if aid not in id_to_media]
+        if missing:
+            with ThreadPoolExecutor(max_workers=4) as ex:
+                futs = {ex.submit(self._anilist_fetch_media, aid): aid for aid in missing}
+                for f in futs:
+                    try:
+                        media = f.result()
+                        if media:
+                            id_to_media[futs[f]] = media
+                    except Exception:
+                        pass
+
+        pairs: list[tuple[dict, dict]] = []
+        for e in with_ids:
+            media = id_to_media.get(e.get("anilistId"))
+            if not media:
+                continue
+            ep_num = e.get("episodeNumber", 1)
+            title = self._safe_get_title(media, self.title_lang)
+            media = dict(media)
+            media["title_override"] = f"{title} - Episode {ep_num}"
+            pairs.append((media, e))
+
+        results = self._render_paired_anilist(pairs)
+
+        if end_idx < len(episodes):
+            results += self.handle_paging(True, "recently_aired?page=%d", page)
+
+        return results
+
+    def process_recently_aired_view(self, query, variables, base_plugin_url, page):
+        from resources.lib.endpoints import animeschedule as AS
+
+        episodes = AS.get_recently_aired_raw(exclude_donghua=True, tz=None, air="raw")
+        if not episodes:
+            return []
+
+        start_idx = (page - 1) * 24
+        end_idx = page * 24
+        page_episodes = episodes[start_idx:end_idx]
+
+        routes = [e.get("route") for e in page_episodes if e.get("route")]
+        route_map = AS.as_get_anime_by_routes_batch(routes, timeout_per=8, max_workers=8)
+
+        with_ids: list[dict] = []
+        for e in page_episodes:
+            r = e.get("route")
+            det = route_map.get(r) if r else None
+            aid = det.get("anilistId") if det else None
+            if not aid and det and det.get("malId"):
+                mapping = database.get_mappings(det["malId"], "mal_id") or {}
+                aid = mapping.get("anilist_id")
+            if aid:
+                e["anilistId"] = aid
+                with_ids.append(e)
+
+        if not with_ids:
+            out = []
+            if end_idx < len(episodes):
+                out += self.handle_paging(True, "recently_aired?page=%d", page)
+            return out
+
+        # Batch first, then fallback
+        ids = [e["anilistId"] for e in with_ids if isinstance(e.get("anilistId"), int)]
+        id_to_media = self._anilist_fetch_media_batch(ids) or {}
+
+        missing = [aid for aid in ids if aid not in id_to_media]
+        if missing:
+            with ThreadPoolExecutor(max_workers=4) as ex:
+                futs = {ex.submit(self._anilist_fetch_media, aid): aid for aid in missing}
+                for f in futs:
+                    try:
+                        media = f.result()
+                        if media:
+                            id_to_media[futs[f]] = media
+                    except Exception:
+                        pass
+
+        pairs: list[tuple[dict, dict]] = []
+        for e in with_ids:
+            media = id_to_media.get(e.get("anilistId"))
+            if not media:
+                continue
+            ep_num = e.get("episodeNumber", 1)
+            title = self._safe_get_title(media, self.title_lang)
+            media = dict(media)
+            media["title_override"] = f"{title} - Episode {ep_num}"
+            pairs.append((media, e))
+
+        results = self._render_paired_anilist(pairs)
+
+        if end_idx < len(episodes):
+            results += self.handle_paging(True, "recently_aired?page=%d", page)
+
+        return results
+
+    def get_anime_details(self, anilist_id):
+        """
+        Fetch detailed anime information from AniList by ID.
+        Returns a dict shaped like {"data": {"Media": {...}}} or None on error.
+        Includes characters to satisfy downstream views.
+        """
+        query = '''
+        query ($id: Int) {
+            Media (id: $id, type: ANIME) {
+                id
+                idMal
+                title {
+                    romaji
+                    english
+                    native
+                }
+                coverImage {
+                    extraLarge
+                    large
+                    medium
+                    color
+                }
+                bannerImage
+                startDate { year month day }
+                endDate { year month day }
+                description(asHtml: false)
+                synonyms
+                format
+                episodes
+                status
+                genres
+                duration
+                countryOfOrigin
+                averageScore
+                meanScore
+                popularity
+                season
+                seasonYear
+                studios(isMain: true) { nodes { name } }
+                nextAiringEpisode {
+                    episode
+                    airingAt
+                }
+                trailer {
+                    id
+                    site
+                    thumbnail
+                }
+                stats {
+                    scoreDistribution { score amount }
+                }
+                characters(perPage: 25, sort: ROLE) {
+                    edges {
+                        role
+                        node {
+                            id
+                            name { userPreferred full native }
+                            image { large medium }
+                        }
+                        voiceActors(language: JAPANESE) {
+                            id
+                            name { userPreferred }
+                            image { large }
+                        }
+                    }
+                }
+            }
+        }
+        '''
+        variables = {'id': anilist_id}
+        headers = {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": "Kodi-Otaku/1.0"
+        }
+
+        results = None
+        for attempt in range(3):
+            try:
+                resp = client.request(
+                    self._BASE_URL,
+                    post={'query': query, 'variables': variables},
+                    jpost=True,
+                    headers=headers,
+                    timeout=15
+                )
+            except TypeError:
+                resp = client.request(self._BASE_URL, post={'query': query, 'variables': variables}, jpost=True)
+            except Exception as e:
+                control.log(f"[AniList get_anime_details] request error for id={anilist_id}: {e}", "error")
+                resp = None
+
+            if resp:
+                try:
+                    results = json.loads(resp) if isinstance(resp, str) else resp
+                except Exception as e:
+                    control.log(f"[AniList get_anime_details] JSON decode error for id={anilist_id}: {e}", "error")
+                    results = None
+
+                if results and "errors" not in results:
+                    media = (results.get('data') or {}).get('Media')
+                    if media:
+                        if "characters" not in media or not isinstance(media["characters"], dict):
+                            media["characters"] = {"edges": []}
+                        elif "edges" not in media["characters"] or not isinstance(media["characters"]["edges"], list):
+                            media["characters"]["edges"] = []
+
+                        # transform studios.nodes to studios.edges
+                        if "studios" in media and isinstance(media["studios"], dict):
+                            nodes = media["studios"].get("nodes", [])
+                            if isinstance(nodes, list):
+                                media["studios"]["edges"] = [{"node": node} for node in nodes]
+
+                        try:
+                            if control.getBool('general.malposters') and media.get('coverImage'):
+                                mapping = database.get_mappings(anilist_id, 'anilist_id') or {}
+                                mal_picture = mapping.get('mal_picture')
+                                if mal_picture and isinstance(mal_picture, str) and '.' in mal_picture:
+                                    base, ext = mal_picture.rsplit('.', 1)
+                                    mal_large = f"https://cdn.myanimelist.net/images/anime/{base}l.{ext}"
+                                    media['coverImage']['extraLarge'] = mal_large
+                        except Exception:
+                            pass
+
+                        return {"data": {"Media": media}}
+
+            time.sleep(0.5 * (attempt + 1))
+
+        control.log(f"[AniList get_anime_details] empty response for id={anilist_id}", "warning")
+        return None

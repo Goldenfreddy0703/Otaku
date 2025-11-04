@@ -288,6 +288,10 @@ msgctxt "#30968"
 msgid "Watch History"
 msgstr ""
 
+msgctxt "#30969"
+msgid "Recently Aired"
+msgstr ""
+
 ######TOOLS & SEARCH DIRECTORY#######
 msgctxt "#30009"
 msgid "Setup Wizard"

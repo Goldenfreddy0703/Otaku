@@ -2417,7 +2417,7 @@
 			<group id="1" label="30409" help="">
 				<setting id="menu.mainmenu.config" type="list[string]" label="30406" help="">
 					<level>0</level>
-					<default>last_watched,watch_history,airing_calendar,airing_last_season,airing_this_season,airing_next_season,trending,popular,voted,favourites,top_100,genres,search,tools</default>
+					<default>last_watched,watch_history,airing_calendar,airing_last_season,airing_this_season,airing_next_season,recently_aired,trending,popular,voted,favourites,top_100,genres,search,tools</default>
 					<constraints>
 						<options>
 							<option label="30900">last_watched</option>
@@ -2426,6 +2426,7 @@
 							<option label="30902">airing_last_season</option>
 							<option label="30903">airing_this_season</option>
 							<option label="30904">airing_next_season</option>
+							<option label="30969">recently_aired</option>
 							<option label="30905">movies</option>
 							<option label="30906">tv_shows</option>
 							<option label="30907">tv_shorts</option>

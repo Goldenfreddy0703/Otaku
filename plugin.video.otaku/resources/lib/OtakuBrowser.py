@@ -193,64 +193,78 @@ class OtakuBrowser(BrowserBase):
                 season_start_date_next, season_end_date_next, year_start_date_next, year_end_date_next)
 
     def get_airing_calendar(self, page=1):
-        days_of_week = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
-        list_ = []
-
-        mal_cache = self.get_cached_data()
-        if mal_cache:
-            list_ = mal_cache
-        else:
-            for day in days_of_week:
-                day_results = []
-                current_page = page
-                request_count = 0
-
-                while True:
-                    retries = 3
-                    popular = None
-                    while retries > 0:
-                        popular = self.get_airing_calendar_res(day, current_page)
-                        if popular and 'data' in popular:
-                            break
-                        retries -= 1
-                        time.sleep(1)  # Add delay before retrying
-
-                    if not popular or 'data' not in popular:
-                        break
-
-                    day_results.extend(popular['data'])
-
-                    if not popular['pagination']['has_next_page']:
-                        break
-
-                    current_page += 1
-                    request_count += 1
-
-                    if request_count >= 3:
-                        time.sleep(1)  # Add delay to respect API rate limit
-                        request_count = 0
-
-                day_results.reverse()
-                list_.extend(day_results)
-                self.set_cached_data(list_)
-
-        # Wrap the results in a dictionary that mimics the API response structure
-        wrapped_results = {
-            "pagination": {
-                "last_visible_page": 1,
-                "has_next_page": False,
-                "current_page": 1,
-                "items": {
-                    "count": len(list_),
-                    "total": len(list_),
-                    "per_page": 25
-                }
-            },
-            "data": list_
-        }
-
-        airing = self.process_airing_view(wrapped_results)
-        return airing
+        """Get weekly calendar using AnimeSchedule API."""
+        from resources.lib.endpoints import animeschedule
+        
+        # Fetch calendar episodes from AnimeSchedule (includes Donghua like MalBrowser)
+        episodes = animeschedule.get_airing_calendar(
+            exclude_donghua=False,
+            tz=None,
+            air="all"
+        )
+        if not episodes:
+            return []
+        
+        # Process calendar view using AnimeSchedule data
+        results = self.process_calendar_view(episodes)
+        return results
+    
+    def process_calendar_view(self, episodes):
+        """Process animeschedule episodes into calendar format."""
+        import time
+        from resources.lib.endpoints import animeschedule
+        
+        # Group episodes by route to fetch anime data in batch
+        routes = list(set(ep.get('route') for ep in episodes if ep.get('route')))
+        anime_data = animeschedule.as_get_anime_by_routes_batch(routes, timeout_per=6, max_workers=16)
+        
+        # Group episodes by route + episode number to deduplicate
+        episode_groups = {}
+        for ep in episodes:
+            route = ep.get('route')
+            ep_num = ep.get('episodeNumber')
+            if not route or not ep_num:
+                continue
+            
+            key = (route, ep_num)
+            if key not in episode_groups:
+                episode_groups[key] = []
+            episode_groups[key].append(ep)
+        
+        results = []
+        ts = int(time.time())
+        
+        # Process each unique anime+episode combination
+        for (route, ep_num), ep_list in episode_groups.items():
+            anime = anime_data.get(route)
+            if not anime:
+                continue
+            
+            mal_id, anilist_id = animeschedule._extract_ids_anywhere(anime)
+            if not mal_id:
+                continue
+            
+            # Sort by air date to get the earliest one
+            ep_list.sort(key=lambda x: animeschedule._parse_iso(x.get('episodeDate', '')) or '')
+            earliest_ep = ep_list[0]
+            
+            # Collect all air types for this episode
+            air_types = []
+            for ep in ep_list:
+                air_type = (ep.get('airType') or '').capitalize()
+                if air_type and air_type not in air_types:
+                    air_types.append(air_type)
+            
+            # Build calendar entry with air types and animeschedule data
+            item = self.base_calendar_view(earliest_ep, anime, mal_id, ts, air_types)
+            if item:
+                results.append(item)
+        
+        # Sort by day of week (Monday to Sunday)
+        weekday_order = {'Monday': 0, 'Tuesday': 1, 'Wednesday': 2, 'Thursday': 3, 'Friday': 4, 'Saturday': 5, 'Sunday': 6}
+        results.sort(key=lambda x: weekday_order.get(x.get('airing_day', 'Monday'), 0))
+        
+        return results
 
     def get_cached_data(self):
         if os.path.exists(control.mal_calendar_json):
@@ -2012,6 +2026,277 @@ class OtakuBrowser(BrowserBase):
         }
 
         return base
+    
+    def base_calendar_view(self, ep, anime, mal_id, ts, air_types=None):
+        """Build calendar entry from animeschedule episode data."""
+        import datetime
+        from resources.lib.endpoints import animeschedule
+        
+        ed = animeschedule._parse_iso(ep.get('episodeDate', ''))
+        if not ed:
+            return None
+        
+        if ed.tzinfo:
+            airingAt = ed.astimezone()
+        else:
+            airingAt = ed.replace(tzinfo=datetime.timezone.utc).astimezone()
+        
+        airingAt_day = airingAt.strftime('%A')
+        airingAt_time = airingAt.strftime('%I:%M %p')
+        airing_status = 'airing' if airingAt.timestamp() > ts else 'aired'
+        
+        episode_num = ep.get('episodeNumber', '?')
+        
+        # Add air type info if available
+        air_type_str = ''
+        if air_types:
+            air_type_str = f" ({', '.join(air_types)})"
+        elif ep.get('airType'):
+            air_type_str = f" ({ep.get('airType').capitalize()})"
+        
+        # Get title from anime data
+        title_data = anime.get('title')
+        if isinstance(title_data, dict):
+            title = title_data.get('english') or title_data.get('romaji') or title_data.get('userPreferred') or 'Unknown'
+        elif isinstance(title_data, str):
+            title = title_data
+        else:
+            title = anime.get('name', 'Unknown')
+        
+        # Get poster from animeschedule
+        poster = None
+        image_route = anime.get('imageVersionRoute')
+        if image_route:
+            poster = animeschedule.build_image_url(image_route)
+        
+        if not poster:
+            if isinstance(anime.get('image'), str):
+                poster = anime.get('image')
+            elif isinstance(anime.get('image'), dict):
+                poster = anime.get('image', {}).get('large') or anime.get('image', {}).get('medium')
+        
+        # Get description and clean HTML entities
+        description = anime.get('description', '')
+        if description:
+            import html
+            import re
+            description = html.unescape(description)
+            description = description.replace('<br><br>', '[CR]').replace('<br>', '').replace('<i>', '[I]').replace('</i>', '[/I]').replace('<b>', '[B]').replace('</b>', '[/B]')
+            description = re.sub(r'<[^>]+>', '', description)
+        
+        # Get genres from animeschedule format (list of dicts with 'name' field)
+        genres_list = anime.get('genres', [])
+        if isinstance(genres_list, list) and genres_list:
+            genre_names = []
+            for g in genres_list[:3]:
+                if isinstance(g, dict):
+                    genre_names.append(g.get('name', ''))
+                elif isinstance(g, str):
+                    genre_names.append(g)
+            genres = ' | '.join(filter(None, genre_names)) if genre_names else 'Genres Not Found'
+        else:
+            genres = 'Genres Not Found'
+        
+        # Get score and rank from AnimeSchedule stats
+        average_score = 0
+        rank = 0
+        
+        stats = anime.get('stats', {})
+        if isinstance(stats, dict):
+            if stats.get('averageScore') is not None:
+                average_score = round(float(stats['averageScore']))
+            if stats.get('trackedRating') is not None:
+                rank = stats['trackedRating']
+        
+        base = {
+            'release_title': title,
+            'poster': poster or '',
+            'ep_title': '{} {} {}{}'.format(episode_num, airing_status, airingAt_day, air_type_str),
+            'ep_airingAt': airingAt_time,
+            'airing_day': airingAt_day,
+            'averageScore': average_score,
+            'score': average_score,
+            'rank': rank,
+            'plot': description,
+            'genres': genres,
+            'id': mal_id,
+            '_sort_timestamp': airingAt.timestamp()
+        }
+        
+        return base
+    
+    def base_recently_aired_view(self, ep, anime, mal_id):
+        """Build recently aired item from animeschedule episode data only."""
+        import html
+        import re
+        from resources.lib.endpoints import animeschedule
+        
+        # Get title from anime data
+        title_data = anime.get('title')
+        if isinstance(title_data, dict):
+            base_title = title_data.get('english') or title_data.get('romaji') or title_data.get('userPreferred') or 'Unknown'
+        elif isinstance(title_data, str):
+            base_title = title_data
+        else:
+            base_title = anime.get('name', 'Unknown')
+        
+        # Build label with episode number
+        ep_num = ep.get('episodeNumber', 1)
+        label = f"{base_title} - Episode {ep_num}"
+        
+        # Get poster from animeschedule
+        poster = ''
+        image_route = anime.get('imageVersionRoute')
+        if image_route:
+            poster = animeschedule.build_image_url(image_route)
+        
+        if not poster:
+            if isinstance(anime.get('image'), str):
+                poster = anime.get('image')
+            elif isinstance(anime.get('image'), dict):
+                poster = anime.get('image', {}).get('large') or anime.get('image', {}).get('medium') or ''
+        
+        # Get description and clean HTML
+        desc = anime.get('description', '')
+        if desc:
+            desc = html.unescape(desc)
+            desc = desc.replace('<br><br>', '\n').replace('<br>', '\n')
+            desc = re.sub(r'<[^>]+>', '', desc)
+        
+        # Format episode badge
+        badge = animeschedule.as_format_episode_badge(ep)
+        plot = f"{badge}\n{desc}" if desc else badge
+        
+        # Get score and rank from AnimeSchedule stats
+        rating = None
+        stats = anime.get('stats', {})
+        if isinstance(stats, dict) and stats.get('averageScore'):
+            score = round(float(stats['averageScore'])) / 10.0
+            if score > 0:
+                rating = {'score': score}
+        
+        # Get year
+        year = anime.get('year')
+        year = year if isinstance(year, int) else 0
+        
+        item = {
+            'name': label,
+            'url': f'animes/{mal_id}/',
+            'image': {
+                'poster': poster,
+                'icon': poster,
+                'thumb': poster,
+                'fanart': poster,
+                'landscape': None,
+                'banner': poster,
+                'clearart': None,
+                'clearlogo': None
+            },
+            'info': {
+                'title': label,
+                'plot': plot,
+                'year': year,
+                'mediatype': 'tvshow',
+            },
+            'cm': [],
+            'isfolder': True,
+            'isplayable': False
+        }
+        
+        if rating:
+            item['info']['rating'] = rating
+        
+        return item
+    
+    def get_recently_aired(self, page=1, format=None, prefix=None):
+        """
+        Recently aired for the last 7 days from AnimeSchedule,
+        sorted latest-first, 24 items per page, includes Donghua, using AnimeSchedule data only.
+        """
+        from resources.lib.endpoints import animeschedule as AS
+
+        # 1) Fetch and sort episodes (latest first)
+        episodes = AS.get_recently_aired_raw(
+            exclude_donghua=False,
+            tz=None,
+            air="raw",
+            include_airing_now=True
+        )
+
+        if not isinstance(episodes, list) or not episodes:
+            return []
+
+        def _dt(e):
+            from datetime import datetime, timezone
+            dt = AS._parse_iso(e.get("episodeDate") or "")
+            if not dt:
+                return datetime.min.replace(tzinfo=timezone.utc)
+            return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+        episodes.sort(key=_dt, reverse=True)
+
+        # 2) Page window (24/page)
+        per_page = 24
+        start_idx = (page - 1) * per_page
+        end_idx = start_idx + per_page
+        if start_idx >= len(episodes):
+            out = []
+            base_url = f"{prefix}?page=%d" if prefix else "recently_aired?page=%d"
+            return out + self.handle_paging(False, base_url, page)
+        page_eps_raw = episodes[start_idx:end_idx]
+
+        # 3) Resolve AnimeSchedule routes -> anime objects
+        routes = [e.get("route") for e in page_eps_raw if e.get("route")]
+        route_map = AS.as_get_anime_by_routes_batch(routes, timeout_per=8, max_workers=8)
+
+        # 4) Build items using only AnimeSchedule data
+        seen_mal = set()
+        items = []
+        for ep in page_eps_raw:
+            r = ep.get("route")
+            if not r:
+                continue
+            a = route_map.get(r) or {}
+            mal_id = a.get("malId")
+            if not mal_id or mal_id in seen_mal:
+                continue
+            seen_mal.add(mal_id)
+            
+            item = self.base_recently_aired_view(ep, a, mal_id)
+            items.append(item)
+            
+            if len(items) >= per_page:
+                break
+
+        # If some in the page lacked malId, try to pull forward
+        if len(items) < per_page:
+            for ep in episodes[end_idx:]:
+                if len(items) >= per_page:
+                    break
+                r = ep.get("route")
+                if not r:
+                    continue
+                a = route_map.get(r)
+                if a is None:
+                    a = AS.as_get_anime_by_route(r, timeout=8)
+                if not isinstance(a, dict):
+                    continue
+                mal_id = a.get("malId")
+                if not mal_id or mal_id in seen_mal:
+                    continue
+                seen_mal.add(mal_id)
+                
+                item = self.base_recently_aired_view(ep, a, mal_id)
+                items.append(item)
+
+        # 5) Pager
+        base_url = f"{prefix}?page=%d" if prefix else "recently_aired?page=%d"
+        if end_idx < len(episodes):
+            items += self.handle_paging(True, base_url, page)
+        else:
+            items += self.handle_paging(False, base_url, page)
+
+        return items
 
     def database_update_show(self, mal_res=None, anilist_res=None):
         """
