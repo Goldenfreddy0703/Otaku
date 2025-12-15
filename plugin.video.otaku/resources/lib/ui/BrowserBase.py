@@ -16,7 +16,8 @@ class BrowserBase(object):
 
         next_page = page + 1
         name = "Next Page (%d)" % next_page
-        next_url = base_url % next_page
+        sep = '&' if '?' in base_url else '?'
+        next_url = f"{base_url}{sep}page={next_page}"
         url_path, sep, query = next_url.partition('?')
 
         try:
