@@ -1661,16 +1661,27 @@ def SEARCH(payload, params):
             format = mappings[key][0] if control.settingids.browser_api in ['mal', 'otaku'] else mappings[key][1]
             break
 
-    query = payload
+    from urllib.parse import unquote
+
+    # 🔧 FIX: extract real query from payload
+    query = payload.split('/', 1)[1] if '/' in payload else payload
+    query = unquote(query)
+
     page = int(params.get('page', 1))
+
+    # Only open keyboard if NO query
     if not query:
         query = control.keyboard(control.lang(30018))
         if not query:
             return control.draw_items([], 'tvshows')
         if control.getInt('searchhistory') == 0:
             database.addSearchHistory(query, type)
+
     prefix = plugin_url.split('/', 1)[0]
-    control.draw_items(BROWSER.get_search(query, page, format, prefix), 'tvshows')
+    control.draw_items(
+        BROWSER.get_search(query, page, format, prefix),
+        'tvshows'
+    )
 
 
 @Route('play/*')
