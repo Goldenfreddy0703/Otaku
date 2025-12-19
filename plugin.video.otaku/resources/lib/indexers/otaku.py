@@ -280,6 +280,19 @@ class OtakuAPI:
         kodi_meta = pickle.loads(database.get_show(mal_id)['kodi_meta'])
         episode = res.get('mal_id', res.get('episode'))
         url = f"{mal_id}/{episode}"
+        
+        # Check if should hide unaired episodes - use fallback logic across sources
+        aired_date = (
+            (anidb_meta.get('airdate') if anidb_meta else None)
+            or (simkl_meta.get('date') if simkl_meta else None)
+            or (jikan_meta.get('aired') if jikan_meta else None)
+            or (anizip_meta.get('airDate') if anizip_meta else None)
+            or (kitsu_meta['attributes'].get('airdate') if kitsu_meta and kitsu_meta.get('attributes') else None)
+            or ''
+        )
+        if indexers.should_hide_unaired_episode(aired_date):
+            return None
+        
         # Fallback logic for title
         title = (
             (anidb_meta.get('title') if anidb_meta else None)
@@ -461,6 +474,7 @@ class OtakuAPI:
         # Parse episodes in parallel for faster processing
         mapfunc = partial(self.parse_episode_view, mal_id=mal_id, season=season, poster=poster, fanart=fanart, clearart=clearart, clearlogo=clearlogo, eps_watched=eps_watched, update_time=update_time, tvshowtitle=tvshowtitle, dub_data=dub_data, filler_data=filler_data, meta_cache=meta_cache)
         all_results = utils.parallel_process(base_ep_list, mapfunc, max_workers=8)
+        all_results = [r for r in all_results if r is not None]
         all_results = sorted(all_results, key=lambda x: x['info']['episode'])
 
         if control.getBool('override.meta.api') and control.getBool('override.meta.notify'):
@@ -475,6 +489,7 @@ class OtakuAPI:
             mapfunc2 = partial(self.parse_episode_view, mal_id=mal_id, season=season, poster=poster, fanart=fanart, clearart=clearart, clearlogo=clearlogo, eps_watched=eps_watched, update_time=update_time, tvshowtitle=tvshowtitle, dub_data=dub_data, filler_data=filler_data, episodes=episodes)
             # Parallelize episode parsing
             all_results = utils.parallel_process(result, mapfunc2, max_workers=8)
+            all_results = [r for r in all_results if r is not None]
         else:
             mapfunc1 = partial(indexers.parse_episodes, eps_watched=eps_watched, dub_data=dub_data)
             # Parallelize episode parsing
@@ -495,7 +510,7 @@ class OtakuAPI:
         if isinstance(clearlogo, list):
             clearlogo = random.choice(clearlogo) if clearlogo else ''
         tvshowtitle = kodi_meta['title_userPreferred']
-        if not (eps_watched := kodi_meta.get('eps_watched')) and control.settingids.watchlist_data:
+        if not (eps_watched := kodi_meta.get('eps_watched')) and control.getBool('interface.watchlist.data'):
             from resources.lib.WatchlistFlavor import WatchlistFlavor
             flavor = WatchlistFlavor.get_update_flavor()
             if flavor and flavor.flavor_name in control.enabled_watchlists():

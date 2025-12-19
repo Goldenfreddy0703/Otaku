@@ -170,17 +170,53 @@ class AniListWLF(WatchlistFlavorBase):
             'sort': self.__get_sort(),
             'forceSingleCompletedList': False
         }
-        return self.process_status_view(query, variables, next_up)
+        return self.process_status_view(query, variables, next_up, status, offset, page)
 
-    def process_status_view(self, query, variables, next_up):
-        r = client.post(self._URL, headers=self.__headers(), json_data={'query': query, 'variables': variables})
-        results = r.json() if r else {}
-        lists = results['data']['MediaListCollection']['lists']
-        entries = []
-        for mlist in lists:
-            for entrie in mlist['entries']:
-                if entrie not in entries:
-                    entries.append(entrie)
+    @staticmethod
+    def handle_paging(hasmore, base_url, page):
+        if not hasmore or not control.is_addon_visible() and control.getBool('widget.hide.nextpage'):
+            return []
+        next_page = page + 1
+        name = "Next Page (%d)" % next_page
+        return [utils.allocate_item(name, f'{base_url}?page={next_page}', True, False, [], 'next.png', {'plot': name}, fanart='next.png')]
+
+    def process_status_view(self, query, variables, next_up, status, offset, page):
+        from resources.lib.ui.database import (
+            get_watchlist_cache, save_watchlist_cache,
+            is_watchlist_cache_valid, get_watchlist_cache_count
+        )
+
+        paging_enabled = control.getBool('interface.watchlist.paging')
+        per_page = control.getInt('interface.perpage.watchlist') if paging_enabled else 0
+        offset = int(offset) if offset else 0
+
+        # Check cache validity
+        if not is_watchlist_cache_valid(self._NAME, status):
+            # Fetch all items from API and cache them
+            r = client.post(self._URL, headers=self.__headers(), json_data={'query': query, 'variables': variables})
+            results = r.json() if r else {}
+            lists = results.get('data', {}).get('MediaListCollection', {}).get('lists', [])
+            entries = []
+            for mlist in lists:
+                for entrie in mlist['entries']:
+                    if entrie not in entries:
+                        entries.append(entrie)
+            if entries:
+                save_watchlist_cache(self._NAME, status, entries)
+
+        # Get items from cache
+        total_count = get_watchlist_cache_count(self._NAME, status)
+
+        if paging_enabled and per_page > 0:
+            cached_items = get_watchlist_cache(self._NAME, status, limit=per_page, offset=offset)
+        else:
+            cached_items = get_watchlist_cache(self._NAME, status)
+
+        if not cached_items:
+            return []
+
+        # Deserialize cached items
+        entries = [pickle.loads(item['data']) for item in cached_items]
         get_meta.collect_meta(entries)
 
         # If sorting by title, sort manually alphabetically.
@@ -189,15 +225,21 @@ class AniListWLF(WatchlistFlavorBase):
 
         # If sorting by score, sort manually by score.
         if int(self.sort) == 1:
-            entries.sort(key=lambda entry: entry['media']['averageScore'], reverse=True)
+            entries.sort(key=lambda entry: entry['media'].get('averageScore') or 0, reverse=True)
 
-        # If oder is descending, reverse the order.
+        # If order is descending, reverse the order.
         if int(self.order) == 1:
             entries.reverse()
 
-        # If next_up is True, reverse the order if needed.
-        all_results = map(self._base_next_up_view, entries) if next_up else map(self.base_watchlist_status_view, entries)
-        all_results = list(all_results)
+        # Map to views
+        all_results = list(map(self._base_next_up_view, entries)) if next_up else list(map(self.base_watchlist_status_view, entries))
+        all_results = [r for r in all_results if r is not None]
+
+        # Add paging if enabled
+        if paging_enabled and per_page > 0:
+            has_next = (offset + per_page) < total_count
+            all_results += self.handle_paging(has_next, f'watchlist_status_type_pages/anilist/{status}/{offset + per_page}', page)
+
         return all_results
 
     @div_flavor
@@ -500,6 +542,7 @@ class AniListWLF(WatchlistFlavorBase):
         return results
 
     def update_list_status(self, mal_id, status):
+        from resources.lib.ui.database import clear_watchlist_cache
         anilist_id = self._get_mapping_id(mal_id, 'anilist_id')
         if not anilist_id:
             return False
@@ -518,9 +561,12 @@ class AniListWLF(WatchlistFlavorBase):
         }
 
         r = client.post(self._URL, headers=self.__headers(), json_data={'query': query, 'variables': variables})
+        if r and r.ok:
+            clear_watchlist_cache(self._NAME)  # Clear all statuses since item moved
         return r and r.ok
 
     def update_num_episodes(self, mal_id, episode):
+        from resources.lib.ui.database import clear_watchlist_cache
         anilist_id = self._get_mapping_id(mal_id, 'anilist_id')
         if not anilist_id:
             return False
@@ -540,9 +586,12 @@ class AniListWLF(WatchlistFlavorBase):
         }
 
         r = client.post(self._URL, headers=self.__headers(), json_data={'query': query, 'variables': variables})
+        if r and r.ok:
+            clear_watchlist_cache(self._NAME)  # Clear cache to reflect progress
         return r and r.ok
 
     def update_score(self, mal_id, score):
+        from resources.lib.ui.database import clear_watchlist_cache
         anilist_id = self._get_mapping_id(mal_id, 'anilist_id')
         if not anilist_id:
             return False
@@ -561,9 +610,12 @@ class AniListWLF(WatchlistFlavorBase):
         }
 
         r = client.post(self._URL, headers=self.__headers(), json_data={'query': query, 'variables': variables})
+        if r and r.ok:
+            clear_watchlist_cache(self._NAME)  # Clear cache to reflect score
         return r and r.ok
 
     def delete_anime(self, mal_id):
+        from resources.lib.ui.database import clear_watchlist_cache
         anilist_id = self._get_mapping_id(mal_id, 'anilist_id')
         if not anilist_id:
             return False
@@ -584,4 +636,6 @@ class AniListWLF(WatchlistFlavorBase):
             'id': int(list_id)
         }
         r = client.post(self._URL, headers=self.__headers(), json_data={'query': query, 'variables': variables})
+        if r and r.ok:
+            clear_watchlist_cache(self._NAME)  # Clear cache after deletion
         return r and r.ok

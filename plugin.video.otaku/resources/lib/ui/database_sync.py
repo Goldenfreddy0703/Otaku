@@ -19,7 +19,7 @@ class SyncDatabase:
         # You will need to update the below version number to match the new addon version
         # This will ensure that the metadata required for operations is available
         # You may also update this version number to force a rebuild of the database after updating Otaku
-        self.last_meta_update = '1.0.9'
+        self.last_meta_update = '1.0.10'
         self.refresh_activites()
         self.check_database_version()
 
@@ -155,6 +155,32 @@ class SyncDatabase:
             cursor.connection.commit()
 
     @staticmethod
+    def build_watchlist_cache_table():
+        with SQL(control.malSyncDB) as cursor:
+            # Drop old table if it exists with wrong schema
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='watchlist_cache'")
+            if cursor.fetchone():
+                # Check if item_order column exists
+                cursor.execute("PRAGMA table_info(watchlist_cache)")
+                columns = [col[1] for col in cursor.fetchall()]
+                if 'item_order' not in columns:
+                    cursor.execute('DROP TABLE watchlist_cache')
+            
+            cursor.execute('''CREATE TABLE IF NOT EXISTS watchlist_cache (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                service TEXT NOT NULL,
+                status TEXT NOT NULL,
+                mal_id INTEGER,
+                item_order INTEGER NOT NULL,
+                data BLOB NOT NULL,
+                last_updated INTEGER NOT NULL,
+                UNIQUE(service, status, item_order)
+            )''')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_watchlist_service_status ON watchlist_cache(service, status)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_watchlist_last_updated ON watchlist_cache(last_updated)')
+            cursor.connection.commit()
+
+    @staticmethod
     def build_sync_activities():
         with SQL(control.malSyncDB) as cursor:
             cursor.execute('CREATE TABLE IF NOT EXISTS activities (sync_id INTEGER PRIMARY KEY, otaku_version TEXT NOT NULL)')
@@ -179,6 +205,7 @@ class SyncDatabase:
         self.build_showmeta_table()
         self.build_episode_table()
         self.build_show_data_table()
+        self.build_watchlist_cache_table()
 
         self.set_base_activites()
         self.refresh_activites()

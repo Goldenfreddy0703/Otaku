@@ -90,11 +90,45 @@ class SimklWLF(WatchlistFlavorBase):
         url = f'watchlist_status_type/{self._NAME}/{res[1]}'
         return [utils.allocate_item(res[0], url, True, False, [], f'{res[0].lower()}.png', {})]
 
-    def get_watchlist_status(self, status, next_up, offset, page):
-        results = self.get_all_items(status)
-
-        if not results:
+    @staticmethod
+    def handle_paging(hasmore, base_url, page):
+        if not hasmore or not control.is_addon_visible() and control.getBool('widget.hide.nextpage'):
             return []
+        next_page = page + 1
+        name = "Next Page (%d)" % next_page
+        return [utils.allocate_item(name, f'{base_url}?page={next_page}', True, False, [], 'next.png', {'plot': name}, fanart='next.png')]
+
+    def get_watchlist_status(self, status, next_up, offset, page):
+        from resources.lib.ui.database import (
+            get_watchlist_cache, save_watchlist_cache, 
+            is_watchlist_cache_valid, get_watchlist_cache_count
+        )
+        
+        paging_enabled = control.getBool('interface.watchlist.paging')
+        per_page = control.getInt('interface.perpage.watchlist') if paging_enabled else 0
+        offset = int(offset) if offset else 0
+
+        # Check cache validity
+        if not is_watchlist_cache_valid(self._NAME, status):
+            # Fetch all items from API and cache them (raw items only)
+            results = self.get_all_items(status)
+            if results and results.get('anime'):
+                save_watchlist_cache(self._NAME, status, results['anime'])
+        
+        # Get items from cache
+        total_count = get_watchlist_cache_count(self._NAME, status)
+        
+        if paging_enabled and per_page > 0:
+            cached_items = get_watchlist_cache(self._NAME, status, limit=per_page, offset=offset)
+        else:
+            cached_items = get_watchlist_cache(self._NAME, status)
+        
+        if not cached_items:
+            return []
+        
+        # Deserialize cached items
+        import pickle
+        items = [pickle.loads(item['data']) for item in cached_items]
 
         # Get the progress of the item
         def get_progress(item):
@@ -109,19 +143,18 @@ class SimklWLF(WatchlistFlavorBase):
                 current = 0
             return current
 
-        # Extract mal_ids from Simkl response
-        mal_ids = [anime['show']['ids']['mal'] for anime in results['anime'] if anime['show']['ids'].get('mal')]
+        # Fetch AniList data for current page items only (fast for small batches)
+        mal_ids = [anime['show']['ids']['mal'] for anime in items if anime['show']['ids'].get('mal')]
         mal_id_dicts = [{'mal_id': mid} for mid in mal_ids]
         get_meta.collect_meta(mal_id_dicts)
 
-        # Fetch AniList data for all MAL IDs
         try:
             from resources.lib.endpoints.anilist import Anilist
             anilist_data = Anilist().get_anilist_by_mal_ids(mal_ids)
         except Exception:
             anilist_data = []
 
-        # Build AniList lookup by MAL ID (ensure all keys and lookups are strings)
+        # Build AniList lookup by MAL ID
         anilist_by_mal_id = {str(item.get('idMal')): item for item in anilist_data if item.get('idMal')}
 
         # Pass AniList data to view functions
@@ -130,21 +163,27 @@ class SimklWLF(WatchlistFlavorBase):
             anilist_item = anilist_by_mal_id.get(mal_id)
             return self._base_next_up_view(res, anilist_res=anilist_item) if next_up else self._base_watchlist_status_view(res, anilist_res=anilist_item)
 
-        all_results = list(map(viewfunc, results['anime']))
+        all_results = list(filter(None, map(viewfunc, items)))
 
+        # Apply sorting
         if int(self.sort) == 0:  # anime_title
-            all_results = sorted(all_results, key=lambda x: x['info']['title'])
+            all_results = sorted(all_results, key=lambda x: x['info']['title'].lower() if x['info'].get('title') else '')
         elif int(self.sort) == 1:    # user_rating
-            all_results = sorted(all_results, key=lambda x: x['info']['user_rating'] or 0, reverse=True)
+            all_results = sorted(all_results, key=lambda x: x['info'].get('user_rating') or 0, reverse=True)
         elif int(self.sort) == 2:    # progress
             all_results = sorted(all_results, key=get_progress)
         elif int(self.sort) == 3:    # list_updated_at
-            all_results = sorted(all_results, key=lambda x: x['info']['last_watched'] or "0", reverse=True)
+            all_results = sorted(all_results, key=lambda x: x['info'].get('last_watched') or "0", reverse=True)
         elif int(self.sort) == 4:    # last_added
             all_results.reverse()
 
         if int(self.order) == 1:
             all_results.reverse()
+
+        # Add paging if enabled
+        if paging_enabled and per_page > 0:
+            has_next = (offset + per_page) < total_count
+            all_results += self.handle_paging(has_next, f'watchlist_status_type_pages/simkl/{status}/{offset + per_page}', page)
 
         return all_results
 
@@ -163,11 +202,8 @@ class SimklWLF(WatchlistFlavorBase):
         show = database.get_show(mal_id)
         kodi_meta = pickle.loads(show['kodi_meta']) if show else {}
 
-        # Title logic: prefer Simkl, fallback to AniList
-        if self.title_lang == 'english':
-            title = kodi_meta.get('ename') or res['show']['title']
-        else:
-            title = res['show']['title']
+        # Title logic: prefer AniList for title_lang support, fallback to Simkl
+        title = res['show']['title']
         if anilist_res:
             title = anilist_res.get('title', {}).get(self.title_lang) or anilist_res.get('title', {}).get('romaji') or title
         if title is None:
@@ -477,6 +513,7 @@ class SimklWLF(WatchlistFlavorBase):
         return r.json() if r else {}
 
     def update_list_status(self, mal_id, status):
+        from resources.lib.ui.database import clear_watchlist_cache
         data = {
             "shows": [{
                 "to": status,
@@ -489,12 +526,14 @@ class SimklWLF(WatchlistFlavorBase):
         if r:
             r = r.json()
             if not r['not_found']['shows'] or not r['not_found']['shows']:
+                clear_watchlist_cache(self._NAME)  # Clear all statuses since item moved
                 if status == 'completed' and r.get('added', {}).get('shows', [{}])[0].get('to') == 'watching':
                     return 'watching'
                 return True
         return False
 
     def update_num_episodes(self, mal_id, episode):
+        from resources.lib.ui.database import clear_watchlist_cache
         data = {
             "shows": [{
                 "ids": {
@@ -507,10 +546,12 @@ class SimklWLF(WatchlistFlavorBase):
         if r:
             r = r.json()
             if not r['not_found']['shows'] or not r['not_found']['movies']:
+                clear_watchlist_cache(self._NAME)  # Clear cache to reflect progress
                 return True
         return False
 
     def update_score(self, mal_id, score):
+        from resources.lib.ui.database import clear_watchlist_cache
         data = {
             "shows": [{
                 'rating': score,
@@ -527,10 +568,12 @@ class SimklWLF(WatchlistFlavorBase):
         if r:
             r = r.json()
             if not r['not_found']['shows'] or not r['not_found']['movies']:
+                clear_watchlist_cache(self._NAME)  # Clear cache to reflect score
                 return True
         return False
 
     def delete_anime(self, mal_id):
+        from resources.lib.ui.database import clear_watchlist_cache
         data = {
             "shows": [{
                 "ids": {
@@ -542,5 +585,6 @@ class SimklWLF(WatchlistFlavorBase):
         if r:
             r = r.json()
             if not r['not_found']['shows'] or not r['not_found']['movies']:
+                clear_watchlist_cache(self._NAME)  # Clear cache after deletion
                 return True
         return False

@@ -75,13 +75,12 @@ class MyAnimeListWLF(WatchlistFlavorBase):
         control.setInt('mal.expiry', int(time.time()) + int(res['expires_in']))
 
     @staticmethod
-    def handle_paging(hasnextpage, base_url, page):
-        if not hasnextpage or not control.is_addon_visible() and control.getBool('widget.hide.nextpage'):
+    def handle_paging(next_offset, base_url, page):
+        if not control.is_addon_visible() and control.getBool('widget.hide.nextpage'):
             return []
         next_page = page + 1
         name = "Next Page (%d)" % next_page
-        offset = (re.compile("offset=(.+?)&").findall(hasnextpage))[0]
-        return [utils.allocate_item(name, f'{base_url}/{offset}?page={next_page}', True, False, [], 'next.png', {'plot': name}, fanart='next.png')]
+        return [utils.allocate_item(name, f'{base_url}/{next_offset}?page={next_page}', True, False, [], 'next.png', {'plot': name}, fanart='next.png')]
 
     def __get_sort(self):
         sort_types = ['anime_title', 'list_score', "", 'list_updated_at', 'anime_start_date']
@@ -113,6 +112,15 @@ class MyAnimeListWLF(WatchlistFlavorBase):
         return actions
 
     def get_watchlist_status(self, status, next_up, offset, page):
+        from resources.lib.ui.database import (
+            get_watchlist_cache, save_watchlist_cache,
+            is_watchlist_cache_valid, get_watchlist_cache_count
+        )
+
+        paging_enabled = control.getBool('interface.watchlist.paging')
+        per_page = control.getInt('interface.perpage.watchlist') if paging_enabled else 1000
+        offset = int(offset) if offset else 0
+
         fields = [
             'alternative_titles',
             'list_status',
@@ -127,27 +135,72 @@ class MyAnimeListWLF(WatchlistFlavorBase):
             'media_type',
             'status'
         ]
-        params = {
-            "status": status,
-            "sort": self.__get_sort(),
-            "limit": control.getInt('interface.perpage.watchlist'),
-            "offset": offset,
-            "fields": ','.join(fields),
-            "nsfw": True
-        }
-        url = f'{self._URL}/users/@me/animelist'
-        return self._process_status_view(url, params, next_up, f'watchlist_status_type_pages/mal/{status}', page)
 
-    def _process_status_view(self, url, params, next_up, base_plugin_url, page):
-        r = client.get(url, headers=self.__headers(), params=params)
-        results = r.json() if r else {}
+        # Check cache validity
+        if not is_watchlist_cache_valid(self._NAME, status):
+            # Fetch all items from API (use high limit to get all)
+            params = {
+                "status": status,
+                "sort": self.__get_sort(),
+                "limit": 1000,
+                "offset": 0,
+                "fields": ','.join(fields),
+                "nsfw": True
+            }
+            url = f'{self._URL}/users/@me/animelist'
+            all_data = []
+            
+            r = client.get(url, headers=self.__headers(), params=params)
+            results = r.json() if r else {}
+            all_data.extend(results.get('data', []))
+            
+            # Fetch remaining pages
+            while results.get('paging', {}).get('next'):
+                r = client.get(results['paging']['next'], headers=self.__headers())
+                results = r.json() if r else {}
+                all_data.extend(results.get('data', []))
+            
+            # Apply sorting before saving to cache
+            if all_data:
+                # If sorting by anime_title and language is english, sort manually by english title.
+                if self.__get_sort() == 'anime_title' and self.title_lang == 'english':
+                    all_data.sort(key=lambda item: (item['node'].get('alternative_titles', {}).get('en') or item['node'].get('title', '')).lower())
 
-        # Extract mal_ids and create a list of dictionaries with 'mal_id' keys
-        mal_ids = [item['node']['id'] for item in results.get('data', [])]
+                # If sorting by progress, sort manually by progress:
+                if int(self.sort) == 2:
+                    all_data.sort(key=lambda item: item['list_status']['num_episodes_watched'])
+
+                # If order is descending, reverse the order.
+                if int(self.order) == 1:
+                    all_data.reverse()
+
+                save_watchlist_cache(self._NAME, status, all_data)
+
+        # Get items from cache
+        total_count = get_watchlist_cache_count(self._NAME, status)
+
+        if paging_enabled and per_page > 0:
+            cached_items = get_watchlist_cache(self._NAME, status, limit=per_page, offset=offset)
+        else:
+            cached_items = get_watchlist_cache(self._NAME, status)
+
+        if not cached_items:
+            return []
+
+        # Deserialize cached items
+        items = [pickle.loads(item['data']) for item in cached_items]
+
+        return self._process_status_view(items, next_up, f'watchlist_status_type_pages/mal/{status}', page, offset, per_page, total_count, paging_enabled)
+
+    def _process_status_view(self, items, next_up, base_plugin_url, page, offset, per_page, total_count, paging_enabled):
+        if not items:
+            return []
+
+        # Fetch AniList data for current page items only (fast for small batches)
+        mal_ids = [item['node']['id'] for item in items]
         mal_id_dicts = [{'mal_id': mid} for mid in mal_ids]
         get_meta.collect_meta(mal_id_dicts)
 
-        # Fetch AniList data for all MAL IDs
         try:
             from resources.lib.endpoints.anilist import Anilist
             anilist_data = Anilist().get_anilist_by_mal_ids(mal_ids)
@@ -157,26 +210,20 @@ class MyAnimeListWLF(WatchlistFlavorBase):
         # Build AniList lookup by MAL ID
         anilist_by_mal_id = {item.get('idMal'): item for item in anilist_data if item.get('idMal')}
 
-        # If sorting by anime_title and language is english, sort manually by english title.
-        if self.__get_sort() == 'anime_title' and self.title_lang == 'english':
-            results['data'].sort(key=lambda item: (item['node'].get('alternative_titles', {}).get('en') or item['node'].get('title')).lower())
-
-        # If sorting by progress, sort manually by progress:
-        if int(self.sort) == 2:
-            results['data'].sort(key=lambda item: item['list_status']['num_episodes_watched'])
-
-        # If order is descending, reverse the order.
-        if int(self.order) == 1:
-            results['data'].reverse()
-
         # Pass AniList data to view functions
         def viewfunc(res):
             mal_id = res['node']['id']
             anilist_item = anilist_by_mal_id.get(mal_id)
             return self._base_next_up_view(res, anilist_res=anilist_item) if next_up else self._base_watchlist_status_view(res, anilist_res=anilist_item)
 
-        all_results = list(map(viewfunc, results['data']))
-        all_results += self.handle_paging(results.get('paging', {}).get('next'), base_plugin_url, page)
+        all_results = list(map(viewfunc, items))
+
+        # Handle paging
+        if paging_enabled and per_page > 0:
+            next_offset = offset + per_page
+            if next_offset < total_count:
+                all_results += self.handle_paging(next_offset, base_plugin_url, page)
+
         return all_results
 
     @div_flavor
@@ -526,26 +573,38 @@ class MyAnimeListWLF(WatchlistFlavorBase):
         return data
 
     def update_list_status(self, mal_id, status):
+        from resources.lib.ui.database import clear_watchlist_cache
         data = {
             "status": status,
         }
         r = client.put(f'{self._URL}/anime/{mal_id}/my_list_status', headers=self.__headers(), data=data)
+        if r and r.ok:
+            clear_watchlist_cache(self._NAME)  # Clear all statuses since item moved
         return r and r.ok
 
     def update_num_episodes(self, mal_id, episode):
+        from resources.lib.ui.database import clear_watchlist_cache
         data = {
             'num_watched_episodes': int(episode)
         }
         r = client.put(f'{self._URL}/anime/{mal_id}/my_list_status', headers=self.__headers(), data=data)
+        if r and r.ok:
+            clear_watchlist_cache(self._NAME)  # Clear cache to reflect progress
         return r and r.ok
 
     def update_score(self, mal_id, score):
+        from resources.lib.ui.database import clear_watchlist_cache
         data = {
             "score": score,
         }
         r = client.put(f'{self._URL}/anime/{mal_id}/my_list_status', headers=self.__headers(), data=data)
+        if r and r.ok:
+            clear_watchlist_cache(self._NAME)  # Clear cache to reflect score
         return r and r.ok
 
     def delete_anime(self, mal_id):
+        from resources.lib.ui.database import clear_watchlist_cache
         r = client.delete(f'{self._URL}/anime/{mal_id}/my_list_status', headers=self.__headers())
+        if r and r.ok:
+            clear_watchlist_cache(self._NAME)  # Clear cache after deletion
         return r and r.ok

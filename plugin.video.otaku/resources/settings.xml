@@ -96,6 +96,11 @@
 					<default>false</default>
 					<control type="toggle"/>
 				</setting>
+				<setting id="interface.aired_episodes" type="boolean" label="30448" help="">
+					<level>0</level>
+					<default>false</default>
+					<control type="toggle"/>
+				</setting>
 				<setting id="interface.content_type" type="boolean" label="30387" help="30388">
 					<level>0</level>
 					<default>false</default>
@@ -325,17 +330,25 @@
 						</dependency>
 					</dependencies>
 				</setting>
-				<setting id="interface.perpage.watchlist" type="integer" label="30106" help="">
+				<setting id="interface.watchlist.paging" type="boolean" label="30449" help="">
+    				<level>0</level>
+    				<default>true</default>
+    				<control type="toggle"/>
+				</setting>
+				<setting id="interface.perpage.watchlist" type="integer" label="30106" help="" parent="interface.watchlist.paging">
 					<level>0</level>
-					<default>100</default>
+					<default>50</default>
 					<constraints>
-						<minimum>1</minimum>
-						<step>1</step>
+						<minimum>10</minimum>
+						<step>5</step>
 						<maximum>100</maximum>
 					</constraints>
 					<control type="slider" format="integer">
 						<popup>false</popup>
 					</control>
+					<dependencies>
+						<dependency type="visible" setting="interface.watchlist.paging">true</dependency>
+					</dependencies>
 				</setting>
 				<setting id="interface.check.updates" type="integer" label="30107" help="">
 					<level>0</level>
@@ -2121,6 +2134,14 @@
 					<level>0</level>
 					<default>false</default>
 					<control type="toggle"/>
+				</setting>
+				<setting id="watchlist.prefetch.enabled" type="boolean" label="30450" help="">
+					<level>0</level>
+					<default>true</default>
+					<control type="toggle"/>
+					<dependencies>
+						<dependency type="visible" setting="watchlist.update.enabled">true</dependency>
+					</dependencies>
 				</setting>
 				<setting id="watchlist.update.flavor" type="string" label="30164" help="">
 					<level>0</level>

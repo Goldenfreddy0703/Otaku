@@ -258,7 +258,7 @@ class Sources(BrowserBase):
             # Parse sources in parallel for faster processing
             mapfunc = partial(self.parse_animetosho_view, episode=episode)
             all_results = utils.parallel_process(cache_list, mapfunc, max_workers=5) if cache_list else []
-            if control.settingids.showuncached and uncashed_list:
+            if control.getBool('show.uncached') and uncashed_list:
                 mapfunc2 = partial(self.parse_animetosho_view, episode=episode, cached=False)
                 all_results += utils.parallel_process(uncashed_list, mapfunc2, max_workers=5)
             return all_results
@@ -306,7 +306,7 @@ class Sources(BrowserBase):
             # Parse sources in parallel for faster processing
             mapfunc = partial(self.parse_animetosho_view, episode="1")
             all_results = utils.parallel_process(cache_list, mapfunc, max_workers=5) if cache_list else []
-            if control.settingids.showuncached and uncashed_list:
+            if control.getBool('show.uncached') and uncashed_list:
                 mapfunc2 = partial(self.parse_animetosho_view, episode="1", cached=False)
                 all_results += utils.parallel_process(uncashed_list, mapfunc2, max_workers=5)
             return all_results

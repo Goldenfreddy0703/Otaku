@@ -3,6 +3,7 @@ import os
 import json
 import urllib.request
 import urllib.error
+import threading
 
 from resources.lib.ui import control, client, database_sync
 
@@ -62,7 +63,7 @@ def update_mappings_db():
 
 
 def sync_watchlist(silent=False):
-    if control.settingids.watchlist_sync:
+    if control.getBool('watchlist.sync.enabled'):
         control.log('### Updating Completed Sync')
         from resources.lib.WatchlistFlavor import WatchlistFlavor
 
@@ -82,6 +83,55 @@ def sync_watchlist(silent=False):
     else:
         if not silent:
             control.ok_dialog(control.ADDON_NAME, "Watchilst Sync is Disabled")
+
+
+def prefetch_watchlist():
+    """Prefetch all watchlist statuses in background for faster loading."""
+    if not control.getBool('watchlist.prefetch.enabled'):
+        return
+    if not control.getBool('watchlist.update.enabled'):
+        return
+
+    from resources.lib.ui.database import is_watchlist_cache_valid
+
+    flavor_name = control.getSetting('watchlist.update.flavor').lower()
+    if flavor_name not in control.enabled_watchlists():
+        return
+
+    # Map flavor to all its status names
+    status_map = {
+        'mal': ['watching', 'completed', 'on_hold', 'dropped', 'plan_to_watch'],
+        'anilist': ['CURRENT', 'COMPLETED', 'PAUSED', 'DROPPED', 'PLANNING', 'REWATCHING'],
+        'kitsu': ['current', 'completed', 'on_hold', 'dropped', 'planned'],
+        'simkl': ['watching', 'completed', 'on_hold', 'dropped', 'plantowatch']
+    }
+    statuses = status_map.get(flavor_name)
+    if not statuses:
+        return
+
+    try:
+        from resources.lib.WatchlistFlavor import WatchlistFlavor
+        flavor = WatchlistFlavor.get_update_flavor()
+        if not flavor:
+            return
+
+        for status in statuses:
+            # Check if cache is still valid - skip this status
+            if is_watchlist_cache_valid(flavor_name, status):
+                control.log(f'### Watchlist cache valid for {flavor_name}/{status}, skipping')
+                continue
+
+            control.log(f'### Prefetching {flavor_name} watchlist ({status})')
+            try:
+                # Call get_watchlist_status which will fetch and cache the data
+                flavor.get_watchlist_status(status, next_up=False, offset=0, page=1)
+                control.log(f'### Prefetch complete for {flavor_name}/{status}')
+            except Exception as e:
+                control.log(f'### Prefetch failed for {status}: {e}', 'warning')
+
+        control.log(f'### Watchlist prefetch finished for {flavor_name}')
+    except Exception as e:
+        control.log(f'### Watchlist prefetch failed: {e}', 'warning')
 
 
 def update_dub_json():
@@ -247,4 +297,6 @@ if __name__ == "__main__":
             # update_calendars()
             sync_watchlist(True)
             control.setInt('update.time.1', int(time.time()))
+    # Prefetch watchlist in background thread (non-blocking)
+    threading.Thread(target=prefetch_watchlist, daemon=True).start()
     control.log('##################  MAINTENANCE COMPLETE ######################')

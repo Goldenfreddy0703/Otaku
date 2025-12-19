@@ -1,3 +1,21 @@
+Changelog v5.2.64 (2025-12-19):
+- Added watchlist paging with persistent caching across all flavors (AniList, Kitsu, MAL, Simkl)
+- Added new watchlist database table and cache management functions
+- Added settings for enabling paging, page size, and prefetching watchlists on startup
+- Implemented background prefetching of watchlists for faster access
+- Improved button handling in wlf_auth window with direct control ID processing
+- Added touchscreen support for wlf_auth window with onTouch method
+- Enhanced artwork handling in watch history with extended metadata from shows_meta table
+- Improved artwork fallbacks for last watched and watch history entries
+- Refactored TMDB endpoint to separate fanart, thumb, and clearlogo images more accurately
+- Refactored TVDB endpoint to use dedicated artworks endpoint with refined type handling
+- Added "Hide Unaired Episodes" setting with filtering logic across all indexers
+- Optimized indexer imports in get_anime_init to only import required modules
+- Removed SettingIDs proxy and replaced with direct control.getBool()/getStr() calls
+- Added lazy browser initialization and lazy indexer imports for faster startup
+- Added in-memory User-Agent cache and artwork path cache
+- Switched to bulk directory adds for all lists to improve navigation speed
+
 Changelog v5.2.63 (2025-11-14):
 - Added comprehensive source filter system with 5 categories (Video Codecs, HDR Codecs, Audio Codecs, Audio Channels, Miscellaneous)
 - Implemented Seren-style filter dialog with visual selection feedback

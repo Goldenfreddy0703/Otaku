@@ -16,7 +16,7 @@ class BrowserBase(object):
 
         next_page = page + 1
         name = "Next Page (%d)" % next_page
-        next_url = base_url % next_page
+        next_url = re.sub(r'page=%d', f'page={next_page}', base_url)
         url_path, sep, query = next_url.partition('?')
 
         try:

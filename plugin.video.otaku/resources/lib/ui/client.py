@@ -46,6 +46,13 @@ _session_openers = {}
 _session_timestamps = {}
 _SESSION_TIMEOUT = 600  # 10 minutes
 
+# In-memory User-Agent cache to avoid settings DB lookups
+_cached_useragent = None
+_cached_useragent_time = 0
+_cached_mobile_useragent = None
+_cached_mobile_useragent_time = 0
+_USERAGENT_CACHE_TTL = 3600  # 1 hour
+
 
 def _cleanup_old_sessions():
     """Clean up sessions older than timeout to prevent memory leaks"""
@@ -59,33 +66,29 @@ def _cleanup_old_sessions():
 
 
 def _get_cached_useragent(mobile=False):
-    """Get cached user agent to avoid database lookups"""
+    """Get cached user agent from memory to avoid database lookups"""
     import time
+    global _cached_useragent, _cached_useragent_time, _cached_mobile_useragent, _cached_mobile_useragent_time
 
-    setting_key = 'cache.useragent' if not mobile else 'cache.mobile.useragent'
-    timestamp_key = 'cache.useragent.timestamp' if not mobile else 'cache.mobile.useragent.timestamp'
+    current_time = time.time()
 
-    # Check if cache exists and is valid (1 hour TTL)
-    try:
-        cached_time = control.getNumber(timestamp_key)
-        if cached_time and (time.time() - cached_time < 3600):
-            cached_agent = control.getSetting(setting_key)
-            if cached_agent:
-                return cached_agent
-    except:
-        pass
-
-    # Generate new user agent and cache it
+    # Check in-memory cache
     if mobile:
-        agent = randommobileagent()
+        if _cached_mobile_useragent and (current_time - _cached_mobile_useragent_time < _USERAGENT_CACHE_TTL):
+            return _cached_mobile_useragent
     else:
-        agent = randomagent()
+        if _cached_useragent and (current_time - _cached_useragent_time < _USERAGENT_CACHE_TTL):
+            return _cached_useragent
 
-    try:
-        control.setSetting(setting_key, agent)
-        control.setNumber(timestamp_key, time.time())
-    except:
-        pass  # If setting fails, just use the agent without caching
+    # Generate new user agent and cache in memory
+    agent = randommobileagent() if mobile else randomagent()
+
+    if mobile:
+        _cached_mobile_useragent = agent
+        _cached_mobile_useragent_time = current_time
+    else:
+        _cached_useragent = agent
+        _cached_useragent_time = current_time
 
     return agent
 

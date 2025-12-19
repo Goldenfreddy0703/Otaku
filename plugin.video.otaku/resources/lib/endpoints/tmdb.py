@@ -32,22 +32,23 @@ def getArt(meta_ids, mtype, limit=None):
         res = response.json() if response else {}
 
         if res:
+            # Backdrops are for fanart (wide 16:9 background images)
             if res.get('backdrops'):
-                items = []
-                items2 = []
-                # Apply limit during collection if specified
                 backdrops = res['backdrops'][:limit] if limit else res['backdrops']
-                for item in backdrops:
-                    if item.get('file_path'):
-                        items.append(backgroundPath + item['file_path'])
-                        items2.append(thumbPath + item['file_path'])
+                items = [backgroundPath + item['file_path'] for item in backdrops if item.get('file_path')]
                 art['fanart'] = items
-                art['thumb'] = items2
 
+            # Posters are for thumbnails (portrait images)
+            if res.get('posters'):
+                posters = res['posters'][:limit] if limit else res['posters']
+                items = [thumbPath + item['file_path'] for item in posters if item.get('file_path')]
+                art['thumb'] = items
+
+            # Logos are clearlogos (transparent PNG title/logo images)
             if res.get('logos'):
                 logos = res['logos'][:limit] if limit else res['logos']
                 items = [backgroundPath + item["file_path"] for item in logos if item.get('file_path')]
-                art['clearart'] = items
+                art['clearlogo'] = items
     return art
 
 

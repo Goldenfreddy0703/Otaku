@@ -38,13 +38,11 @@ def getArt(meta_ids, mtype, limit=None):
 
     headers = {'Authorization': f'Bearer {token}'}
 
-    # TVDB v4 uses different endpoints for series and movies
+    # TVDB v4 - use dedicated artworks endpoint
     if mtype == 'movies':
-        # For movies, use the movies endpoint
-        response = client.get(f'{baseUrl}/movies/{tvdb_id}/extended', headers=headers)
+        response = client.get(f'{baseUrl}/movies/{tvdb_id}/artworks', headers=headers)
     else:
-        # For TV shows, use the series endpoint with artworks
-        response = client.get(f'{baseUrl}/series/{tvdb_id}/extended', headers=headers)
+        response = client.get(f'{baseUrl}/series/{tvdb_id}/artworks', headers=headers)
 
     if not response:
         return art
@@ -55,8 +53,8 @@ def getArt(meta_ids, mtype, limit=None):
     if not data:
         return art
 
-    # Process artworks
-    artworks = data.get('artworks', [])
+    # Process artworks - check for 'artworks' key or if data itself is a list
+    artworks = data.get('artworks', []) if isinstance(data, dict) else data if isinstance(data, list) else []
 
     if artworks:
         fanart_images = []
@@ -76,26 +74,30 @@ def getArt(meta_ids, mtype, limit=None):
             if not image_url.startswith('http'):
                 image_url = f'https://artworks.thetvdb.com{image_url}'
 
-            # Fanart/Background - apply limit check
+            # TVDB Artwork Type IDs (from /artwork/types endpoint):
+            # Series: 2=Poster, 3=Background, 22=ClearArt, 23=ClearLogo
+            # Movie: 14=Poster, 15=Background, 24=ClearArt, 25=ClearLogo
+
+            # Fanart/Background
             if artwork_type in [3, 15]:  # 3=Series Background, 15=Movie Background
                 if artwork_lang in lang or not artwork_lang:
                     if limit is None or len(fanart_images) < limit:
                         fanart_images.append(image_url)
 
-            # Thumbnails/Posters - apply limit check
+            # Posters
             elif artwork_type in [2, 14]:  # 2=Series Poster, 14=Movie Poster
                 if artwork_lang in lang or not artwork_lang:
                     if limit is None or len(thumb_images) < limit:
                         thumb_images.append(image_url)
 
-            # Clear Art - apply limit check
-            elif artwork_type in [22, 23]:  # 22=Clear Art, 23=HD Clear Art
+            # Clear Art
+            elif artwork_type in [22, 24]:  # 22=Series ClearArt, 24=Movie ClearArt
                 if artwork_lang in lang or not artwork_lang:
                     if limit is None or len(clearart_images) < limit:
                         clearart_images.append(image_url)
 
-            # Clear Logo (language-specific)
-            elif artwork_type in [5, 6]:  # 5=Clear Logo, 6=HD Clear Logo
+            # Clear Logo
+            elif artwork_type in [23, 25]:  # 23=Series ClearLogo, 25=Movie ClearLogo
                 clearlogo_images.append({
                     'url': image_url,
                     'lang': artwork_lang

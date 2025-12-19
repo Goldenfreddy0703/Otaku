@@ -408,7 +408,7 @@ def xbmc_add_dir(name, url, art, info, draw_cm, bulk_add, isfolder, isplayable):
         art['fanart'] = OTAKU_FANART
     else:
         if isinstance(art['fanart'], list):
-            if settingids.fanart_select:
+            if getBool('context.otaku.fanartselect'):
                 if info.get('UniqueIDs', {}).get('mal_id'):
                     mal_id = str(info["UniqueIDs"]["mal_id"])
 
@@ -472,12 +472,8 @@ def draw_items(video_data, content_type=''):
         log(f"Widget detected - adding {widget_delay}ms delay")
         xbmc.sleep(widget_delay)
 
-    if len(video_data) > 99:
-        bulk_draw_items(video_data)
-    else:
-        for vid in video_data:
-            if vid:
-                xbmc_add_dir(vid['name'], vid['url'], vid['image'], vid['info'], vid['cm'], False, vid['isfolder'], vid['isplayable'])
+    # Always use bulk directory adds for better performance (Seren-style optimization)
+    bulk_draw_items(video_data)
     if content_type:
         xbmcplugin.setContent(HANDLE, content_type)
     if content_type == 'episodes':
@@ -510,7 +506,7 @@ def draw_items(video_data, content_type=''):
                 xbmc.executebuiltin('Container.SetViewMode(%d)' % get_view_type(getSetting('interface.episode.view')))
 
     # move to episode position currently watching
-    if content_type == "episodes" and settingids.smart_scroll:
+    if content_type == "episodes" and getBool('general.smart.scroll.enable'):
         try:
             num_watched = int(xbmc.getInfoLabel("Container.TotalWatched"))
             total_ep = int(xbmc.getInfoLabel('Container(id).NumItems'))
@@ -611,27 +607,3 @@ def print(string, *args):
         string = f'{string} {i}'
     textviewer_dialog('print', f'{string}')
     del args, string
-
-
-class SettingIDs:
-    def __init__(self):
-        # Bools
-        self.showuncached = getBool('show.uncached')
-        self.smart_scroll = getBool('general.smart.scroll.enable')
-        self.watchlist_sync = getBool('watchlist.sync.enabled')
-        self.filler = getBool('jz.filler')
-        self.clean_titles = getBool('interface.cleantitles')
-        self.terminateoncloud = getBool('general.terminate.oncloud')
-        self.terminateonlocal = getBool('general.terminate.onlocal')
-        self.dubonly = getBool("divflavors.dubonly")
-        self.showdub = getBool("divflavors.showdub")
-        self.watchlist_data = getBool('interface.watchlist.data')
-        self.fanart_select = getBool('context.otaku.fanartselect')
-
-        # Ints
-
-        # Str
-        self.browser_api = getStr('browser.api')
-
-
-settingids = SettingIDs()

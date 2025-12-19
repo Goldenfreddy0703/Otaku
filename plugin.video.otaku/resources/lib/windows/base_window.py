@@ -61,7 +61,7 @@ class BaseWindow(xbmcgui.WindowXMLDialog):
             fanart = control.OTAKU_FANART
         else:
             if isinstance(fanart, list):
-                if control.settingids.fanart_select and self._mal_id:
+                if control.getBool('context.otaku.fanartselect') and self._mal_id:
                     cache_key = f"fanart_{self._mal_id}"
                     if cache_key in _artwork_cache:
                         fanart = _artwork_cache[cache_key]

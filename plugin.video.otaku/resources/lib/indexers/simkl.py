@@ -15,6 +15,8 @@ class SIMKLAPI:
         self.imagePath = "https://wsrv.nl/?url=https://simkl.in/episodes/%s_w.webp"
 
     def parse_episode_view(self, res, mal_id, season, poster, fanart, clearart, clearlogo, eps_watched, update_time, tvshowtitle, dub_data, filler_data, episodes=None):
+        if indexers.should_hide_unaired_episode(res.get('date', '')):
+            return None
         kodi_meta = pickle.loads(database.get_show(mal_id)['kodi_meta'])
         episode = int(res['episode'])
         url = f"{mal_id}/{episode}"
@@ -78,6 +80,7 @@ class SIMKLAPI:
         mapfunc = partial(self.parse_episode_view, mal_id=mal_id, season=season, poster=poster, fanart=fanart, clearart=clearart, clearlogo=clearlogo, eps_watched=eps_watched, update_time=update_time, tvshowtitle=tvshowtitle, dub_data=dub_data, filler_data=filler_data)
         # Parallelize episode parsing for faster processing
         all_results = utils.parallel_process(result_ep, mapfunc, max_workers=8)
+        all_results = [r for r in all_results if r is not None]
 
         if control.getBool('override.meta.api') and control.getBool('override.meta.notify'):
             control.notify("SIMKL", f'{tvshowtitle} Added to Database', icon=poster)
@@ -92,6 +95,7 @@ class SIMKLAPI:
             mapfunc2 = partial(self.parse_episode_view, mal_id=mal_id, season=season, poster=poster, fanart=fanart, clearart=clearart, clearlogo=clearlogo, eps_watched=eps_watched, update_time=update_time, tvshowtitle=tvshowtitle, dub_data=dub_data, filler_data=None, episodes=episodes)
             # Parallelize episode parsing
             all_results = utils.parallel_process(result_ep, mapfunc2, max_workers=8)
+            all_results = [r for r in all_results if r is not None]
             if control.getBool('override.meta.api') and control.getBool('override.meta.notify'):
                 control.notify("SIMKL Appended", f'{tvshowtitle} Appended to Database', icon=poster)
         else:
@@ -114,7 +118,7 @@ class SIMKLAPI:
         if isinstance(clearlogo, list):
             clearlogo = random.choice(clearlogo) if clearlogo else ''
         tvshowtitle = kodi_meta['title_userPreferred']
-        if not (eps_watched := kodi_meta.get('eps_watched')) and control.settingids.watchlist_data:
+        if not (eps_watched := kodi_meta.get('eps_watched')) and control.getBool('interface.watchlist.data'):
             from resources.lib.WatchlistFlavor import WatchlistFlavor
             flavor = WatchlistFlavor.get_update_flavor()
             if flavor and flavor.flavor_name in control.enabled_watchlists():

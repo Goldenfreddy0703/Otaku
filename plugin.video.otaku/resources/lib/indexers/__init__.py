@@ -10,7 +10,7 @@ def parse_episodes(res, eps_watched, dub_data=None):
     parsed = pickle.loads(res['kodi_meta'])
     if eps_watched and int(eps_watched) >= res['number']:
         parsed['info']['playcount'] = 1
-    if control.settingids.clean_titles and parsed['info'].get('playcount') != 1:
+    if control.getBool('interface.cleantitles') and parsed['info'].get('playcount') != 1:
         parsed['info']['title'] = f'Episode {res["number"]}'
         parsed['info']['plot'] = None
     code = endpoints.get_second_label(parsed['info'], dub_data, res['filler'])
@@ -56,9 +56,36 @@ def get_diff(episodes_0):
     return update_time, diff
 
 
+def should_hide_unaired_episode(aired_date_str):
+    """
+    Check if an episode should be hidden based on aired date and interface.aired_episodes setting.
+    Returns True if episode is unaired and should be hidden, False otherwise.
+    """
+    import datetime
+    if not control.getBool('interface.aired_episodes'):
+        return False
+    
+    if not aired_date_str:
+        return False
+    
+    try:
+        # Parse the aired date with fallback for compatibility
+        try:
+            aired_date = datetime.datetime.strptime(aired_date_str[:10], '%Y-%m-%d')
+        except:
+            import time
+            aired_date = datetime.datetime.fromtimestamp(time.mktime(time.strptime(aired_date_str[:10], '%Y-%m-%d')))
+        
+        today = datetime.datetime.now()
+        return aired_date > today
+    except (ValueError, TypeError, AttributeError, Exception):
+        # If date parsing fails, show the episode anyway
+        return False
+
+
 def update_database(mal_id, update_time, res, url, image, info, season, episode, episodes, title, fanart, poster, clearart, clearlogo, dub_data, filler, anidb_ep_id=None):
     code = endpoints.get_second_label(info, dub_data)
-    if not code and control.settingids.filler:
+    if not code and control.getBool('jz.filler'):
         filler = code = control.colorstr(filler, color="red") if filler == 'Filler' else filler
     info['code'] = code
     landscape = None
@@ -69,7 +96,7 @@ def update_database(mal_id, update_time, res, url, image, info, season, episode,
     if not episodes or len(episodes) <= episode or kodi_meta != episodes[episode - 1]['kodi_meta']:
         database.update_episode(mal_id, season, episode, update_time, kodi_meta, filler, anidb_ep_id)
 
-    if control.settingids.clean_titles and info.get('playcount') != 1:
+    if control.getBool('interface.cleantitles') and info.get('playcount') != 1:
         parsed['info']['title'] = f'Episode {res["episode"]}'
         parsed['info']['plot'] = None
     return parsed

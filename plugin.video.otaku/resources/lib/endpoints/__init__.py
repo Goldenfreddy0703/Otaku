@@ -1,8 +1,8 @@
-from resources.lib.ui.control import settingids
+from resources.lib.ui import control
 
 
 def get_second_label(info, dub_data, filler=None):
-    if settingids.filler and filler:
+    if control.getBool('jz.filler') and filler:
         return filler
 
     code_dub = code_sub = code = None

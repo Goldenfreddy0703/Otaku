@@ -4,20 +4,29 @@ import concurrent.futures
 from functools import partial
 from resources.lib.ui import control, database
 
+# Cache for artwork file paths to avoid repeated os.path.exists() calls
+_artwork_path_cache = {}
+
+
+def _get_artwork_path(filename):
+    """Get artwork path with caching to reduce disk I/O"""
+    if filename in _artwork_path_cache:
+        return _artwork_path_cache[filename]
+
+    genre_path = os.path.join(control.OTAKU_GENRE_PATH, filename)
+    art_path = os.path.join(control.OTAKU_ICONS_PATH, filename)
+    result = genre_path if os.path.exists(genre_path) else art_path
+    _artwork_path_cache[filename] = result
+    return result
+
 
 def allocate_item(name, url, isfolder, isplayable, cm, image='', info=None, fanart=None, poster=None, landscape=None, banner=None, clearart=None, clearlogo=None):
     if image and '/' not in image:
-        genre_image = os.path.join(control.OTAKU_GENRE_PATH, image)
-        art_image = os.path.join(control.OTAKU_ICONS_PATH, image)
-        image = genre_image if os.path.exists(genre_image) else art_image
+        image = _get_artwork_path(image)
     if fanart and not isinstance(fanart, list) and '/' not in fanart:
-        genre_fanart = os.path.join(control.OTAKU_GENRE_PATH, fanart)
-        art_fanart = os.path.join(control.OTAKU_ICONS_PATH, fanart)
-        fanart = genre_fanart if os.path.exists(genre_fanart) else art_fanart
+        fanart = _get_artwork_path(fanart)
     if poster and '/' not in poster:
-        genre_poster = os.path.join(control.OTAKU_GENRE_PATH, poster)
-        art_poster = os.path.join(control.OTAKU_ICONS_PATH, poster)
-        poster = genre_poster if os.path.exists(genre_poster) else art_poster
+        poster = _get_artwork_path(poster)
     return {
         'isfolder': isfolder,
         'isplayable': isplayable,
@@ -87,11 +96,11 @@ def search_history(search_array, format):
 
 
 def parse_view(base, isfolder, isplayable, dub=False):
-    if control.settingids.showdub and dub:
+    if control.getBool('divflavors.showdub') and dub:
         base['name'] += ' [COLOR blue](Dub)[/COLOR]'
         base['info']['title'] = base['name']
     parsed_view = allocate_item(base["name"], base["url"], isfolder, isplayable, [], base["image"], base["info"], fanart=base.get("fanart"), poster=base["image"], landscape=base.get("landscape"), banner=base.get("banner"), clearart=base.get("clearart"), clearlogo=base.get("clearlogo"))
-    if control.settingids.dubonly and not dub:
+    if control.getBool('divflavors.dubonly') and not dub:
         parsed_view = None
     return parsed_view
 

@@ -69,14 +69,12 @@ class KitsuWLF(WatchlistFlavorBase):
         control.setInt('kitsu.expiry', int(time.time() + int(data['expires_in'])))
 
     @staticmethod
-    def handle_paging(hasnextpage, base_url, page):
-        if not hasnextpage or not control.is_addon_visible() and control.getBool('widget.hide.nextpage'):
+    def handle_paging(next_offset, base_url, page):
+        if not control.is_addon_visible() and control.getBool('widget.hide.nextpage'):
             return []
         next_page = page + 1
         name = "Next Page (%d)" % next_page
-        parsed = parse.urlparse(hasnextpage)
-        offset = parse.parse_qs(parsed.query)['page[offset]'][0]
-        return [utils.allocate_item(name, f'{base_url}/{offset}?page={next_page}', True, False, [], 'next.png', {'plot': name}, fanart='next.png')]
+        return [utils.allocate_item(name, f'{base_url}/{next_offset}?page={next_page}', True, False, [], 'next.png', {'plot': name}, fanart='next.png')]
 
     def __get_sort(self):
         # Mapping:
@@ -126,65 +124,159 @@ class KitsuWLF(WatchlistFlavorBase):
         return actions
 
     def get_watchlist_status(self, status, next_up, offset, page):
-        url = f'{self._URL}/edge/library-entries'
-        params = {
-            "fields[anime]": "titles,canonicalTitle,posterImage,episodeCount,synopsis,episodeLength,subtype,averageRating,ageRating,youtubeVideoId",
-            "filter[user_id]": self.user_id,
-            "filter[kind]": "anime",
-            "filter[status]": status,
-            "include": "anime,anime.mappings,anime.mappings.item",
-            "page[limit]": control.getInt('interface.perpage.watchlist'),
-            "page[offset]": offset,
-            "sort": self.__get_sort(),
-        }
-        return self.process_watchlist_view(url, params, next_up, f'watchlist_status_type_pages/kitsu/{status}', page)
+        from resources.lib.ui.database import (
+            get_watchlist_cache, save_watchlist_cache,
+            is_watchlist_cache_valid, get_watchlist_cache_count
+        )
 
-    def process_watchlist_view(self, url, params, next_up, base_plugin_url, page):
-        result = client.get(url, headers=self.__headers(), params=params)
-        result = result.json() if result else {}
-        _list = result.get("data", [])
+        paging_enabled = control.getBool('interface.watchlist.paging')
+        per_page = control.getInt('interface.perpage.watchlist') if paging_enabled else 1000
+        offset = int(offset) if offset else 0
 
-        if not result.get('included'):
-            result['included'] = []
+        # Check cache validity
+        if not is_watchlist_cache_valid(self._NAME, status):
+            # Fetch all items from API
+            url = f'{self._URL}/edge/library-entries'
+            # Note: Don't use fields[anime] sparse fieldset - it breaks relationships needed for mappings
+            params = {
+                "fields[mappings]": "externalSite,externalId",
+                "filter[user_id]": self.user_id,
+                "filter[kind]": "anime",
+                "filter[status]": status,
+                "include": "anime,anime.mappings",
+                "page[limit]": 20,
+                "page[offset]": 0,
+                "sort": self.__get_sort(),
+            }
 
-        el = result["included"][:len(_list)]
-        self.mapping = [x for x in result['included'] if x['type'] == 'mappings']
+            all_data = []
+            all_mappings = {}  # Build mapping dict: kitsu_id -> mal_id
+            result = client.get(url, headers=self.__headers(), params=params)
+            result = result.json() if result else {}
 
-        # Extract mal_ids from the new API response structure
-        mal_ids = [item['attributes']['externalId'] for item in self.mapping if item['attributes']['externalSite'] == 'myanimelist/anime']
+            if result.get('data'):
+                _list = result.get("data", [])
+                included = result.get('included', [])
+
+                # Separate anime and mappings from included
+                anime_by_id = {x['id']: x for x in included if x['type'] == 'anime'}
+                mappings_by_id = {x['id']: x for x in included if x['type'] == 'mappings'}
+
+                # Build kitsu_id -> mal_id lookup dict by checking anime's mapping relationships
+                for anime_id, anime in anime_by_id.items():
+                    mapping_refs = anime.get('relationships', {}).get('mappings', {}).get('data', [])
+                    for ref in mapping_refs:
+                        mapping = mappings_by_id.get(ref['id'])
+                        if mapping and mapping['attributes']['externalSite'] == 'myanimelist/anime':
+                            all_mappings[anime_id] = mapping['attributes']['externalId']
+                            break
+
+                # Store items with their anime data
+                for item in _list:
+                    anime_id = item['relationships']['anime']['data']['id']
+                    anime_data = anime_by_id.get(anime_id)
+                    all_data.append({
+                        'entry': item,
+                        'anime': anime_data,
+                        'mal_id': all_mappings.get(anime_id, '')
+                    })
+
+                # Fetch remaining pages
+                while result.get('links', {}).get('next'):
+                    result = client.get(result['links']['next'], headers=self.__headers())
+                    result = result.json() if result else {}
+                    if result.get('data'):
+                        _list = result.get("data", [])
+                        included = result.get('included', [])
+
+                        anime_by_id = {x['id']: x for x in included if x['type'] == 'anime'}
+                        mappings_by_id = {x['id']: x for x in included if x['type'] == 'mappings'}
+
+                        # Build kitsu_id -> mal_id lookup dict by checking anime's mapping relationships
+                        for anime_id, anime in anime_by_id.items():
+                            mapping_refs = anime.get('relationships', {}).get('mappings', {}).get('data', [])
+                            for ref in mapping_refs:
+                                mapping = mappings_by_id.get(ref['id'])
+                                if mapping and mapping['attributes']['externalSite'] == 'myanimelist/anime':
+                                    all_mappings[anime_id] = mapping['attributes']['externalId']
+                                    break
+
+                        for item in _list:
+                            anime_id = item['relationships']['anime']['data']['id']
+                            anime_data = anime_by_id.get(anime_id)
+                            all_data.append({
+                                'entry': item,
+                                'anime': anime_data,
+                                'mal_id': all_mappings.get(anime_id, '')
+                            })
+
+            # Apply ordering before saving to cache
+            if all_data and int(self.order) == 1:
+                all_data.reverse()
+
+            if all_data:
+                save_watchlist_cache(self._NAME, status, all_data)
+
+        # Get items from cache
+        total_count = get_watchlist_cache_count(self._NAME, status)
+
+        if paging_enabled and per_page > 0:
+            cached_items = get_watchlist_cache(self._NAME, status, limit=per_page, offset=offset)
+        else:
+            cached_items = get_watchlist_cache(self._NAME, status)
+
+        if not cached_items:
+            return []
+
+        # Deserialize cached items
+        items = [pickle.loads(item['data']) for item in cached_items]
+
+        return self.process_watchlist_view(items, next_up, f'watchlist_status_type_pages/kitsu/{status}', page, offset, per_page, total_count, paging_enabled)
+
+    def process_watchlist_view(self, items, next_up, base_plugin_url, page, offset, per_page, total_count, paging_enabled):
+        if not items:
+            return []
+
+        # Collect all MAL IDs from pre-computed cache data
+        mal_ids = [item.get('mal_id') for item in items if item.get('mal_id')]
         mal_id_dicts = [{'mal_id': mid} for mid in mal_ids]
         get_meta.collect_meta(mal_id_dicts)
 
-        # Fetch AniList data for all MAL IDs
+        # Fetch AniList data for current page items only (fast for small batches)
         try:
             from resources.lib.endpoints.anilist import Anilist
             anilist_data = Anilist().get_anilist_by_mal_ids(mal_ids)
         except Exception:
             anilist_data = []
 
-        # Build AniList lookup by MAL ID (ensure all keys and lookups are strings)
+        # Build AniList lookup by MAL ID
         anilist_by_mal_id = {str(item.get('idMal')): item for item in anilist_data if item.get('idMal')}
 
-        # If order is descending, reverse the order.
-        if int(self.order) == 1:
-            _list = _list[::-1]
-            el = el[::-1]
-
         # Pass AniList data to view functions
-        def viewfunc(res, eres):
-            kitsu_id = eres['id']
-            mal_id = str(self.mapping_mal(kitsu_id))
+        def viewfunc(cache_item):
+            res = cache_item['entry']
+            eres = cache_item['anime']
+            if not eres:
+                return None
+            mal_id = str(cache_item.get('mal_id', ''))
             anilist_item = anilist_by_mal_id.get(mal_id)
-            return self._base_next_up_view(res, eres, anilist_res=anilist_item) if next_up else self._base_watchlist_view(res, eres, anilist_res=anilist_item)
+            return self._base_next_up_view(res, eres, mal_id=mal_id, anilist_res=anilist_item) if next_up else self._base_watchlist_view(res, eres, mal_id=mal_id, anilist_res=anilist_item)
 
-        all_results = [viewfunc(res, eres) for res, eres in zip(_list, el)]
-        all_results += self.handle_paging(result['links'].get('next'), base_plugin_url, page)
+        all_results = [r for r in [viewfunc(item) for item in items] if r is not None]
+
+        # Handle paging
+        if paging_enabled and per_page > 0:
+            next_offset = offset + per_page
+            if next_offset < total_count:
+                all_results += self.handle_paging(next_offset, base_plugin_url, page)
+
         return all_results
 
     @div_flavor
-    def _base_watchlist_view(self, res, eres, mal_dub=None, anilist_res=None):
+    def _base_watchlist_view(self, res, eres, mal_dub=None, mal_id=None, anilist_res=None):
         kitsu_id = eres['id']
-        mal_id = self.mapping_mal(kitsu_id)
+        if not mal_id:
+            mal_id = self.mapping_mal(kitsu_id)
 
         if not mal_id:
             control.log(f"Mal ID not found for {kitsu_id}", level='warning')
@@ -193,14 +285,18 @@ class KitsuWLF(WatchlistFlavorBase):
 
         # Title logic: prefer Kitsu, fallback to AniList
         title = eres["attributes"]["titles"].get(self.__get_title_lang(), eres["attributes"]['canonicalTitle'])
-        if anilist_res:
+        if not title and anilist_res:
             title = anilist_res.get('title', {}).get(self.title_lang) or anilist_res.get('title', {}).get('romaji') or title
         if title is None:
             title = ''
 
+        # Add relation info (if available)
+        if anilist_res and anilist_res.get('relationType'):
+            title += ' [I]%s[/I]' % control.colorstr(anilist_res['relationType'], 'limegreen')
+
         # Plot/synopsis
         plot = eres['attributes'].get('synopsis')
-        if anilist_res and anilist_res.get('description'):
+        if not plot and anilist_res and anilist_res.get('description'):
             desc = anilist_res['description']
             desc = desc.replace('<i>', '[I]').replace('</i>', '[/I]')
             desc = desc.replace('<b>', '[B]').replace('</b>', '[/B]')
@@ -228,13 +324,12 @@ class KitsuWLF(WatchlistFlavorBase):
 
         # Duration
         duration = None
-        if anilist_res and anilist_res.get('duration'):
+        try:
+            duration = eres['attributes']['episodeLength'] * 60
+        except TypeError:
+            pass
+        if not duration and anilist_res and anilist_res.get('duration'):
             duration = anilist_res.get('duration') * 60 if isinstance(anilist_res.get('duration'), int) else anilist_res.get('duration')
-        else:
-            try:
-                duration = eres['attributes']['episodeLength'] * 60
-            except TypeError:
-                pass
 
         # Country
         country = None
@@ -243,20 +338,23 @@ class KitsuWLF(WatchlistFlavorBase):
 
         # Rating/score
         info_rating = None
-        if anilist_res and anilist_res.get('averageScore'):
+        try:
+            rating = float(eres['attributes']['averageRating'])
+            if rating:
+                info_rating = {'score': rating / 10}
+        except (TypeError, ValueError):
+            pass
+        if not info_rating and anilist_res and anilist_res.get('averageScore'):
             info_rating = {'score': anilist_res.get('averageScore') / 10.0}
             if anilist_res.get('stats') and anilist_res['stats'].get('scoreDistribution'):
                 total_votes = sum([score['amount'] for score in anilist_res['stats']['scoreDistribution']])
                 info_rating['votes'] = total_votes
-        else:
-            try:
-                info_rating = {'score': float(eres['attributes']['averageRating']) / 10}
-            except TypeError:
-                pass
 
         # Trailer
         trailer = None
-        if anilist_res and anilist_res.get('trailer'):
+        if eres['attributes'].get('youtubeVideoId'):
+            trailer = f"plugin://plugin.video.youtube/play/?video_id={eres['attributes']['youtubeVideoId']}"
+        elif anilist_res and anilist_res.get('trailer'):
             try:
                 if anilist_res['trailer']['site'] == 'youtube':
                     trailer = f"plugin://plugin.video.youtube/play/?video_id={anilist_res['trailer']['id']}"
@@ -264,8 +362,6 @@ class KitsuWLF(WatchlistFlavorBase):
                     trailer = f"plugin://plugin.video.dailymotion_com/?url={anilist_res['trailer']['id']}&mode=playVideo"
             except (KeyError, TypeError):
                 pass
-        else:
-            trailer = 'plugin://plugin.video.youtube/play/?video_id={0}'.format(eres['attributes']['youtubeVideoId'])
 
         # Playcount
         playcount = None
@@ -275,12 +371,14 @@ class KitsuWLF(WatchlistFlavorBase):
         # Premiered/year
         premiered = None
         year = None
+        start_date = None
         if anilist_res and anilist_res.get('startDate'):
             start_date = anilist_res.get('startDate')
+        if start_date:
             if isinstance(start_date, dict):
-                y = start_date.get('year', 0) or 0
-                m = start_date.get('month', 1) or 1
-                d = start_date.get('day', 1) or 1
+                y = int(start_date.get('year', 0) or 0)
+                m = int(start_date.get('month', 1) or 1)
+                d = int(start_date.get('day', 1) or 1)
                 premiered = '{}-{:02}-{:02}'.format(y, m, d)
                 year = y if y else None
 
@@ -304,6 +402,9 @@ class KitsuWLF(WatchlistFlavorBase):
             **database.get_unique_ids(kitsu_id, 'kitsu_id'),
             **database.get_unique_ids(mal_id, 'mal_id')
         }
+        if anilist_res and anilist_res.get('id'):
+            info_unique_ids['anilist_id'] = str(anilist_res['id'])
+            info_unique_ids.update(database.get_unique_ids(anilist_res['id'], 'anilist_id'))
 
         # Art/Images
         show_meta = database.get_show_meta(mal_id)
@@ -344,6 +445,8 @@ class KitsuWLF(WatchlistFlavorBase):
             info['year'] = year
         if cast:
             info['cast'] = cast
+        if anilist_res and anilist_res.get('countryOfOrigin'):
+            info['mpaa'] = anilist_res.get('countryOfOrigin')
 
         base = {
             "name": '%s - %d/%d' % (title, res["attributes"]["progress"], eres["attributes"].get('episodeCount', 0) if eres["attributes"]['episodeCount'] else 0),
@@ -374,9 +477,10 @@ class KitsuWLF(WatchlistFlavorBase):
         return utils.parse_view(base, True, False, dub)
 
     @div_flavor
-    def _base_next_up_view(self, res, eres, mal_dub=None, anilist_res=None):
+    def _base_next_up_view(self, res, eres, mal_dub=None, mal_id=None, anilist_res=None):
         kitsu_id = eres['id']
-        mal_id = self.mapping_mal(kitsu_id)
+        if not mal_id:
+            mal_id = self.mapping_mal(kitsu_id)
         dub = True if mal_dub and mal_dub.get(str(mal_id)) else False
 
         progress = res["attributes"]['progress']
@@ -533,6 +637,7 @@ class KitsuWLF(WatchlistFlavorBase):
         return data
 
     def update_list_status(self, mal_id, status):
+        from resources.lib.ui.database import clear_watchlist_cache
         kitsu_id = self._get_mapping_id(mal_id, 'kitsu_id')
         if not kitsu_id:
             return False
@@ -562,6 +667,8 @@ class KitsuWLF(WatchlistFlavorBase):
                 }
             }
             r = client.post(f'{self._URL}/edge/library-entries', headers=self.__headers(), json_data=data)
+            if r and r.ok:
+                clear_watchlist_cache(self._NAME)  # Clear all statuses since item moved
             return r and r.ok
         animeid = int(r['data'][0]['id'])
         data = {
@@ -574,9 +681,12 @@ class KitsuWLF(WatchlistFlavorBase):
             }
         }
         r = client.patch(f'{self._URL}/edge/library-entries/{animeid}', headers=self.__headers(), json_data=data)
+        if r and r.ok:
+            clear_watchlist_cache(self._NAME)  # Clear all statuses since item moved
         return r and r.ok
 
     def update_num_episodes(self, mal_id, episode):
+        from resources.lib.ui.database import clear_watchlist_cache
         kitsu_id = self._get_mapping_id(mal_id, 'kitsu_id')
         if not kitsu_id:
             return False
@@ -607,6 +717,8 @@ class KitsuWLF(WatchlistFlavorBase):
                 }
             }
             r = client.post(f'{self._URL}/edge/library-entries', headers=self.__headers(), json_data=data)
+            if r and r.ok:
+                clear_watchlist_cache(self._NAME)  # Clear cache to reflect progress
             return r and r.ok
 
         animeid = int(r['data'][0]['id'])
@@ -622,9 +734,12 @@ class KitsuWLF(WatchlistFlavorBase):
             }
         }
         r = client.patch(f'{self._URL}/edge/library-entries/{animeid}', headers=self.__headers(), json_data=data)
+        if r and r.ok:
+            clear_watchlist_cache(self._NAME)  # Clear cache to reflect progress
         return r and r.ok
 
     def update_score(self, mal_id, score):
+        from resources.lib.ui.database import clear_watchlist_cache
         kitsu_id = self._get_mapping_id(mal_id, 'kitsu_id')
         if not kitsu_id:
             return False
@@ -657,6 +772,8 @@ class KitsuWLF(WatchlistFlavorBase):
                 }
             }
             r = client.post(f'{self._URL}/edge/library-entries', headers=self.__headers(), json_data=data)
+            if r and r.ok:
+                clear_watchlist_cache(self._NAME)  # Clear cache to reflect score
             return r and r.ok
 
         animeid = int(r['data'][0]['id'])
@@ -670,9 +787,12 @@ class KitsuWLF(WatchlistFlavorBase):
             }
         }
         r = client.patch(f'{self._URL}/edge/library-entries/{animeid}', headers=self.__headers(), json_data=data)
+        if r and r.ok:
+            clear_watchlist_cache(self._NAME)  # Clear cache to reflect score
         return r and r.ok
 
     def delete_anime(self, mal_id):
+        from resources.lib.ui.database import clear_watchlist_cache
         kitsu_id = self._get_mapping_id(mal_id, 'kitsu_id')
         if not kitsu_id:
             return False
@@ -685,4 +805,6 @@ class KitsuWLF(WatchlistFlavorBase):
             return True
 
         r = client.delete(f'{self._URL}/edge/library-entries/{animeid}', headers=self.__headers())
+        if r and r.ok:
+            clear_watchlist_cache(self._NAME)  # Clear cache after deletion
         return r and r.ok

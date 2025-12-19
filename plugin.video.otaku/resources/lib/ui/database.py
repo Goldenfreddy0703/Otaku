@@ -107,6 +107,93 @@ def is_cache_valid(cached_time, cache_timeout):
     return (cache_timeout * 3600) > diff
 
 
+# ==================== Watchlist Cache Functions ====================
+
+def get_watchlist_cache(service, status, limit=None, offset=0):
+    """Get cached watchlist items with optional pagination"""
+    with SQL(control.malSyncDB) as cursor:
+        if limit:
+            cursor.execute(
+                'SELECT * FROM watchlist_cache WHERE service=? AND status=? ORDER BY id LIMIT ? OFFSET ?',
+                (service, status, limit, offset)
+            )
+        else:
+            cursor.execute(
+                'SELECT * FROM watchlist_cache WHERE service=? AND status=? ORDER BY id',
+                (service, status)
+            )
+        return cursor.fetchall()
+
+
+def get_watchlist_cache_count(service, status):
+    """Get total count of cached items for a service/status"""
+    with SQL(control.malSyncDB) as cursor:
+        cursor.execute(
+            'SELECT COUNT(*) as count FROM watchlist_cache WHERE service=? AND status=?',
+            (service, status)
+        )
+        result = cursor.fetchone()
+        return result['count'] if result else 0
+
+
+def get_watchlist_cache_last_updated(service, status):
+    """Get the last updated timestamp for cached watchlist"""
+    with SQL(control.malSyncDB) as cursor:
+        cursor.execute(
+            'SELECT MIN(last_updated) as last_updated FROM watchlist_cache WHERE service=? AND status=?',
+            (service, status)
+        )
+        result = cursor.fetchone()
+        return result['last_updated'] if result else None
+
+
+def save_watchlist_cache(service, status, items):
+    """Save watchlist items to cache (replaces existing cache for service/status)"""
+    now = int(time.time())
+    with SQL(control.malSyncDB) as cursor:
+        # Clear existing cache for this service/status
+        cursor.execute('DELETE FROM watchlist_cache WHERE service=? AND status=?', (service, status))
+        # Insert new items with order index
+        for idx, item in enumerate(items):
+            mal_id = None
+            # Extract mal_id based on service structure
+            if service == 'simkl':
+                mal_id = item.get('show', {}).get('ids', {}).get('mal')
+            elif service == 'kitsu':
+                mal_id = item.get('mal_id')  # Will be set during processing
+            elif service == 'mal':
+                mal_id = item.get('node', {}).get('id')
+            elif service == 'anilist':
+                mal_id = item.get('media', {}).get('idMal')
+            
+            data = pickle.dumps(item)
+            cursor.execute(
+                'INSERT INTO watchlist_cache (service, status, mal_id, item_order, data, last_updated) VALUES (?, ?, ?, ?, ?, ?)',
+                (service, status, mal_id, idx, data, now)
+            )
+        cursor.connection.commit()
+
+
+def clear_watchlist_cache(service=None, status=None):
+    """Clear watchlist cache, optionally filtered by service and/or status"""
+    with SQL(control.malSyncDB) as cursor:
+        if service and status:
+            cursor.execute('DELETE FROM watchlist_cache WHERE service=? AND status=?', (service, status))
+        elif service:
+            cursor.execute('DELETE FROM watchlist_cache WHERE service=?', (service,))
+        else:
+            cursor.execute('DELETE FROM watchlist_cache')
+        cursor.connection.commit()
+
+
+def is_watchlist_cache_valid(service, status, cache_hours=0.5):
+    """Check if watchlist cache is still valid (default 30 minutes)"""
+    last_updated = get_watchlist_cache_last_updated(service, status)
+    if not last_updated:
+        return False
+    return is_cache_valid(last_updated, cache_hours)
+
+
 def update_show(mal_id, kodi_meta, anime_schedule_route=''):
     with SQL(control.malSyncDB) as cursor:
         cursor.execute('PRAGMA foreign_keys=OFF')

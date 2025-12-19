@@ -190,8 +190,8 @@ class Sources(GetSources):
             if (
                 self.canceled
                 or not self.remainingProviders
-                or (control.settingids.terminateoncloud and len(self.cloud_files) > 0)
-                or (control.settingids.terminateonlocal and len(self.local_files) > 0)
+                or (control.getBool('general.terminate.oncloud') and len(self.cloud_files) > 0)
+                or (control.getBool('general.terminate.onlocal') and len(self.local_files) > 0)
             ):
                 break
 

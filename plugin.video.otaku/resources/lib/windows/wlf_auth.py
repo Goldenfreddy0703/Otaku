@@ -21,12 +21,26 @@ class WatchlistFlavorAuth(BaseWindow):
     def onClick(self, controlId):
         if controlId == 1000:
             self.handle_action(7)
+        else:
+            self.handle_action(controlId)
+
+    def onTouch(self, x, y):
+        """Handle touchscreen events"""
+        focusedControl = self.getFocusId()
+        # Handle touch on button controls (1002 = Authorize, 1003 = Cancel)
+        if focusedControl in [1002, 1003]:
+            self.handle_action(focusedControl)
 
     def handle_action(self, actionID):
-        if actionID == 7 and self.getFocusId() == 1002:
+        if actionID == 1002:
+            # Authorize button clicked
             self.set_settings()
-
-        if actionID == 7 and self.getFocusId() == 1003:
+        elif actionID == 1003:
+            # Cancel button clicked
+            self.close()
+        elif actionID == 7 and self.getFocusId() == 1002:
+            self.set_settings()
+        elif actionID == 7 and self.getFocusId() == 1003:
             self.close()
 
     def onAction(self, action):
