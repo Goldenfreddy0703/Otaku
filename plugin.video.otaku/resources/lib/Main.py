@@ -1683,6 +1683,7 @@ def EDIT_SEARCH_ITEM(payload, params):
 @Route('search_ona/*')
 @Route('search_music/*')
 def SEARCH(payload, params):
+    from urllib.parse import unquote
     _, types, mappings, _ = get_search_config()
 
     type = None
@@ -1698,7 +1699,7 @@ def SEARCH(payload, params):
             format = mappings[key][0] if control.getStr('browser.api') in ['mal', 'otaku'] else mappings[key][1]
             break
 
-    query = payload
+    query = unquote(payload) if payload else payload
     page = int(params.get('page', 1))
     if not query:
         query = control.keyboard(control.lang(30018))

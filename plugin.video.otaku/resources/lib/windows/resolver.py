@@ -216,7 +216,7 @@ class Resolver(BaseWindow):
                 subtitles.append(embed_extractor.get_sub(sub_url, sub_lang))
             item.setSubtitles(subtitles)
 
-        # Handle mimetype
+        # Handle mimetype - hooks will configure InputStream Adaptive for HLS/DASH
         if linkInfo['headers'].get('Content-Type'):
             item.setProperty('MimeType', linkInfo['headers']['Content-Type'])
             item = hook_mimetype.trigger(linkInfo['headers']['Content-Type'], item)
@@ -224,13 +224,16 @@ class Resolver(BaseWindow):
         if self.params.get('image'):
             self.image = self.params.get('image', {})
 
+        # Get the clean URL from item (hooks may have stripped headers)
+        stream_url = item.getPath()
+
         # Set art and tags
         if self.context:
             control.set_videotags(item, self.params)
             art = self._build_art_dict(use_params=True)
             item.setArt(art)
             control.playList.clear()
-            control.playList.add(linkInfo['url'], item)
+            control.playList.add(stream_url, item)
             xbmc.Player().play(control.playList, item)
         else:
             if self.params.get('info'):
@@ -352,8 +355,10 @@ class Resolver(BaseWindow):
         if 'Content-Type' not in resp_headers.keys():
             if 'Content-Length' not in resp_headers.keys():
                 resp_headers.update({'Content-Type': 'video/MP2T'})
+            elif '.m3u8' in url:
+                resp_headers.update({'Content-Type': 'application/vnd.apple.mpegurl'})
         elif resp_headers['Content-Type'] == 'application/octet-stream' and '.m3u8' in url:
-            resp_headers.update({'Content-Type': 'video/MP2T'})
+            resp_headers.update({'Content-Type': 'application/vnd.apple.mpegurl'})
         return {
             "url": link if '|' in link else response.url,
             "headers": resp_headers,
@@ -493,12 +498,13 @@ def _DASH_HOOK(item):
                 item.setContentLookup(False)
             if '|' in stream_url:
                 stream_url, headers = stream_url.split('|')
+                item.setPath(stream_url)  # Set clean URL without headers
                 item.setProperty('inputstream.adaptive.stream_headers', headers)
+                item.setProperty('inputstream.adaptive.manifest_headers', headers)
                 if control.kodi_version > 21.8:
                     item.setProperty('inputstream.adaptive.common_headers', headers)
                 else:
                     item.setProperty('inputstream.adaptive.stream_params', headers)
-                    item.setProperty('inputstream.adaptive.manifest_headers', headers)
         else:
             raise Exception("InputStream Adaptive is not supported.")
     return item
@@ -519,12 +525,15 @@ def _HLS_HOOK(item):
                 item.setContentLookup(False)
             if '|' in stream_url:
                 stream_url, headers = stream_url.split('|')
+                item.setPath(stream_url)  # Set clean URL without headers
                 item.setProperty('inputstream.adaptive.stream_headers', headers)
+                item.setProperty('inputstream.adaptive.manifest_headers', headers)
+                # For HLS AES-128 encrypted streams, license_key is used for key file requests
+                item.setProperty('inputstream.adaptive.license_key', '|' + headers + '||R{SSM}')
                 if control.kodi_version > 21.8:
                     item.setProperty('inputstream.adaptive.common_headers', headers)
                 else:
                     item.setProperty('inputstream.adaptive.stream_params', headers)
-                    item.setProperty('inputstream.adaptive.manifest_headers', headers)
 
     return item
 
@@ -544,11 +553,14 @@ def _HLS2_HOOK(item):
                 item.setContentLookup(False)
             if '|' in stream_url:
                 stream_url, headers = stream_url.split('|')
+                item.setPath(stream_url)  # Set clean URL without headers
                 item.setProperty('inputstream.adaptive.stream_headers', headers)
+                item.setProperty('inputstream.adaptive.manifest_headers', headers)
+                # For HLS AES-128 encrypted streams, license_key is used for key file requests
+                item.setProperty('inputstream.adaptive.license_key', '|' + headers + '||R{SSM}')
                 if control.kodi_version > 21.8:
                     item.setProperty('inputstream.adaptive.common_headers', headers)
                 else:
                     item.setProperty('inputstream.adaptive.stream_params', headers)
-                    item.setProperty('inputstream.adaptive.manifest_headers', headers)
 
     return item

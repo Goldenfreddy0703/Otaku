@@ -1,3 +1,12 @@
+Changelog v5.2.65 (2025-12-20):
+- Fixed Animepahe playback with improved header handling for streaming compatibility
+- Enhanced kwik source extraction with proper Referer and Origin headers for CORS
+- Improved InputStream Adaptive configuration with manifest headers and license_key for HLS/DASH
+- Added support for AES-128 encrypted HLS streams with proper key file request configuration
+- Fixed content-type detection for HLS streams (.m3u8 -> application/vnd.apple.mpegurl)
+- Fixed search history to decode URL-encoded queries for consistent results with new search
+- Added urllib.parse.unquote to properly handle URL-encoded search payloads
+
 Changelog v5.2.64 (2025-12-19):
 - Added watchlist paging with persistent caching across all flavors (AniList, Kitsu, MAL, Simkl)
 - Added new watchlist database table and cache management functions
