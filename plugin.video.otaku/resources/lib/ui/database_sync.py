@@ -1,8 +1,10 @@
 from resources.lib.ui import control
-from sqlite3 import version
-from resources.lib.ui.database import SQL
+try:
+    from sqlite3 import version as sqlite_version
+except ImportError:
+    from sqlite3 import sqlite_version  # noQA
 
-sqlite_version = version
+from resources.lib.ui.database import SQL
 
 
 class SyncDatabase:
@@ -165,7 +167,7 @@ class SyncDatabase:
                 columns = [col[1] for col in cursor.fetchall()]
                 if 'item_order' not in columns:
                     cursor.execute('DROP TABLE watchlist_cache')
-            
+
             cursor.execute('''CREATE TABLE IF NOT EXISTS watchlist_cache (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 service TEXT NOT NULL,

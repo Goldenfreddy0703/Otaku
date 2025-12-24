@@ -2,9 +2,9 @@ import subprocess
 import os
 import shutil
 
-# Source and destination base directories
+# Source and destination base directories (swapped)
 src_base = r"C:\Users\jenki\Documents\Github\Otaku"
-dst_base = r"C:\Users\jenki\Documents\Github\Otaku\plugin.video.otaku"
+dst_base = r"C:\Users\jenki\Documents\Github\Otaku-Testing\plugin.video.otaku.testing"
 
 # Files to exclude
 exclude_files = {"addon.xml", "changelog.txt", "news.txt", "sync_to_testing.py"}
@@ -29,7 +29,7 @@ def copy_files(files):
             print(f"Skipping excluded file: {rel_path}")
             continue
 
-        # Normalize to forward slashes, then drop the first component
+        # Normalize and drop "plugin.video.otaku/"
         parts = rel_path.split("/")
         if parts[0] == "plugin.video.otaku":
             rel_path_fixed = os.path.join(*parts[1:])

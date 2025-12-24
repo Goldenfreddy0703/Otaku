@@ -7,7 +7,7 @@ class AllDebrid:
         self.token = control.getSetting('alldebrid.token')
         self.autodelete = control.getBool('alldebrid.autodelete')
         self.agent_identifier = 'Otaku'
-        self.base_url = 'https://api.alldebrid.com/v4'
+        self.base_url = 'https://api.alldebrid.com/v4.1'
         self.cache_check_results = []
         self.OauthTimeStep = 1
         self.OauthTimeout = 0
@@ -124,8 +124,8 @@ class AllDebrid:
 
     def resolve_single_magnet(self, hash_, magnet, episode, pack_select):
         magnet_id = self.addMagnet(magnet)['magnets'][0]['id']
-        folder_details = self.magnet_status(magnet_id)['magnets']['links']
-        folder_details = [{'link': x['link'], 'path': x['filename']} for x in folder_details]
+        folder_details = self.magnet_status(magnet_id)['magnets']['files']
+        folder_details = [{'link': x['l'], 'path': x['n']} for x in folder_details]
 
         if episode:
             selected_file = source_utils.get_best_match('path', folder_details, str(episode), pack_select)
@@ -188,8 +188,8 @@ class AllDebrid:
         magnet_id = magnet_data['magnets'][0]['id']
         magnet_status = self.magnet_status(magnet_id)
         status = magnet_status['magnets']['status']
-        folder_details = magnet_status['magnets']['links']
-        folder_details = [{'link': x['link'], 'path': x['filename']} for x in folder_details]
+        folder_details = magnet_status['magnets']['files']
+        folder_details = [{'link': x['l'], 'path': x['n']} for x in folder_details]
 
         if runinbackground:
             control.notify(heading, "The source is downloading to your cloud")

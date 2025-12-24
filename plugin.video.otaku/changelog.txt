@@ -1,3 +1,7 @@
+Changelog v5.2.66 (2025-12-30):
+- Fixed compatibility issues with Kodi 22 nightly
+- Updated AllDebrid Api to 4.1
+
 Changelog v5.2.65 (2025-12-20):
 - Fixed Animepahe playback with improved header handling for streaming compatibility
 - Enhanced kwik source extraction with proper Referer and Origin headers for CORS

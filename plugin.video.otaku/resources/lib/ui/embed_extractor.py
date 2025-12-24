@@ -163,13 +163,10 @@ def __extract_kwik(url, page_content, referer=None):
     page_content += __get_packed_data(page_content)
     r = re.search(r"const\s*source\s*=\s*'([^']+)", page_content)
     if r:
-        # Get the domain from the URL (kwik.cx or kwik.si)
-        parsed = urllib.parse.urlparse(url)
-        domain = f'{parsed.scheme}://{parsed.netloc}'
-        # CDN requires Origin header for CORS and Referer should be just the domain
+        ref = urllib.parse.urljoin(url, '/')
         headers = {'User-Agent': _EDGE_UA,
-                   'Referer': domain + '/',
-                   'Origin': domain}
+                   'Referer': ref,
+                   'Origin': ref[:-1]}
         return r.group(1) + __append_headers(headers)
 
 
