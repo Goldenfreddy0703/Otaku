@@ -165,7 +165,7 @@ def save_watchlist_cache(service, status, items):
                 mal_id = item.get('node', {}).get('id')
             elif service == 'anilist':
                 mal_id = item.get('media', {}).get('idMal')
-            
+
             data = pickle.dumps(item)
             cursor.execute(
                 'INSERT INTO watchlist_cache (service, status, mal_id, item_order, data, last_updated) VALUES (?, ?, ?, ?, ?, ?)',
