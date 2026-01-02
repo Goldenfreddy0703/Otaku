@@ -1,3 +1,6 @@
+Changelog v5.2.68 (2026-01-02):
+- Fix AllDebrid season pack handling
+
 Changelog v5.2.67 (2026-01-01):
 - Complete Next Up Overhaul — Recoded for all watchlists (MAL, AniList, Kitsu, Simkl)
 - Added episode-driven display with format "Show Name 01x13 - Episode Title"
