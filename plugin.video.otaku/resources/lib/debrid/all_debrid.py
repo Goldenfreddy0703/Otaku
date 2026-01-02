@@ -125,6 +125,8 @@ class AllDebrid:
     def resolve_single_magnet(self, hash_, magnet, episode, pack_select):
         magnet_id = self.addMagnet(magnet)['magnets'][0]['id']
         folder_details = self.magnet_status(magnet_id)['magnets']['files']
+        if folder_details[0].get('e'):
+            folder_details = folder_details[0].get('e')
         folder_details = [{'link': x['l'], 'path': x['n']} for x in folder_details]
 
         if episode:
@@ -189,6 +191,8 @@ class AllDebrid:
         magnet_status = self.magnet_status(magnet_id)
         status = magnet_status['magnets']['status']
         folder_details = magnet_status['magnets']['files']
+        if folder_details[0].get('e'):
+            folder_details = folder_details[0].get('e')
         folder_details = [{'link': x['l'], 'path': x['n']} for x in folder_details]
 
         if runinbackground:
