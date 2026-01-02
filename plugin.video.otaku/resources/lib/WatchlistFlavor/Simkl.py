@@ -99,6 +99,10 @@ class SimklWLF(WatchlistFlavorBase):
         return [utils.allocate_item(name, f'{base_url}?page={next_page}', True, False, [], 'next.png', {'plot': name}, fanart='next.png')]
 
     def get_watchlist_status(self, status, next_up, offset, page):
+        # Handle Next Up separately - it needs special episode-level processing
+        if next_up:
+            return self._get_next_up_episodes(status, offset, page)
+
         from resources.lib.ui.database import (
             get_watchlist_cache, save_watchlist_cache, 
             is_watchlist_cache_valid, get_watchlist_cache_count
@@ -161,9 +165,391 @@ class SimklWLF(WatchlistFlavorBase):
         def viewfunc(res):
             mal_id = str(res['show']['ids'].get('mal'))
             anilist_item = anilist_by_mal_id.get(mal_id)
-            return self._base_next_up_view(res, anilist_res=anilist_item) if next_up else self._base_watchlist_status_view(res, anilist_res=anilist_item)
+            return self._base_watchlist_status_view(res, anilist_res=anilist_item)
 
         all_results = list(filter(None, map(viewfunc, items)))
+
+        # Apply sorting
+        if int(self.sort) == 0:  # anime_title
+            all_results = sorted(all_results, key=lambda x: x['info']['title'].lower() if x['info'].get('title') else '')
+        elif int(self.sort) == 1:    # user_rating
+            all_results = sorted(all_results, key=lambda x: x['info'].get('user_rating') or 0, reverse=True)
+        elif int(self.sort) == 2:    # progress
+            all_results = sorted(all_results, key=get_progress)
+        elif int(self.sort) == 3:    # list_updated_at
+            all_results = sorted(all_results, key=lambda x: x['info'].get('last_watched') or "0", reverse=True)
+        elif int(self.sort) == 4:    # last_added
+            all_results.reverse()
+
+        if int(self.order) == 1:
+            all_results.reverse()
+
+        # Add paging if enabled
+        if paging_enabled and per_page > 0:
+            has_next = (offset + per_page) < total_count
+            all_results += self.handle_paging(has_next, f'watchlist_status_type_pages/simkl/{status}/{offset + per_page}', page)
+
+        return all_results
+
+    def _get_next_up_episodes(self, status, offset, page):
+        """
+        Get Next Up episodes - Episode-driven list of next unwatched episodes.
+
+        Next Up Rules:
+        - Shows must have at least one watched episode
+        - Only the immediate next unwatched episode is shown per anime
+        - Sorted by last watched activity (last_watched_at)
+        - Only aired episodes are included
+        - Completed shows are excluded
+        - Format: "Show Name 01x13 - Episode Title"
+        """
+        from resources.lib.ui.database import (
+            get_watchlist_cache, save_watchlist_cache,
+            is_watchlist_cache_valid, get_watchlist_cache_count
+        )
+
+        paging_enabled = control.getBool('interface.watchlist.paging')
+        per_page = control.getInt('interface.perpage.watchlist') if paging_enabled else 1000
+        offset = int(offset) if offset else 0
+
+        # Use a separate cache key for next_up to ensure proper sorting
+        cache_status = 'next_up'
+
+        if not is_watchlist_cache_valid(self._NAME, cache_status):
+            # Fetch all "watching" items
+            results = self.get_all_items('watching')
+            all_data = results.get('anime', []) if results else []
+
+            # Filter: Only shows with at least 1 watched episode AND have a valid next episode
+            filtered_data = []
+            for item in all_data:
+                eps_watched = item.get('watched_episodes_count', 0)
+                total_eps = item.get('total_episodes_count', 0)
+
+                # Must have watched at least 1 episode
+                if eps_watched < 1:
+                    continue
+
+                # Skip if show is completed (all episodes watched)
+                # total_eps == 0 means unknown/ongoing, so include it
+                if total_eps > 0 and eps_watched >= total_eps:
+                    continue
+
+                filtered_data.append(item)
+
+            # Sort by last_watched_at (most recent first)
+            filtered_data.sort(
+                key=lambda x: x.get('last_watched_at', ''),
+                reverse=True
+            )
+
+            if filtered_data:
+                save_watchlist_cache(self._NAME, cache_status, filtered_data)
+
+        # Get items from cache
+        total_count = get_watchlist_cache_count(self._NAME, cache_status)
+
+        if paging_enabled and per_page > 0:
+            cached_items = get_watchlist_cache(self._NAME, cache_status, limit=per_page, offset=offset)
+        else:
+            cached_items = get_watchlist_cache(self._NAME, cache_status)
+
+        if not cached_items:
+            return []
+
+        # Deserialize cached items
+        items = [pickle.loads(item['data']) for item in cached_items]
+
+        # Collect metadata for all MAL IDs
+        mal_ids = [anime['show']['ids']['mal'] for anime in items if anime['show']['ids'].get('mal')]
+        mal_id_dicts = [{'mal_id': mid} for mid in mal_ids]
+        get_meta.collect_meta(mal_id_dicts)
+
+        # Fetch AniList data for additional metadata
+        try:
+            from resources.lib.endpoints.anilist import Anilist
+            anilist_data = Anilist().get_anilist_by_mal_ids(mal_ids)
+        except Exception:
+            anilist_data = []
+
+        anilist_by_mal_id = {str(item.get('idMal')): item for item in anilist_data if item.get('idMal')}
+
+        # Process each anime to build next up episode items
+        def process_next_up_item(item):
+            try:
+                mal_id = str(item['show']['ids'].get('mal', ''))
+                anilist_item = anilist_by_mal_id.get(mal_id)
+                return self._build_next_up_episode(item, anilist_res=anilist_item)
+            except Exception as e:
+                control.log(f"Error processing Next Up for Simkl: {str(e)}", level='warning')
+                return None
+
+        # Process items in parallel
+        all_results = utils.parallel_process(items, process_next_up_item, max_workers=5)
+        all_results = [r for r in all_results if r is not None]
+
+        # Handle paging
+        if paging_enabled and per_page > 0:
+            next_offset = offset + per_page
+            if next_offset < total_count:
+                all_results += self._handle_next_up_paging(next_offset, page)
+
+        return all_results
+
+    def _handle_next_up_paging(self, next_offset, page):
+        """Handle paging for Next Up with next_up=true parameter preserved"""
+        if not control.is_addon_visible() and control.getBool('widget.hide.nextpage'):
+            return []
+        next_page = page + 1
+        name = "Next Page (%d)" % next_page
+        url = f'watchlist_status_type_pages/simkl/watching/{next_offset}?page={next_page}&next_up=true'
+        return [utils.allocate_item(name, url, True, False, [], 'next.png', {'plot': name}, fanart='next.png')]
+
+    def _build_next_up_episode(self, res, anilist_res=None):
+        """
+        Build a single Next Up episode item with full metadata.
+
+        Format: "Show Name 01x13 - Episode Title"
+        Includes: cast, poster, thumbnail, trailer, country, year, etc.
+        """
+        from resources.lib import MetaBrowser
+
+        show_ids = res['show']['ids']
+        anilist_id = show_ids.get('anilist')
+        mal_id = show_ids.get('mal')
+        kitsu_id = show_ids.get('kitsu')
+
+        eps_watched = res.get('watched_episodes_count', 0)
+        next_ep_num = eps_watched + 1
+        total_eps = res.get('total_episodes_count', 0)
+
+        # Get show title
+        show_title = res['show'].get('title', '')
+        if anilist_res:
+            show_title = anilist_res.get('title', {}).get(self.title_lang) or anilist_res.get('title', {}).get('romaji') or show_title
+
+        # Check if we should limit to aired episodes only
+        if not control.getBool('playlist.unaired'):
+            from resources.lib.AnimeSchedule import get_anime_schedule
+            airing_anime = get_anime_schedule(mal_id)
+            if airing_anime and airing_anime.get('current_episode'):
+                max_aired = airing_anime['current_episode']
+                if next_ep_num > max_aired:
+                    return None  # Next episode hasn't aired yet
+
+        # Skip if the show appears completed (next episode exceeds total)
+        if 0 < total_eps < next_ep_num:
+            return None
+
+        # Get episode metadata via MetaBrowser (centralized for all watchlists)
+        episode_meta = MetaBrowser.get_next_up_meta(mal_id, next_ep_num) if mal_id else {}
+
+        # Get season number
+        season = utils.get_season([show_title], mal_id) if show_title and mal_id else 1
+
+        # Build the display title: "Show Name 01x13 - Episode Title"
+        season_str = str(season).zfill(2)
+        ep_str = str(next_ep_num).zfill(2)
+        ep_title = episode_meta.get('title', f'Episode {next_ep_num}')
+
+        if control.getBool('interface.cleantitles'):
+            display_title = f"{show_title} {season_str}x{ep_str}"
+        else:
+            display_title = f"{show_title} {season_str}x{ep_str} - {ep_title}"
+
+        # Get artwork from show meta
+        show_meta = database.get_show_meta(mal_id) if mal_id else None
+        art = pickle.loads(show_meta['art']) if show_meta else {}
+
+        # Poster - show poster from Simkl
+        poster = f'https://wsrv.nl/?url=https://simkl.in/posters/{res["show"]["poster"]}_m.jpg' if res['show'].get('poster') else None
+        # AniList fallback for poster
+        if not poster and anilist_res and anilist_res.get('coverImage'):
+            poster = anilist_res['coverImage'].get('extraLarge') or anilist_res['coverImage'].get('large')
+
+        # Fanart
+        fanart = art.get('fanart', poster)
+        if isinstance(fanart, list):
+            fanart = random.choice(fanart) if fanart else poster
+
+        # Episode thumbnail (episode-specific image)
+        ep_thumb = episode_meta.get('image')
+
+        # For the main image, use episode thumbnail if available, otherwise fanart
+        ep_image = ep_thumb or fanart or poster
+
+        # Episode plot
+        ep_plot = episode_meta.get('plot', '')
+        if not ep_plot:
+            ep_plot = f"Episode {next_ep_num} of {show_title}"
+
+        # Aired date
+        aired = episode_meta.get('aired', '')
+
+        # Episode rating
+        ep_rating = episode_meta.get('rating')
+
+        # Show rating from AniList
+        info_rating = None
+        if ep_rating:
+            info_rating = {'score': ep_rating}
+        elif anilist_res and anilist_res.get('averageScore'):
+            info_rating = {'score': anilist_res.get('averageScore') / 10.0}
+
+        # Duration
+        duration = None
+        if anilist_res and anilist_res.get('duration'):
+            duration = anilist_res.get('duration') * 60 if isinstance(anilist_res.get('duration'), int) else anilist_res.get('duration')
+
+        # Genres
+        genre = None
+        if anilist_res:
+            genre = anilist_res.get('genres')
+
+        # Studios
+        studio = None
+        if anilist_res and anilist_res.get('studios'):
+            if isinstance(anilist_res['studios'], list):
+                studio = [s.get('name') for s in anilist_res['studios']]
+            elif isinstance(anilist_res['studios'], dict) and 'edges' in anilist_res['studios']:
+                studio = [s['node'].get('name') for s in anilist_res['studios']['edges']]
+
+        # Status
+        status = None
+        if anilist_res:
+            status = anilist_res.get('status')
+
+        # Country
+        country = None
+        if anilist_res and anilist_res.get('countryOfOrigin'):
+            country = [anilist_res.get('countryOfOrigin')]
+
+        # Premiered/year
+        premiered = None
+        year = res['show'].get('year')
+        if anilist_res and anilist_res.get('startDate'):
+            start_date = anilist_res.get('startDate')
+            if isinstance(start_date, dict):
+                try:
+                    premiered = '{}-{:02}-{:02}'.format(
+                        int(start_date.get('year', 0) or 0),
+                        int(start_date.get('month', 1) or 1),
+                        int(start_date.get('day', 1) or 1)
+                    )
+                    year = int(start_date.get('year', 0) or 0) if start_date.get('year') else year
+                except (TypeError, ValueError):
+                    pass
+
+        # Cast from AniList
+        cast = None
+        if anilist_res and anilist_res.get('characters'):
+            try:
+                cast = []
+                for i, x in enumerate(anilist_res['characters'].get('edges', [])):
+                    role = x['node']['name']['userPreferred']
+                    actor = x['voiceActors'][0]['name']['userPreferred']
+                    actor_hs = x['voiceActors'][0]['image']['large']
+                    cast.append({'name': actor, 'role': role, 'thumbnail': actor_hs, 'index': i})
+            except (IndexError, KeyError, TypeError):
+                pass
+
+        # Trailer from AniList
+        trailer = None
+        if anilist_res and anilist_res.get('trailer'):
+            try:
+                if anilist_res['trailer']['site'] == 'youtube':
+                    trailer = f"plugin://plugin.video.youtube/play/?video_id={anilist_res['trailer']['id']}"
+                else:
+                    trailer = f"plugin://plugin.video.dailymotion_com/?url={anilist_res['trailer']['id']}&mode=playVideo"
+            except (KeyError, TypeError):
+                pass
+
+        # MPAA rating
+        mpaa = None
+        if anilist_res and anilist_res.get('countryOfOrigin'):
+            mpaa = anilist_res.get('countryOfOrigin')
+
+        # UniqueIDs
+        unique_ids = {}
+        if anilist_id:
+            unique_ids['anilist_id'] = str(anilist_id)
+            unique_ids.update(database.get_unique_ids(anilist_id, 'anilist_id'))
+        if mal_id:
+            unique_ids['mal_id'] = str(mal_id)
+            unique_ids.update(database.get_unique_ids(mal_id, 'mal_id'))
+        if kitsu_id:
+            unique_ids['kitsu_id'] = str(kitsu_id)
+            unique_ids.update(database.get_unique_ids(kitsu_id, 'kitsu_id'))
+
+        # Build info dict with all metadata
+        info = {
+            'UniqueIDs': unique_ids,
+            'title': display_title,
+            'tvshowtitle': show_title,
+            'season': season,
+            'episode': next_ep_num,
+            'plot': ep_plot,
+            'duration': duration,
+            'status': status,
+            'mediatype': 'episode',
+        }
+
+        # Add optional fields
+        if aired:
+            info['aired'] = aired
+        if info_rating:
+            info['rating'] = info_rating
+        if genre:
+            info['genre'] = genre
+        if studio:
+            info['studio'] = studio
+        if country:
+            info['country'] = country
+        if premiered:
+            info['premiered'] = premiered
+        if year:
+            info['year'] = year
+        if cast:
+            info['cast'] = cast
+        if trailer:
+            info['trailer'] = trailer
+        if mpaa:
+            info['mpaa'] = mpaa
+
+        # Build the base item with all artwork
+        base = {
+            "name": display_title,
+            "url": f"play/{mal_id}/{next_ep_num}" if mal_id else f"watchlist_to_ep/{anilist_id}/{eps_watched}",
+            "image": ep_image,
+            "info": info,
+            "fanart": fanart,
+            "poster": poster
+        }
+
+        # Add episode thumbnail separately for Kodi to use
+        if ep_thumb:
+            base['thumb'] = ep_thumb
+
+        # Add additional artwork from show meta
+        if art.get('banner'):
+            base['banner'] = art['banner']
+        if art.get('thumb'):
+            thumb = art['thumb']
+            base['landscape'] = random.choice(thumb) if isinstance(thumb, list) else thumb
+        if art.get('clearart'):
+            clearart = art['clearart']
+            base['clearart'] = random.choice(clearart) if isinstance(clearart, list) else clearart
+        if art.get('clearlogo'):
+            clearlogo = art['clearlogo']
+            base['clearlogo'] = random.choice(clearlogo) if isinstance(clearlogo, list) else clearlogo
+
+        # Handle movies (1 episode)
+        if total_eps == 1 and mal_id:
+            base['url'] = f'play_movie/{mal_id}/'
+            base['info']['mediatype'] = 'movie'
+            return utils.parse_view(base, False, True, dub=False)
+
+        return utils.parse_view(base, False, True, dub=False)
 
         # Apply sorting
         if int(self.sort) == 0:  # anime_title
@@ -376,104 +762,6 @@ class SimklWLF(WatchlistFlavorBase):
             base['url'] = f'play_movie/{mal_id}/'
             base['info']['mediatype'] = 'movie'
             return utils.parse_view(base, False, True, dub)
-        return utils.parse_view(base, True, False, dub)
-
-    @div_flavor
-    def _base_next_up_view(self, res, mal_dub=None, anilist_res=None):
-        show_ids = res['show']['ids']
-        anilist_id = show_ids.get('anilist')
-        mal_id = show_ids.get('mal')
-        kitsu_id = show_ids.get('kitsu')
-        dub = True if mal_dub and mal_dub.get(str(mal_id)) else False
-
-        progress = res['watched_episodes_count']
-        next_up = progress + 1
-        episode_count = res["total_episodes_count"]
-
-        if not control.getBool('playlist.unaired'):
-            from resources.lib.AnimeSchedule import get_anime_schedule
-            airing_anime = get_anime_schedule(mal_id)
-
-            if airing_anime and airing_anime.get('current_episode'):
-                episode_count = airing_anime['current_episode']
-
-        if 0 < episode_count < next_up:
-            return
-
-        base_title = res['show']['title']
-
-        title = '%s - %s/%s' % (base_title, next_up, episode_count)
-        poster = image = f'https://wsrv.nl/?url=https://simkl.in/posters/{res["show"]["poster"]}_m.jpg'
-        mal_id, next_up_meta, show = self._get_next_up_meta(mal_id, int(progress))
-        if next_up_meta:
-            kodi_meta = pickle.loads(show['kodi_meta'])
-            if self.title_lang == 'english':
-                base_title = kodi_meta.get('ename') or res['show']['title']
-                title = '%s - %s/%s' % (base_title, next_up, episode_count)
-            if next_up_meta.get('title'):
-                title = '%s - %s' % (title, next_up_meta['title'])
-            if next_up_meta.get('image'):
-                image = next_up_meta['image']
-            plot = next_up_meta.get('plot')
-            aired = next_up_meta.get('aired')
-        else:
-            plot = aired = None
-
-        info = {
-            'UniqueIDs': {
-                'anilist_id': str(anilist_id),
-                'mal_id': str(mal_id),
-                'kitsu_id': str(kitsu_id),
-                **database.get_unique_ids(anilist_id, 'anilist_id'),
-                **database.get_unique_ids(mal_id, 'mal_id'),
-                **database.get_unique_ids(kitsu_id, 'kitsu_id')
-            },
-            'episode': next_up,
-            'title': title,
-            'tvshowtitle': base_title,
-            'plot': plot,
-            'mediatype': 'episode',
-            'aired': aired,
-            'last_watched': res['last_watched_at'],
-            'user_rating': res['user_rating']
-        }
-
-        base = {
-            "name": title,
-            "url": f'watchlist_to_ep/{mal_id}/{res["watched_episodes_count"]}',
-            "image": image,
-            "info": info,
-            "fanart": image,
-            "poster": poster
-        }
-
-        show_meta = database.get_show_meta(mal_id)
-        if show_meta:
-            art = pickle.loads(show_meta['art'])
-            if art.get('fanart'):
-                base['fanart'] = art['fanart']
-            # Pull all artwork from kodi_meta (already respects settings and is pre-selected)
-            if art.get('banner'):
-                base['banner'] = art['banner']
-            if art.get('thumb'):
-                thumb = art['thumb']
-                base['landscape'] = random.choice(thumb) if isinstance(thumb, list) else thumb
-            if art.get('clearart'):
-                clearart = art['clearart']
-                base['clearart'] = random.choice(clearart) if isinstance(clearart, list) else clearart
-            if art.get('clearlogo'):
-                clearlogo = art['clearlogo']
-                base['clearlogo'] = random.choice(clearlogo) if isinstance(clearlogo, list) else clearlogo
-
-        if res["total_episodes_count"] == 1:
-            base['url'] = f'play_movie/{mal_id}/'
-            base['info']['mediatype'] = 'movie'
-            return utils.parse_view(base, False, True, dub)
-
-        if next_up_meta:
-            base['url'] = 'play/%d/%d' % (int(mal_id), int(next_up))
-            return utils.parse_view(base, False, True, dub)
-
         return utils.parse_view(base, True, False, dub)
 
     @staticmethod

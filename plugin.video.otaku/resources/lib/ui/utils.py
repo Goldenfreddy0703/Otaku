@@ -99,7 +99,8 @@ def parse_view(base, isfolder, isplayable, dub=False):
     if control.getBool('divflavors.showdub') and dub:
         base['name'] += ' [COLOR blue](Dub)[/COLOR]'
         base['info']['title'] = base['name']
-    parsed_view = allocate_item(base["name"], base["url"], isfolder, isplayable, [], base["image"], base["info"], fanart=base.get("fanart"), poster=base["image"], landscape=base.get("landscape"), banner=base.get("banner"), clearart=base.get("clearart"), clearlogo=base.get("clearlogo"))
+    poster = base.get("poster") or base["image"]
+    parsed_view = allocate_item(base["name"], base["url"], isfolder, isplayable, [], base["image"], base["info"], fanart=base.get("fanart"), poster=poster, landscape=base.get("landscape"), banner=base.get("banner"), clearart=base.get("clearart"), clearlogo=base.get("clearlogo"))
     if control.getBool('divflavors.dubonly') and not dub:
         parsed_view = None
     return parsed_view

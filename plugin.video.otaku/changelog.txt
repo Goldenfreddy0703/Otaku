@@ -1,3 +1,14 @@
+Changelog v5.2.67 (2026-01-01):
+- Complete Next Up Overhaul — Recoded for all watchlists (MAL, AniList, Kitsu, Simkl)
+- Added episode-driven display with format "Show Name 01x13 - Episode Title"
+- Added episode thumbnails via centralized MetaBrowser.get_next_up_meta()
+- Added full metadata support for Next Up (cast, trailer, country, year, studios, genres, duration, ratings)
+- Added dedicated caching for Next Up sorted by last watched activity
+- Added filtering for shows with at least 1 watched episode (excludes unwatched and completed)
+- Added parallel processing for faster Next Up loading
+- Fixed resolver timeout issue with debrid CDN links (switched from GET to HEAD request)
+- Improved artwork handling with proper poster/thumbnail separation
+
 Changelog v5.2.66 (2025-12-30):
 - Fixed compatibility issues with Kodi 22 nightly
 - Updated AllDebrid Api to 4.1

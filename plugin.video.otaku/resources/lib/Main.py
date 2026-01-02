@@ -45,7 +45,7 @@ def add_last_watched(items):
         if show_meta and show_meta.get('art'):
             art = pickle.loads(show_meta['art'])
         
-        last_watched = "%s[I]%s[/I]" % (control.lang(30000), kodi_meta['title_userPreferred'])
+        last_watched = "%s: [I]%s[/I]" % (control.lang(30000), kodi_meta['title_userPreferred'])
         info = {
             'UniqueIDs': {
                 'mal_id': mal_id,

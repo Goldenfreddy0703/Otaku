@@ -346,7 +346,9 @@ class Resolver(BaseWindow):
                 headers["Cookie"] = cookie
                 headers["User-Agent"] = ua
 
-        response = client.get(url, headers=headers)
+        # Use HEAD request instead of GET - only fetches headers, not the body
+        # This is much faster for debrid CDN links (avoids downloading video data)
+        response = client.head(url, headers=headers, timeout=30)
         if not response or str(response.status_code) not in ['200', '201']:
             status = response.status_code if response else 'failed'
             raise Exception('could not resolve %s. status_code=%s' %
