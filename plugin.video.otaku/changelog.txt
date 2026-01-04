@@ -1,3 +1,7 @@
+Changelog v5.2.70 (2026-01-04):
+- Fixed AllDebrid directory tree traversal to properly handle nested folder structures in torrents
+- Added recursive collect_files() method to traverse full directory tree for AllDebrid
+
 Changelog v5.2.69 (2026-01-03):
 - Fixed Next Up crash for ongoing anime with unknown episode count (e.g., One Piece)
 - Changed .get('key', 0) to .get('key') or 0 to handle API null values in all watchlist flavors
