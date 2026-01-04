@@ -223,8 +223,8 @@ class SimklWLF(WatchlistFlavorBase):
             # Filter: Only shows with at least 1 watched episode AND have a valid next episode
             filtered_data = []
             for item in all_data:
-                eps_watched = item.get('watched_episodes_count', 0)
-                total_eps = item.get('total_episodes_count', 0)
+                eps_watched = item.get('watched_episodes_count') or 0
+                total_eps = item.get('total_episodes_count') or 0
 
                 # Must have watched at least 1 episode
                 if eps_watched < 1:
@@ -319,9 +319,9 @@ class SimklWLF(WatchlistFlavorBase):
         mal_id = show_ids.get('mal')
         kitsu_id = show_ids.get('kitsu')
 
-        eps_watched = res.get('watched_episodes_count', 0)
+        eps_watched = res.get('watched_episodes_count') or 0
         next_ep_num = eps_watched + 1
-        total_eps = res.get('total_episodes_count', 0)
+        total_eps = res.get('total_episodes_count') or 0
 
         # Get show title
         show_title = res['show'].get('title', '')

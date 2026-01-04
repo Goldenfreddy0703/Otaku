@@ -296,8 +296,8 @@ class MyAnimeListWLF(WatchlistFlavorBase):
             # Filter: Only shows with at least 1 watched episode AND have a valid next episode
             filtered_data = []
             for item in all_data:
-                eps_watched = item['list_status'].get('num_episodes_watched', 0)
-                total_eps = item['node'].get('num_episodes', 0)
+                eps_watched = item['list_status'].get('num_episodes_watched') or 0
+                total_eps = item['node'].get('num_episodes') or 0
                 
                 # Must have watched at least 1 episode
                 if eps_watched < 1:
@@ -386,9 +386,9 @@ class MyAnimeListWLF(WatchlistFlavorBase):
         from resources.lib import MetaBrowser
         
         mal_id = item['node']['id']
-        eps_watched = item['list_status'].get('num_episodes_watched', 0)
+        eps_watched = item['list_status'].get('num_episodes_watched') or 0
         next_ep_num = eps_watched + 1
-        total_eps = item['node'].get('num_episodes', 0)
+        total_eps = item['node'].get('num_episodes') or 0
         anilist_res = anilist_by_mal_id.get(mal_id)
 
         # Get show title

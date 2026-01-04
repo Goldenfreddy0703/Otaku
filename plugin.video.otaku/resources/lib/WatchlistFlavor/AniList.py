@@ -287,8 +287,8 @@ class AniListWLF(WatchlistFlavorBase):
             # Filter: Only shows with at least 1 watched episode AND have a valid next episode
             filtered_entries = []
             for entry in entries:
-                progress = entry.get('progress', 0)
-                total_eps = entry['media'].get('episodes', 0)
+                progress = entry.get('progress') or 0
+                total_eps = entry['media'].get('episodes') or 0
 
                 # Must have watched at least 1 episode
                 if progress < 1:
@@ -363,7 +363,7 @@ class AniListWLF(WatchlistFlavorBase):
         anilist_id = res['id']
         mal_id = res.get('idMal')
         next_ep_num = progress + 1
-        total_eps = res.get('episodes', 0)
+        total_eps = res.get('episodes') or 0
 
         # Get show title
         show_title = res['title'].get(self.title_lang) or res['title'].get('userPreferred') or res['title'].get('romaji', '')

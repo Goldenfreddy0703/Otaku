@@ -295,8 +295,8 @@ class KitsuWLF(WatchlistFlavorBase):
             eres = cache_item['anime']
             if not eres:
                 continue
-            progress = res["attributes"].get('progress', 0)
-            total_eps = eres["attributes"].get('episodeCount', 0)
+            progress = res["attributes"].get('progress') or 0
+            total_eps = eres["attributes"].get('episodeCount') or 0
 
             # Must have watched at least 1 episode
             if progress < 1:
@@ -373,9 +373,9 @@ class KitsuWLF(WatchlistFlavorBase):
         if not mal_id:
             mal_id = self.mapping_mal(kitsu_id)
 
-        progress = res["attributes"].get('progress', 0)
+        progress = res["attributes"].get('progress') or 0
         next_ep_num = progress + 1
-        total_eps = eres["attributes"].get('episodeCount', 0)
+        total_eps = eres["attributes"].get('episodeCount') or 0
 
         # Get show title
         show_title = eres["attributes"]["titles"].get(self.__get_title_lang(), eres["attributes"].get('canonicalTitle', ''))

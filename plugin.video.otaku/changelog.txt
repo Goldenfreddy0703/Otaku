@@ -1,3 +1,7 @@
+Changelog v5.2.69 (2026-01-03):
+- Fixed Next Up crash for ongoing anime with unknown episode count (e.g., One Piece)
+- Changed .get('key', 0) to .get('key') or 0 to handle API null values in all watchlist flavors
+
 Changelog v5.2.68 (2026-01-02):
 - Fix AllDebrid season pack handling
 
