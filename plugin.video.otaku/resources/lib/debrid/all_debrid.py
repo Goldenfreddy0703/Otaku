@@ -124,10 +124,10 @@ class AllDebrid:
 
     def resolve_single_magnet(self, hash_, magnet, episode, pack_select):
         magnet_id = self.addMagnet(magnet)['magnets'][0]['id']
-        folder_details = self.magnet_status(magnet_id)['magnets']['files']
-        if folder_details[0].get('e'):
-            folder_details = folder_details[0].get('e')
-        folder_details = [{'link': x['l'], 'path': x['n']} for x in folder_details]
+        details = self.magnet_status(magnet_id)['magnets']['files']
+        folder_details = []
+        for x in details:
+            self.collect_files(x, folder_details)
 
         if episode:
             selected_file = source_utils.get_best_match('path', folder_details, str(episode), pack_select)
@@ -180,6 +180,14 @@ class AllDebrid:
         status = status_data['magnets']['status']
         return magnet_id, status, status_data
 
+    def collect_files(self, y, files):
+        if y.get('e'):
+            for z in y.get('e'):
+                self.collect_files(z, files)
+        else:
+            files.append({'link': y['l'], 'path': y['n']})
+        return files
+
     def resolve_uncached_source(self, source, runinbackground, runinforground, pack_select):
         heading = f'{control.ADDON_NAME}: Cache Resolver'
         if runinforground:
@@ -190,10 +198,6 @@ class AllDebrid:
         magnet_id = magnet_data['magnets'][0]['id']
         magnet_status = self.magnet_status(magnet_id)
         status = magnet_status['magnets']['status']
-        folder_details = magnet_status['magnets']['files']
-        if folder_details[0].get('e'):
-            folder_details = folder_details[0].get('e')
-        folder_details = [{'link': x['l'], 'path': x['n']} for x in folder_details]
 
         if runinbackground:
             control.notify(heading, "The source is downloading to your cloud")
@@ -228,6 +232,10 @@ class AllDebrid:
             if total_size > 0:
                 control.ok_dialog(heading, "This file has been added to your Cloud")
             # Check if there's only one file in the torrent
+            details = magnet_status['magnets']['files']
+            folder_details = []
+            for x in details:
+                self.collect_files(x, folder_details)
             if len(folder_details) == 1:
                 # If there's just one file, use it directly
                 stream_link = self.resolve_hoster(folder_details[0]['link'])
