@@ -196,10 +196,11 @@ class SimklWLF(WatchlistFlavorBase):
         Get Next Up episodes - Episode-driven list of next unwatched episodes.
 
         Next Up Rules:
-        - Shows must have at least one watched episode
+        - All anime in Watching list are included
+        - Shows with 0 progress show Episode 1 as next up
         - Only the immediate next unwatched episode is shown per anime
         - Sorted by last watched activity (last_watched_at)
-        - Only aired episodes are included
+        - Only aired episodes are included (if playlist.unaired is disabled)
         - Completed shows are excluded
         - Format: "Show Name 01x13 - Episode Title"
         """
@@ -220,15 +221,12 @@ class SimklWLF(WatchlistFlavorBase):
             results = self.get_all_items('watching')
             all_data = results.get('anime', []) if results else []
 
-            # Filter: Only shows with at least 1 watched episode AND have a valid next episode
+            # Filter: Shows that have a valid next episode to watch
+            # Includes shows with 0 progress (Episode 1 is their next up)
             filtered_data = []
             for item in all_data:
                 eps_watched = item.get('watched_episodes_count') or 0
                 total_eps = item.get('total_episodes_count') or 0
-
-                # Must have watched at least 1 episode
-                if eps_watched < 1:
-                    continue
 
                 # Skip if show is completed (all episodes watched)
                 # total_eps == 0 means unknown/ongoing, so include it

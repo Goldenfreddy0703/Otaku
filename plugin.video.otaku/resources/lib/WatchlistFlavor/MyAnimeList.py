@@ -235,10 +235,11 @@ class MyAnimeListWLF(WatchlistFlavorBase):
         Get Next Up episodes - Episode-driven list of next unwatched episodes.
         
         Next Up Rules:
-        - Shows must have at least one watched episode
+        - All anime in Watching list are included
+        - Shows with 0 progress show Episode 1 as next up
         - Only the immediate next unwatched episode is shown per anime
         - Sorted by last watched activity (list_updated_at)
-        - Only aired episodes are included
+        - Only aired episodes are included (if playlist.unaired is disabled)
         - Completed shows are excluded
         - Format: "Show Name 01x13 - Episode Title"
         """
@@ -293,15 +294,12 @@ class MyAnimeListWLF(WatchlistFlavorBase):
                 results = r.json() if r else {}
                 all_data.extend(results.get('data', []))
 
-            # Filter: Only shows with at least 1 watched episode AND have a valid next episode
+            # Filter: Shows that have a valid next episode to watch
+            # Includes shows with 0 progress (Episode 1 is their next up)
             filtered_data = []
             for item in all_data:
                 eps_watched = item['list_status'].get('num_episodes_watched') or 0
                 total_eps = item['node'].get('num_episodes') or 0
-                
-                # Must have watched at least 1 episode
-                if eps_watched < 1:
-                    continue
                 
                 # Skip if show is completed (all episodes watched)
                 # total_eps == 0 means unknown/ongoing, so include it

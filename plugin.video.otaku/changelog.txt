@@ -1,3 +1,8 @@
+Changelog v5.2.71 (2026-01-11):
+- Fixed Next Up to include anime with 0 episodes watched (Episode 1 now shows for newly added anime)
+- Next Up now displays all anime in Currently Watching list, not just those with 1+ watched episodes
+- Applied fix across all watchlist flavors (AniList, MyAnimeList, Kitsu, Simkl)
+
 Changelog v5.2.70 (2026-01-04):
 - Fixed AllDebrid directory tree traversal to properly handle nested folder structures in torrents
 - Added recursive collect_files() method to traverse full directory tree for AllDebrid
