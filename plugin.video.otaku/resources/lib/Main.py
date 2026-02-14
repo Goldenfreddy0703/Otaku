@@ -1727,6 +1727,9 @@ def PLAY(payload, params):
     # This ensures metadata is available even when playing from Information dialog
     if not params.get('tvshowtitle'):
         episode_data = database.get_episode(mal_id, episode)
+        if not episode_data:
+            MetaBrowser.get_anime_init(mal_id)
+            episode_data = database.get_episode(mal_id, episode)
         if episode_data:
             params = pickle.loads(episode_data['kodi_meta'])
 
