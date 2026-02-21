@@ -16,12 +16,13 @@ class SyncDatabase:
         self.build_showmeta_table()
         self.build_episode_table()
         self.build_show_data_table()
+        self.build_anilist_enrichment_table()
 
         # If you make changes to the required meta in any indexer that is cached in this database
         # You will need to update the below version number to match the new addon version
         # This will ensure that the metadata required for operations is available
         # You may also update this version number to force a rebuild of the database after updating Otaku
-        self.last_meta_update = '1.0.10'
+        self.last_meta_update = '1.0.11'
         self.refresh_activites()
         self.check_database_version()
 
@@ -81,18 +82,18 @@ class SyncDatabase:
             # Clear last_watched setting
             control.setSetting('addon.last_watched', '')
 
-            # Update menu configurations with last_watched and watch_history items
-            self._update_menu_config('menu.mainmenu.config', 'last_watched', 'watch_history')
-            self._update_menu_config('movie.mainmenu.config', 'last_watched_movie', 'watch_history_movie')
-            self._update_menu_config('tv_show.mainmenu.config', 'last_watched_tv_show', 'watch_history_tv_show')
-            self._update_menu_config('tv_short.mainmenu.config', 'last_watched_tv_short', 'watch_history_tv_short')
-            self._update_menu_config('special.mainmenu.config', 'last_watched_special', 'watch_history_special')
-            self._update_menu_config('ova.mainmenu.config', 'last_watched_ova', 'watch_history_ova')
-            self._update_menu_config('ona.mainmenu.config', 'last_watched_ona', 'watch_history_ona')
-            self._update_menu_config('music.mainmenu.config', 'last_watched_music', 'watch_history_music')
+            # Update menu configurations with last_watched, watch_history, and Next Up items
+            self._update_menu_config('menu.mainmenu.config', 'last_watched', 'watch_history', 'next_up')
+            self._update_menu_config('movie.mainmenu.config', 'last_watched_movie', 'watch_history_movie', 'next_up_movie')
+            self._update_menu_config('tv_show.mainmenu.config', 'last_watched_tv_show', 'watch_history_tv_show', 'next_up_tv_show')
+            self._update_menu_config('tv_short.mainmenu.config', 'last_watched_tv_short', 'watch_history_tv_short', 'next_up_tv_short')
+            self._update_menu_config('special.mainmenu.config', 'last_watched_special', 'watch_history_special', 'next_up_special')
+            self._update_menu_config('ova.mainmenu.config', 'last_watched_ova', 'watch_history_ova', 'next_up_ova')
+            self._update_menu_config('ona.mainmenu.config', 'last_watched_ona', 'watch_history_ona', 'next_up_ona')
+            self._update_menu_config('music.mainmenu.config', 'last_watched_music', 'watch_history_music', 'next_up_music')
 
-    def _update_menu_config(self, config_key, last_watched_item, watch_history_item):
-        """Helper method to update menu configurations with last_watched and watch_history items"""
+    def _update_menu_config(self, config_key, last_watched_item, watch_history_item, next_up_item):
+        """Helper method to update menu configurations with last_watched, watch_history, and next_up items"""
         menu = control.getStringList(config_key)
         if menu:
             # Add last_watched item if not already in the list
@@ -107,6 +108,19 @@ class SyncDatabase:
                     menu.insert(insert_index, watch_history_item)
                 else:
                     menu.insert(0, watch_history_item)
+
+            # Add next_up item if not already in the list
+            if next_up_item not in menu:
+                # Insert next_up after watch_history if watch_history exists
+                if watch_history_item in menu:
+                    insert_index = menu.index(watch_history_item) + 1
+                    menu.insert(insert_index, next_up_item)
+                # Otherwise, insert next_up after last_watched if last_watched exists
+                elif last_watched_item in menu:
+                    insert_index = menu.index(last_watched_item) + 1
+                    menu.insert(insert_index, next_up_item)
+                else:
+                    menu.insert(0, next_up_item)
             control.setStringList(config_key, menu)
 
     @staticmethod
@@ -188,6 +202,16 @@ class SyncDatabase:
             cursor.execute('CREATE TABLE IF NOT EXISTS activities (sync_id INTEGER PRIMARY KEY, otaku_version TEXT NOT NULL)')
             cursor.connection.commit()
 
+    @staticmethod
+    def build_anilist_enrichment_table():
+        with SQL(control.malSyncDB) as cursor:
+            cursor.execute('''CREATE TABLE IF NOT EXISTS anilist_enrichment (
+                mal_id INTEGER PRIMARY KEY,
+                data BLOB NOT NULL,
+                last_updated INTEGER NOT NULL
+            )''')
+            cursor.connection.commit()
+
     def re_build_database(self, silent=False):
         import service
 
@@ -208,6 +232,7 @@ class SyncDatabase:
         self.build_episode_table()
         self.build_show_data_table()
         self.build_watchlist_cache_table()
+        self.build_anilist_enrichment_table()
 
         self.set_base_activites()
         self.refresh_activites()
@@ -220,7 +245,6 @@ class SyncDatabase:
 
         # Retrieve current settings
         watchlist_update_enabled = control.getBool('watchlist.update.enabled')
-        watchlist_update_flavor = control.getSetting('watchlist.update.flavor')
         watchlist_update_percent = control.getInt('watchlist.update.percent')
         watchlist_sync_enabled = control.getBool('watchlist.sync.enabled')
         anilist_enabled = control.getBool('anilist.enabled')
@@ -253,7 +277,6 @@ class SyncDatabase:
         # Save all these settings to migrationSettings (migration.json)
         migration_data = {
             "watchlist.update.enabled": watchlist_update_enabled,
-            "watchlist.update.flavor": watchlist_update_flavor,
             "watchlist.update.percent": watchlist_update_percent,
             "watchlist.sync.enabled": watchlist_sync_enabled,
             "anilist.enabled": anilist_enabled,

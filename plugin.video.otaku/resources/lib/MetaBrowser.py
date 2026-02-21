@@ -34,10 +34,15 @@ BROWSER = _BrowserProxy()
 def get_anime_init(mal_id):
     # Lazy import indexers - only import what's actually needed
     show_meta = database.get_show_meta(mal_id)
-    if not show_meta:
+    show = database.get_show(mal_id)
+
+    # Ensure both shows and shows_meta tables are populated
+    # shows_meta can exist from collect_meta batch runs without the shows entry
+    if not show_meta or not show:
         BROWSER.get_anime(mal_id)
         show_meta = database.get_show_meta(mal_id)
-        if not show_meta:
+        show = database.get_show(mal_id)
+        if not show_meta or not show:
             return [], 'episodes'
 
     if control.getBool('override.meta.api'):

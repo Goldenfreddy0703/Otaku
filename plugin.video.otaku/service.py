@@ -67,12 +67,13 @@ def sync_watchlist(silent=False):
         control.log('### Updating Completed Sync')
         from resources.lib.WatchlistFlavor import WatchlistFlavor
 
-        flavor = WatchlistFlavor.get_update_flavor()
-        if flavor:
-            if flavor.flavor_name in control.enabled_watchlists():
-                flavor.save_completed()
+        flavors = WatchlistFlavor.get_all_update_flavors()
+        if flavors:
+            synced = WatchlistFlavor.watchlist_sync_all()
+            if synced:
                 if not silent:
-                    notify_string = f'Completed Sync [B]{flavor.flavor_name.capitalize()}[/B]'
+                    synced_names = ', '.join([n.capitalize() for n in synced])
+                    notify_string = f'Completed Sync [B]{synced_names}[/B]'
                     return control.notify(control.ADDON_NAME, notify_string)
             else:
                 if not silent:
@@ -94,8 +95,8 @@ def prefetch_watchlist():
 
     from resources.lib.ui.database import is_watchlist_cache_valid
 
-    flavor_name = control.getSetting('watchlist.update.flavor').lower()
-    if flavor_name not in control.enabled_watchlists():
+    enabled = control.enabled_watchlists()
+    if not enabled:
         return
 
     # Map flavor to all its status names
@@ -105,31 +106,53 @@ def prefetch_watchlist():
         'kitsu': ['current', 'completed', 'on_hold', 'dropped', 'planned'],
         'simkl': ['watching', 'completed', 'on_hold', 'dropped', 'plantowatch']
     }
-    statuses = status_map.get(flavor_name)
-    if not statuses:
-        return
 
     try:
         from resources.lib.WatchlistFlavor import WatchlistFlavor
-        flavor = WatchlistFlavor.get_update_flavor()
-        if not flavor:
-            return
 
-        for status in statuses:
-            # Check if cache is still valid - skip this status
-            if is_watchlist_cache_valid(flavor_name, status):
-                control.log(f'### Watchlist cache valid for {flavor_name}/{status}, skipping')
+        for flavor_name in enabled:
+            statuses = status_map.get(flavor_name)
+            if not statuses:
                 continue
 
-            control.log(f'### Prefetching {flavor_name} watchlist ({status})')
-            try:
-                # Call get_watchlist_status which will fetch and cache the data
-                flavor.get_watchlist_status(status, next_up=False, offset=0, page=1)
-                control.log(f'### Prefetch complete for {flavor_name}/{status}')
-            except Exception as e:
-                control.log(f'### Prefetch failed for {status}: {e}', 'warning')
+            flavor = WatchlistFlavor.get_flavor_by_name(flavor_name)
+            if not flavor:
+                continue
 
-        control.log(f'### Watchlist prefetch finished for {flavor_name}')
+            for status in statuses:
+                # Check if cache is still valid - skip this status
+                if is_watchlist_cache_valid(flavor_name, status):
+                    control.log(f'### Watchlist cache valid for {flavor_name}/{status}, skipping')
+                    continue
+
+                control.log(f'### Prefetching {flavor_name} watchlist ({status})')
+                try:
+                    # Only cache raw data — skip view processing (no AniList calls)
+                    flavor.get_watchlist_status(status, next_up=False, offset=0, page=1, cache_only=True)
+                    control.log(f'### Prefetch complete for {flavor_name}/{status}')
+                except Exception as e:
+                    control.log(f'### Prefetch failed for {status}: {e}', 'warning')
+
+            control.log(f'### Watchlist prefetch finished for {flavor_name}')
+
+        # Consolidated AniList enrichment: ONE API call for ALL watchlist MAL IDs
+        try:
+            from resources.lib.ui.database import get_all_watchlist_mal_ids, save_anilist_enrichment_batch
+            all_mal_ids = get_all_watchlist_mal_ids()
+            if all_mal_ids:
+                control.log(f'### Prefetching AniList enrichment for {len(all_mal_ids)} MAL IDs')
+                from resources.lib.endpoints.anilist import Anilist
+                anilist_data = Anilist().get_anilist_by_mal_ids(all_mal_ids)
+                if anilist_data:
+                    save_anilist_enrichment_batch(anilist_data)
+                    control.log(f'### AniList enrichment cached: {len(anilist_data)} items')
+                else:
+                    control.log('### AniList enrichment returned no data')
+            else:
+                control.log('### No MAL IDs found in watchlist cache for AniList enrichment')
+        except Exception as e:
+            control.log(f'### AniList enrichment prefetch failed: {e}', 'warning')
+
     except Exception as e:
         control.log(f'### Watchlist prefetch failed: {e}', 'warning')
 

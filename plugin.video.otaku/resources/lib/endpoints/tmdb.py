@@ -52,6 +52,26 @@ def getArt(meta_ids, mtype, limit=None):
     return art
 
 
+def searchByTitle(title, mtype):
+    """Search TMDB by title and return the discovered TMDB ID, or None."""
+    if not title:
+        return None
+    search_type = 'movie' if mtype == 'movies' else 'tv'
+    params = {
+        'query': title,
+        'api_key': apiKey
+    }
+    try:
+        response = client.get(f'{baseUrl}search/{search_type}', params=params)
+        res = response.json() if response else {}
+        results = res.get('results', [])
+        if results:
+            return results[0].get('id')
+    except Exception:
+        pass
+    return None
+
+
 def get_episode_titles(tmdb_id, season_number, episode_number):
     params = {
         'include_image_language': 'en,ja,null',

@@ -6,7 +6,7 @@ import json
 
 from resources.lib.ui import control, database
 from resources.lib.endpoints import aniskip, anime_skip
-from resources.lib import WatchlistIntegration, indexers
+from resources.lib import indexers
 
 
 playList = control.playList
@@ -149,33 +149,18 @@ class WatchlistPlayer(player):
         if not self._watchlist_update:
             return
 
-        # Cache show data to avoid repeated database calls
-        show = database.get_show(self.mal_id)
-        if not show:
-            return
-
-        kodi_meta = pickle.loads(show['kodi_meta'])
-        status = kodi_meta.get('status')
-        episodes = kodi_meta.get('episodes')
-
         while self.isPlaying() and not self.updated:
             self.current_time = self.getTime()
             watched_percentage = (self.current_time / self.total_time) * 100 if self.total_time != 0 else 0
 
             if watched_percentage > self.update_percent:
-                self._watchlist_update(self.mal_id, self.episode)
+                any_completed = self._watchlist_update(self.mal_id, self.episode)
                 self.updated = True
 
-                # Update watchlist status based on completion
-                if self.episode == episodes and status in ['Finished Airing', 'FINISHED']:
-                    WatchlistIntegration.set_watchlist_status(self.mal_id, 'completed')
-                    WatchlistIntegration.set_watchlist_status(self.mal_id, 'COMPLETED')
+                # Sync completed watchlists if any flavor was auto-completed
+                if any_completed:
                     xbmc.sleep(3000)
                     service.sync_watchlist(True)
-                else:
-                    WatchlistIntegration.set_watchlist_status(self.mal_id, 'watching')
-                    WatchlistIntegration.set_watchlist_status(self.mal_id, 'current')
-                    WatchlistIntegration.set_watchlist_status(self.mal_id, 'CURRENT')
                 break
             xbmc.sleep(10000)  # Check every 10 seconds instead of 5
 

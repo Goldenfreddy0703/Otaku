@@ -100,6 +100,36 @@ class Anilist:
             page += 1
         return all_media
 
+    def get_enrichment_for_mal_ids(self, mal_ids):
+        """
+        Get AniList enrichment data using DB cache first, fetching only missing IDs from API.
+        Returns list of AniList media objects (same format as get_anilist_by_mal_ids).
+        """
+        if not mal_ids:
+            return []
+
+        from resources.lib.ui.database import get_anilist_enrichment_batch, save_anilist_enrichment_batch
+
+        # Check cache for existing data
+        cached = get_anilist_enrichment_batch(mal_ids)
+        cached_ids = set(cached.keys())
+        missing = [mid for mid in mal_ids if int(mid) not in cached_ids]
+
+        # Fetch missing from AniList API
+        if missing:
+            try:
+                fresh = self.get_anilist_by_mal_ids(missing)
+                if fresh:
+                    save_anilist_enrichment_batch(fresh)
+                    for item in fresh:
+                        mal_id = item.get('idMal')
+                        if mal_id:
+                            cached[int(mal_id)] = item
+            except Exception as e:
+                control.log(f'AniList enrichment fetch failed: {e}', 'warning')
+
+        return list(cached.values())
+
 
     def get_anilist_ratings_batch(self, mal_ids):
         """

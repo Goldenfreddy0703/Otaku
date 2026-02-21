@@ -1,33 +1,46 @@
-Note: If Anyone has not gotten a migration dialog when getting this major update, Please go to your maintenance catagory of the addon settings and run the migration script.
-Thank you
+Otaku v5.2.72 — The "I Finally Got Off the Couch" Update
 
+Hey everyone,
 
-Welcome to the New Era of Otaku!
+Let’s be real — I’ve been lazy. My last commit was January 11th and I basically disappeared for over a month. Life happened, motivation vanished, you know how it goes. But I’m back, and I came back to coding. This is one of the biggest updates Otaku has seen in a while, so buckle up.
 
-Hi everyone,
+What’s New? 
 
-We’re thrilled to announce a major milestone: Otaku has officially migrated to its new version!
-This is the biggest update in Otaku’s history, bringing over everything from Otaku Testing and making it the new standard.
+AniList Enrichment — Massively Optimized:
+- Startup watchlist prefetch no longer hammers the AniList API with 20+ separate calls
+- All MAL IDs are collected and fetched in ONE single batch call, then cached for 7 days
+- Watchlist views now load AniList data from cache instantly instead of hitting the API every time
+- Fixed Simkl Next Up crash caused by null last_watched_at values from the API
+- Fixed same potential crash in MAL Next Up with null updated_at values
 
-What’s New?
-- Expanded content: Movies, TV Shows, Shorts, Specials, OVAs, ONAs, and Music Videos
-- Fully working Debrid & Cloud services (thanks to @joezito129 & @adamosborne83)
-- Easy Debrid support
-- Enhanced filtering & search for more accurate scraping
-- MyAnimeList menus added alongside AniList
-- New sorting system for finer control of sources
-- Faster, smoother playback (subtitles, audio, intro/outro skip)
-- Watchlist completion: finished anime auto-added to your completed list
-- Seamless watchlist migration—no reconfiguration needed
-- Uncached source support for Debrid services
-- Kodi 20+ compatibility (Kodi 19 is no longer supported)
+Next Up — Completely Rebuilt:
+- Brand new top-level Next Up menu item accessible from every sub-menu
+- Choose which watchlist flavor powers your Next Up (AniList, Kitsu, MAL, Simkl, or auto)
+- Enable/disable Next Up right from Watchlist settings
+- Rewrote and centralized ~800 lines of duplicated code into a single shared builder
+- Way cleaner, way faster, way less buggy
 
-Why the Change?
-After surveying our users, it became clear that almost everyone had already moved on from Python 2/Kodi 18. With this update, we’re fully embracing Kodi 20+, ensuring Otaku is future-proof, faster, and more reliable.
+Widget Playback — Finally Fixed:
+- Widgets now show full metadata (title, description, artwork) during playback
+- This was a long-standing issue that many of you reported — it’s gone now
+- Fixed crashes when playing Next Up episodes for shows not fully initialized
 
-Thanks & Support
-We want to thank the entire community for helping us get here, especially our contributors. If you encounter issues or want to share feedback, visit our wiki on Github
+Artwork Improvements:
+- New title-based artwork search fallback for anime missing TVDB/TMDB mappings
+- If ID-based lookups fail, Otaku now searches by title to find artwork
+- Toggle it on/off in settings (on by default)
 
-This migration marks a new era for Otaku, and we can’t wait to hear what you think. Happy watching!
+Watchlist Recode:
+- All enabled watchlists now update simultaneously — no more picking just one
+- Per-flavor completion detection using each service’s own episode counts
+- New per-flavor Watchlist Manager in the context menu
+- Unified status mapping across all flavors for consistent behavior
+
+A Huge Thank You:
+Seriously, thank you to everyone who stuck around while I was MIA. Your patience, bug reports, and support mean the world. Special thanks to the team and everyone in the community who kept things going. You all are the reason Otaku exists.
+
+I’ve got my motivation back and I’m excited to keep pushing this forward. If you run into any issues with this update, hit us up on GitHub.
+
+Happy watching!
 
 — Team Otaku

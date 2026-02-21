@@ -1836,3 +1836,23 @@ msgstr ""
 msgctxt "#30450"
 msgid "Prefetch Watchlist on Startup"
 msgstr ""
+
+msgctxt "#30451"
+msgid "Next Up"
+msgstr ""
+
+msgctxt "#30452"
+msgid "Artwork Title Search"
+msgstr ""
+
+msgctxt "#30453"
+msgid "Next Up Watchlist"
+msgstr ""
+
+msgctxt "#30454"
+msgid "Auto (First Enabled)"
+msgstr ""
+
+msgctxt "#30455"
+msgid "Enable Next Up"
+msgstr ""

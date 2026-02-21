@@ -22,6 +22,28 @@ def get_auth_token():
     return None
 
 
+def searchByTitle(title, mtype):
+    """Search TVDB by title and return the discovered TVDB ID, or None."""
+    if not title or not api_key:
+        return None
+    token = get_auth_token()
+    if not token:
+        return None
+    headers = {'Authorization': f'Bearer {token}'}
+    search_type = 'movie' if mtype == 'movies' else 'series'
+    params = {'query': title, 'type': search_type}
+    try:
+        response = client.get(f'{baseUrl}/search', params=params, headers=headers)
+        res = response.json() if response else {}
+        results = res.get('data', [])
+        if results:
+            tvdb_id = results[0].get('tvdb_id') or results[0].get('id')
+            return int(tvdb_id) if tvdb_id else None
+    except Exception:
+        pass
+    return None
+
+
 def getArt(meta_ids, mtype, limit=None):
     """Get artwork from TVDB API v4"""
     art = {}

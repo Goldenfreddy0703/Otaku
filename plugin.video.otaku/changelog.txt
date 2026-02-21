@@ -1,3 +1,31 @@
+Changelog v5.2.72 (2026-02-21):
+- Added AniList enrichment cache — consolidated 20+ separate API calls into ONE batch call on startup
+- Added persistent anilist_enrichment DB table with 7-day TTL for cached AniList metadata
+- Added cache_only mode to watchlist prefetching — skips view processing, only caches raw data
+- Added get_enrichment_for_mal_ids() helper — checks DB cache first, only fetches missing IDs from API
+- View functions now use cached AniList data instead of making fresh API calls every time
+- Fixed Simkl Next Up crash caused by last_watched_at being null from API (TypeError on sort)
+- Fixed potential MAL Next Up crash with same null value pattern on updated_at field
+- Added top-level Next Up menu item available across all sub-menus (main, movies, tv shows, etc.)
+- Added "Enable Next Up" toggle in Watchlist settings (requires watchlist updating to be enabled)
+- Added "Next Up Watchlist" flavor picker: Auto (First Enabled), AniList, Kitsu, MyAnimeList, Simkl
+- Centralized Next Up episode building into shared build_next_up_item() in WatchlistFlavorBase
+- Reduced ~800 lines of duplicated Next Up code across all 4 flavors to shared builder + thin wrappers
+- Removed per-flavor "Next Up" entries from individual watchlist menus
+- Fixed widget playback showing no metadata by detecting widget context and using playlist-based playback
+- Fixed missing metadata fallback when episode data isn't in database during playback
+- Fixed Next Up playback crash when show exists in shows_meta but not in shows table
+- Added title-based artwork search fallback when ID-based lookups return no artwork
+- Uses mal_title from mappings DB (falls back to kodi_meta title_userPreferred)
+- Searches TMDB and TVDB by title to discover missing IDs, then fetches artwork
+- Added "Artwork Title Search" toggle in settings (enabled by default)
+- Complete Watchlist Recode — All enabled watchlists now update simultaneously instead of picking one
+- Added per-flavor completion detection using each service's own total episode count
+- Added per-flavor Watchlist Manager context menu for managing individual watchlists
+- Removed watchlist.update.flavor setting — all enabled flavors update automatically
+- Added unified status mapping (_STATUS_MAP) for consistent status handling across all flavors
+- Simplified player.py and Main.py watchlist update flow
+
 Changelog v5.2.71 (2026-01-11):
 - Fixed Next Up to include anime with 0 episodes watched (Episode 1 now shows for newly added anime)
 - Next Up now displays all anime in Currently Watching list, not just those with 1+ watched episodes

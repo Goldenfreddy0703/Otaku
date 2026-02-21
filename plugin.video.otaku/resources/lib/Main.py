@@ -30,6 +30,12 @@ BROWSER = MetaBrowser.BROWSER
 plugin_url = control.get_plugin_url(sys.argv[0])
 
 
+def add_next_up(items):
+    """Add Next Up menu item if enabled in watchlist settings."""
+    if control.getBool('watchlist.update.enabled') and control.getBool('nextup.enabled'):
+        items.append((control.lang(30451), "next_up", 'next_up.png', {}))
+    return items
+
 def add_last_watched(items):
     # # Check if last watched feature is enabled
     # if not control.getBool("interface.show_last_watched"):
@@ -1732,6 +1738,31 @@ def PLAY(payload, params):
             episode_data = database.get_episode(mal_id, episode)
         if episode_data:
             params = pickle.loads(episode_data['kodi_meta'])
+        else:
+            # Fallback: build minimal params from show database
+            # This ensures metadata is available even for episodes not yet indexed
+            show_meta = database.get_show(mal_id)
+            if show_meta:
+                kodi_meta = pickle.loads(show_meta['kodi_meta'])
+                show_art = database.get_show_meta(mal_id)
+                art = pickle.loads(show_art['art']) if show_art and show_art.get('art') else {}
+                params = {
+                    'info': {
+                        'title': f"{kodi_meta.get('title_userPreferred', '')} - Episode {episode}",
+                        'tvshowtitle': kodi_meta.get('title_userPreferred', ''),
+                        'episode': int(episode),
+                        'plot': kodi_meta.get('plot', ''),
+                        'mediatype': 'episode',
+                        'UniqueIDs': {'mal_id': str(mal_id), **database.get_unique_ids(mal_id, 'mal_id')},
+                    },
+                    'image': {
+                        'poster': art.get('poster') or kodi_meta.get('poster', ''),
+                        'fanart': art.get('fanart', ''),
+                        'icon': art.get('poster') or kodi_meta.get('poster', ''),
+                        'thumb': art.get('thumb', ''),
+                    },
+                    'path': params.get('path', ''),
+                }
 
     if resume:
         resume = float(resume)
@@ -2093,8 +2124,7 @@ def find_episode_by_title(mal_ids, episode_titles):
 @Route('marked_as_watched_ona/*')
 @Route('marked_as_watched_music/*')
 def MARKED_AS_WATCHED(payload, params):
-    from resources.lib.WatchlistFlavor import WatchlistFlavor
-    from resources.lib.WatchlistIntegration import watchlist_update_episode, set_watchlist_status
+    from resources.lib.WatchlistIntegration import watchlist_update_episode
     import service
 
     payload_list = payload.split("/")
@@ -2104,32 +2134,26 @@ def MARKED_AS_WATCHED(payload, params):
         mal_id = payload_list[0] if payload_list else ""
         episode = 1
 
-    show = database.get_show(mal_id)
-    if show:
-        kodi_meta = pickle.loads(show['kodi_meta'])
-        status = kodi_meta.get('status')
-        episodes = kodi_meta.get('episodes')
-        title = kodi_meta.get('title_userPreferred')
-        if episode == episodes:
-            if status in ['Finished Airing', 'FINISHED']:
-                set_watchlist_status(mal_id, 'completed')
-                set_watchlist_status(mal_id, 'COMPLETED')
-                control.sleep(3000)
-                service.sync_watchlist(True)
-        else:
-            set_watchlist_status(mal_id, 'watching')
-            set_watchlist_status(mal_id, 'current')
-            set_watchlist_status(mal_id, 'CURRENT')
-            control.sleep(3000)
-            service.sync_watchlist(True)
+    any_completed = watchlist_update_episode(mal_id, episode)
+    if any_completed:
+        control.sleep(3000)
+        service.sync_watchlist(True)
 
-    flavor = WatchlistFlavor.get_update_flavor()
-    watchlist_update_episode(mal_id, episode)
+    # Build notification showing updated watchlists
+    enabled = control.enabled_watchlists()
+    flavor_labels = {'anilist': 'AniList', 'kitsu': 'Kitsu', 'mal': 'MAL', 'simkl': 'Simkl'}
+    updated_names = ', '.join([flavor_labels.get(f, f.capitalize()) for f in enabled]) if enabled else 'No Watchlist'
+
     if len(payload_list) == 2 and payload_list[1]:
-        control.notify(control.ADDON_NAME, f'Episode #{episode} was Marked as Watched in {flavor.flavor_name}')
+        control.notify(control.ADDON_NAME, f'Episode #{episode} was Marked as Watched in {updated_names}')
         control.execute(f'ActivateWindow(Videos,plugin://{control.ADDON_ID}/watchlist_to_ep/{mal_id}/{episode})')
     else:
-        control.notify(control.ADDON_NAME, f'{title} was Marked as Watched in {flavor.flavor_name}')
+        show = database.get_show(mal_id)
+        title = ''
+        if show:
+            kodi_meta = pickle.loads(show['kodi_meta'])
+            title = kodi_meta.get('title_userPreferred', '')
+        control.notify(control.ADDON_NAME, f'{title} was Marked as Watched in {updated_names}')
     control.exit_code()
 
 
@@ -2772,6 +2796,9 @@ def LIST_MENU(payload, params):
     if "watch_history" in enabled_ids:
         enabled_menu_items = add_watch_history(enabled_menu_items)
 
+    if "next_up" in enabled_ids:
+        enabled_menu_items = add_next_up(enabled_menu_items)
+
     for item in MENU_ITEMS:
         if item[1] in enabled_ids:
             enabled_menu_items.append(item)
@@ -2840,6 +2867,9 @@ def MOVIES_MENU(payload, params):
 
     if "watch_history_movie" in enabled_ids:
         enabled_movies_items = add_watch_history(enabled_movies_items)
+
+    if "next_up_movie" in enabled_ids:
+        enabled_movies_items = add_next_up(enabled_movies_items)
 
     for item in MOVIES_ITEMS:
         if item[1] in enabled_ids:
@@ -2910,6 +2940,9 @@ def TV_SHOWS_MENU(payload, params):
     if "watch_history_tv_show" in enabled_ids:
         enabled_tv_show_items = add_watch_history(enabled_tv_show_items)
 
+    if "next_up_tv_show" in enabled_ids:
+        enabled_tv_show_items = add_next_up(enabled_tv_show_items)
+
     for item in TV_SHOWS_ITEMS:
         if item[1] in enabled_ids:
             enabled_tv_show_items.append(item)
@@ -2978,6 +3011,9 @@ def TV_SHORTS_MENU(payload, params):
 
     if "watch_history_tv_short" in enabled_ids:
         enabled_tv_short_items = add_watch_history(enabled_tv_short_items)
+
+    if "next_up_tv_short" in enabled_ids:
+        enabled_tv_short_items = add_next_up(enabled_tv_short_items)
 
     for item in TV_SHORTS_ITEMS:
         if item[1] in enabled_ids:
@@ -3048,6 +3084,9 @@ def SPECIALS_MENU(payload, params):
     if "watch_history_special" in enabled_ids:
         enabled_special_items = add_watch_history(enabled_special_items)
 
+    if "next_up_special" in enabled_ids:
+        enabled_special_items = add_next_up(enabled_special_items)
+
     for item in SPECIALS_ITEMS:
         if item[1] in enabled_ids:
             enabled_special_items.append(item)
@@ -3116,6 +3155,9 @@ def OVAS_MENU(payload, params):
 
     if "watch_history_ova" in enabled_ids:
         enabled_ova_items = add_watch_history(enabled_ova_items)
+
+    if "next_up_ova" in enabled_ids:
+        enabled_ova_items = add_next_up(enabled_ova_items)
 
     for item in OVAS_ITEMS:
         if item[1] in enabled_ids:
@@ -3186,6 +3228,9 @@ def ONAS_MENU(payload, params):
     if "watch_history_ona" in enabled_ids:
         enabled_ona_items = add_watch_history(enabled_ona_items)
 
+    if "next_up_ona" in enabled_ids:
+        enabled_ona_items = add_next_up(enabled_ona_items)
+
     for item in ONAS_ITEMS:
         if item[1] in enabled_ids:
             enabled_ona_items.append(item)
@@ -3254,6 +3299,9 @@ def MUSIC_MENU(payload, params):
 
     if "watch_history_music" in enabled_ids:
         enabled_music_items = add_watch_history(enabled_music_items)
+
+    if "next_up_music" in enabled_ids:
+        enabled_music_items = add_next_up(enabled_music_items)
 
     for item in MUSIC_ITEMS:
         if item[1] in enabled_ids:
@@ -4410,11 +4458,11 @@ def SETUP_WIZARD(payload, params):
 
     # Yes selected
     if choice == 1:
-        control.setStringList('menu.mainmenu.config', ['last_watched', 'watch_history', 'airing_calendar', 'airing_last_season', 'airing_this_season', 'airing_next_season', 'movies', 'tv_shows', 'tv_shorts', 'specials', 'ovas', 'onas', 'music', 'trending', 'popular', 'voted', 'favourites', 'top_100', 'genres', 'search', 'tools'])
+        control.setStringList('menu.mainmenu.config', ['last_watched', 'watch_history', 'next_up', 'airing_calendar', 'airing_last_season', 'airing_this_season', 'airing_next_season', 'movies', 'tv_shows', 'tv_shorts', 'specials', 'ovas', 'onas', 'music', 'trending', 'popular', 'voted', 'favourites', 'top_100', 'genres', 'search', 'tools'])
 
     # No selected
     elif choice == 0:
-        control.setStringList('menu.mainmenu.config', ['last_watched', 'watch_history', 'airing_calendar', 'airing_last_season', 'airing_this_season', 'airing_next_season', 'trending', 'popular', 'voted', 'favourites', 'top_100', 'genres', 'search', 'tools'])
+        control.setStringList('menu.mainmenu.config', ['last_watched', 'watch_history', 'next_up', 'airing_calendar', 'airing_last_season', 'airing_this_season', 'airing_next_season', 'trending', 'popular', 'voted', 'favourites', 'top_100', 'genres', 'search', 'tools'])
 
     # Ask the user to select between Subs or Dubs
     # Here the button labels are:

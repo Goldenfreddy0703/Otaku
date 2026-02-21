@@ -119,10 +119,11 @@ def enabled_watchlists():
 
 
 def watchlist_to_update():
+    """Returns the first enabled watchlist name for backward compatibility."""
     if getBool('watchlist.update.enabled'):
-        flavor = getSetting('watchlist.update.flavor').lower()
-        if getBool('%s.enabled' % flavor):
-            return flavor
+        enabled = enabled_watchlists()
+        if enabled:
+            return enabled[0]
 
 
 def copy2clip(txt):

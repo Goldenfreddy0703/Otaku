@@ -194,6 +194,72 @@ def is_watchlist_cache_valid(service, status, cache_hours=0.5):
     return is_cache_valid(last_updated, cache_hours)
 
 
+# ==================== AniList Enrichment Cache Functions ====================
+
+def get_all_watchlist_mal_ids():
+    """Get all unique MAL IDs from the watchlist cache across all services."""
+    with SQL(control.malSyncDB) as cursor:
+        cursor.execute('SELECT DISTINCT mal_id FROM watchlist_cache WHERE mal_id IS NOT NULL')
+        rows = cursor.fetchall()
+        mal_ids = []
+        for row in rows:
+            try:
+                mal_ids.append(int(row['mal_id']))
+            except (ValueError, TypeError):
+                pass
+        return mal_ids
+
+
+def save_anilist_enrichment_batch(anilist_data_list):
+    """Save a list of AniList media objects to the enrichment cache, keyed by idMal."""
+    if not anilist_data_list:
+        return
+    now = int(time.time())
+    with SQL(control.malSyncDB) as cursor:
+        for item in anilist_data_list:
+            mal_id = item.get('idMal')
+            if not mal_id:
+                continue
+            data = pickle.dumps(item)
+            cursor.execute(
+                'REPLACE INTO anilist_enrichment (mal_id, data, last_updated) VALUES (?, ?, ?)',
+                (int(mal_id), data, now)
+            )
+        cursor.connection.commit()
+
+
+def get_anilist_enrichment_batch(mal_ids, max_age_hours=168):
+    """
+    Get cached AniList enrichment data for given MAL IDs.
+    Returns dict {mal_id: anilist_data_dict}.
+    Entries older than max_age_hours (default 7 days) are excluded.
+    """
+    if not mal_ids:
+        return {}
+    result = {}
+    cutoff = int(time.time()) - (max_age_hours * 3600)
+    with SQL(control.malSyncDB) as cursor:
+        placeholders = ','.join('?' for _ in mal_ids)
+        cursor.execute(
+            f'SELECT * FROM anilist_enrichment WHERE mal_id IN ({placeholders}) AND last_updated > ?',
+            [int(mid) for mid in mal_ids] + [cutoff]
+        )
+        rows = cursor.fetchall()
+        for row in rows:
+            try:
+                result[row['mal_id']] = pickle.loads(row['data'])
+            except Exception:
+                pass
+    return result
+
+
+def clear_anilist_enrichment():
+    """Clear all AniList enrichment cache."""
+    with SQL(control.malSyncDB) as cursor:
+        cursor.execute('DELETE FROM anilist_enrichment')
+        cursor.connection.commit()
+
+
 def update_show(mal_id, kodi_meta, anime_schedule_route=''):
     with SQL(control.malSyncDB) as cursor:
         cursor.execute('PRAGMA foreign_keys=OFF')

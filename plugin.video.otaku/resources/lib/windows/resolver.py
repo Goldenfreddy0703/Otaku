@@ -224,24 +224,30 @@ class Resolver(BaseWindow):
         if self.params.get('image'):
             self.image = self.params.get('image', {})
 
+        # Set video tags from the best available source
+        if self.params.get('info'):
+            control.set_videotags(item, self.params['info'])
+        else:
+            control.set_videotags(item, self.params)
+
+        art = self._build_art_dict(use_params=False)
+        item.setArt(art)
+
         # Get the clean URL from item (hooks may have stripped headers)
         stream_url = item.getPath()
 
-        # Set art and tags
-        if self.context:
-            control.set_videotags(item, self.params)
-            art = self._build_art_dict(use_params=True)
-            item.setArt(art)
+        # Detect widget context - widgets need playlist-based playback
+        # because setResolvedUrl doesn't reliably carry metadata in widgets
+        is_widget = xbmc.getInfoLabel('Container.PluginName') != control.ADDON_ID
+
+        if self.context or is_widget:
+            # Playlist-based playback: ensures metadata is always visible
+            # Used for source_select/rescrape AND widget playback
             control.playList.clear()
             control.playList.add(stream_url, item)
             xbmc.Player().play(control.playList, item)
         else:
-            if self.params.get('info'):
-                control.set_videotags(item, self.params['info'])
-            else:
-                control.set_videotags(item, self.params)
-            art = self._build_art_dict(use_params=False)
-            item.setArt(art)
+            # Standard resolved URL playback (in-addon context)
             xbmcplugin.setResolvedUrl(control.HANDLE, True, item)
 
         # Monitor playback start

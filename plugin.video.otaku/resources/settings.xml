@@ -653,6 +653,11 @@
 					</constraints>
 					<control type="spinner" format="string"/>
 				</setting>
+				<setting id="artwork.titlesearch" type="boolean" label="30452" help="">
+					<level>0</level>
+					<default>true</default>
+					<control type="toggle"/>
+				</setting>
 				<setting id="artwork.advanced" type="boolean" label="30444" help="">
 					<level>0</level>
 					<default>false</default>
@@ -2143,22 +2148,6 @@
 						<dependency type="visible" setting="watchlist.update.enabled">true</dependency>
 					</dependencies>
 				</setting>
-				<setting id="watchlist.update.flavor" type="string" label="30164" help="">
-					<level>0</level>
-					<default>MAL</default>
-					<constraints>
-						<options>
-							<option>AniList</option>
-							<option>Kitsu</option>
-							<option>MAL</option>
-							<option>Simkl</option>
-						</options>
-					</constraints>
-					<control type="spinner" format="string"/>
-					<dependencies>
-						<dependency type="visible" setting="watchlist.update.enabled">true</dependency>
-					</dependencies>
-				</setting>
 				<setting id="watchlist.update.percent" type="integer" label="30159" help="30160">
 					<level>0</level>
 					<default>80</default>
@@ -2179,6 +2168,32 @@
 					<default>true</default>
 					<control type="toggle"/>
 					<dependencies>
+						<dependency type="visible" setting="watchlist.update.enabled">true</dependency>
+					</dependencies>
+				</setting>
+				<setting id="nextup.enabled" type="boolean" label="30455" help="">
+					<level>0</level>
+					<default>false</default>
+					<control type="toggle"/>
+					<dependencies>
+						<dependency type="visible" setting="watchlist.update.enabled">true</dependency>
+					</dependencies>
+				</setting>
+				<setting id="nextup.flavor" type="integer" label="30453" help="">
+					<level>0</level>
+					<default>0</default>
+					<constraints>
+						<options>
+							<option label="30454">0</option>
+							<option label="30220">1</option>
+							<option label="30222">2</option>
+							<option label="30218">3</option>
+							<option label="30227">4</option>
+						</options>
+					</constraints>
+					<control type="spinner" format="string"/>
+					<dependencies>
+						<dependency type="visible" setting="nextup.enabled">true</dependency>
 						<dependency type="visible" setting="watchlist.update.enabled">true</dependency>
 					</dependencies>
 				</setting>
@@ -2496,11 +2511,12 @@
 			<group id="1" label="30407" help="">
 				<setting id="menu.mainmenu.config" type="list[string]" label="30404" help="">
 					<level>0</level>
-					<default>last_watched,watch_history,airing_calendar,airing_last_season,airing_this_season,airing_next_season,trending,popular,voted,favourites,top_100,genres,search,tools</default>
+					<default>last_watched,watch_history,next_up,airing_calendar,airing_last_season,airing_this_season,airing_next_season,trending,popular,voted,favourites,top_100,genres,search,tools</default>
 					<constraints>
 						<options>
 							<option label="30000">last_watched</option>
 							<option label="30068">watch_history</option>
+							<option label="30451">next_up</option>
 							<option label="30001">airing_calendar</option>
 							<option label="30002">airing_last_season</option>
 							<option label="30003">airing_this_season</option>
@@ -2606,11 +2622,12 @@
 			<group id="2" label="30408" help="">
 				<setting id="movie.mainmenu.config" type="list[string]" label="30404" help="">
 					<level>0</level>
-					<default>last_watched_movie,watch_history_movie,airing_last_season_movie,airing_this_season_movie,airing_next_season_movie,trending_movie,popular_movie,voted_movie,favourites_movie,top_100_movie,genres_movie,search_history_movie</default>
+					<default>last_watched_movie,watch_history_movie,next_up_movie,airing_last_season_movie,airing_this_season_movie,airing_next_season_movie,trending_movie,popular_movie,voted_movie,favourites_movie,top_100_movie,genres_movie,search_history_movie</default>
 					<constraints>
 						<options>
 							<option label="30000">last_watched_movie</option>
 							<option label="30068">watch_history_movie</option>
+							<option label="30451">next_up_movie</option>
 							<option label="30002">airing_last_season_movie</option>
 							<option label="30003">airing_this_season_movie</option>
 							<option label="30004">airing_next_season_movie</option>
@@ -2708,11 +2725,12 @@
 			<group id="3" label="30409" help="">
 				<setting id="tv_show.mainmenu.config" type="list[string]" label="30404" help="">
 					<level>0</level>
-					<default>last_watched_tv_show,watch_history_tv_show,airing_last_season_tv_show,airing_this_season_tv_show,airing_next_season_tv_show,trending_tv_show,popular_tv_show,voted_tv_show,favourites_tv_show,top_100_tv_show,genres_tv_show,search_history_tv_show</default>
+					<default>last_watched_tv_show,watch_history_tv_show,next_up_tv_show,airing_last_season_tv_show,airing_this_season_tv_show,airing_next_season_tv_show,trending_tv_show,popular_tv_show,voted_tv_show,favourites_tv_show,top_100_tv_show,genres_tv_show,search_history_tv_show</default>
 					<constraints>
 						<options>
 							<option label="30000">last_watched_tv_show</option>
 							<option label="30068">watch_history_tv_show</option>
+							<option label="30451">next_up_tv_show</option>
 							<option label="30002">airing_last_season_tv_show</option>
 							<option label="30003">airing_this_season_tv_show</option>
 							<option label="30004">airing_next_season_tv_show</option>
@@ -2809,11 +2827,12 @@
 			<group id="4" label="30410" help="">
 				<setting id="tv_short.mainmenu.config" type="list[string]" label="30404" help="">
 					<level>0</level>
-					<default>last_watched_tv_short,watch_history_tv_short,airing_last_season_tv_short,airing_this_season_tv_short,airing_next_season_tv_short,trending_tv_short,popular_tv_short,voted_tv_short,favourites_tv_short,top_100_tv_short,genres_tv_short,search_history_tv_short</default>
+					<default>last_watched_tv_short,watch_history_tv_short,next_up_tv_short,airing_last_season_tv_short,airing_this_season_tv_short,airing_next_season_tv_short,trending_tv_short,popular_tv_short,voted_tv_short,favourites_tv_short,top_100_tv_short,genres_tv_short,search_history_tv_short</default>
 					<constraints>
 						<options>
 							<option label="30000">last_watched_tv_short</option>
 							<option label="30068">watch_history_tv_short</option>
+							<option label="30451">next_up_tv_short</option>
 							<option label="30002">airing_last_season_tv_short</option>
 							<option label="30003">airing_this_season_tv_short</option>
 							<option label="30004">airing_next_season_tv_short</option>
@@ -2910,11 +2929,12 @@
 			<group id="5" label="30411" help="">
 				<setting id="special.mainmenu.config" type="list[string]" label="30404" help="">
 					<level>0</level>
-					<default>last_watched_special,watch_history_special,airing_last_season_special,airing_this_season_special,airing_next_season_special,trending_special,popular_special,voted_special,favourites_special,top_100_special,genres_special,search_history_special</default>
+					<default>last_watched_special,watch_history_special,next_up_special,airing_last_season_special,airing_this_season_special,airing_next_season_special,trending_special,popular_special,voted_special,favourites_special,top_100_special,genres_special,search_history_special</default>
 					<constraints>
 						<options>
 							<option label="30000">last_watched_special</option>
 							<option label="30068">watch_history_special</option>
+							<option label="30451">next_up_special</option>
 							<option label="30002">airing_last_season_special</option>
 							<option label="30003">airing_this_season_special</option>
 							<option label="30004">airing_next_season_special</option>
@@ -3011,11 +3031,12 @@
 			<group id="6" label="30412" help="">
 				<setting id="ova.mainmenu.config" type="list[string]" label="30404" help="">
 					<level>0</level>
-					<default>last_watched_ova,watch_history_ova,airing_last_season_ova,airing_this_season_ova,airing_next_season_ova,trending_ova,popular_ova,voted_ova,favourites_ova,top_100_ova,genres_ova,search_history_ova</default>
+					<default>last_watched_ova,watch_history_ova,next_up_ova,airing_last_season_ova,airing_this_season_ova,airing_next_season_ova,trending_ova,popular_ova,voted_ova,favourites_ova,top_100_ova,genres_ova,search_history_ova</default>
 					<constraints>
 						<options>
 							<option label="30000">last_watched_ova</option>
 							<option label="30068">watch_history_ova</option>
+							<option label="30451">next_up_ova</option>
 							<option label="30002">airing_last_season_ova</option>
 							<option label="30003">airing_this_season_ova</option>
 							<option label="30004">airing_next_season_ova</option>
@@ -3112,11 +3133,12 @@
 			<group id="7" label="30413" help="">
 				<setting id="ona.mainmenu.config" type="list[string]" label="30404" help="">
 					<level>0</level>
-					<default>last_watched_ona,watch_history_ona,airing_last_season_ona,airing_this_season_ona,airing_next_season_ona,trending_ona,popular_ona,voted_ona,favourites_ona,top_100_ona,genres_ona,search_history_ona</default>
+					<default>last_watched_ona,watch_history_ona,next_up_ona,airing_last_season_ona,airing_this_season_ona,airing_next_season_ona,trending_ona,popular_ona,voted_ona,favourites_ona,top_100_ona,genres_ona,search_history_ona</default>
 					<constraints>
 						<options>
 							<option label="30000">last_watched_ona</option>
 							<option label="30068">watch_history_ona</option>
+							<option label="30451">next_up_ona</option>
 							<option label="30002">airing_last_season_ona</option>
 							<option label="30003">airing_this_season_ona</option>
 							<option label="30004">airing_next_season_ona</option>
@@ -3213,11 +3235,12 @@
 			<group id="8" label="30414" help="">
 				<setting id="music.mainmenu.config" type="list[string]" label="30404" help="">
 					<level>0</level>
-					<default>last_watched_music,watch_history_music,airing_last_season_music,airing_this_season_music,airing_next_season_music,trending_music,popular_music,voted_music,favourites_music,top_100_music,genres_music,search_history_music</default>
+					<default>last_watched_music,watch_history_music,next_up_music,airing_last_season_music,airing_this_season_music,airing_next_season_music,trending_music,popular_music,voted_music,favourites_music,top_100_music,genres_music,search_history_music</default>
 					<constraints>
 						<options>
 							<option label="30000">last_watched_music</option>
 							<option label="30068">watch_history_music</option>
+							<option label="30451">next_up_music</option>
 							<option label="30002">airing_last_season_music</option>
 							<option label="30003">airing_this_season_music</option>
 							<option label="30004">airing_next_season_music</option>

@@ -139,6 +139,68 @@ def update_meta(mal_id, mtype='tv', anilist_banner=None):
         anilist_banner=anilist_banner
     )
 
+    # Title-based artwork search fallback when ID lookups produced no useful artwork
+    if not combined_art.get('fanart') and not combined_art.get('thumb') and control.getBool('artwork.titlesearch'):
+        title = meta_ids.get('mal_title')
+        if not title:
+            # Fallback: try title from show's kodi_meta
+            show = database.get_show(mal_id)
+            if show and show.get('kodi_meta'):
+                try:
+                    import pickle
+                    km = pickle.loads(show['kodi_meta'])
+                    title = km.get('title_userPreferred') or km.get('title_english') or km.get('title_romaji')
+                except Exception:
+                    pass
+        if title:
+            control.log(f"Artwork: ID lookup returned no art for mal_id={mal_id}, trying title search: '{title}'")
+            discovered = False
+            if not meta_ids.get('themoviedb_id'):
+                try:
+                    found_id = tmdb.searchByTitle(title, mtype)
+                    if found_id:
+                        meta_ids['themoviedb_id'] = found_id
+                        discovered = True
+                        control.log(f"Artwork: Discovered TMDB ID {found_id} via title search")
+                except Exception as e:
+                    control.log(f"Artwork: TMDB title search error: {e}")
+            if not meta_ids.get('thetvdb_id'):
+                try:
+                    found_id = tvdb.searchByTitle(title, mtype)
+                    if found_id:
+                        meta_ids['thetvdb_id'] = found_id
+                        discovered = True
+                        control.log(f"Artwork: Discovered TVDB ID {found_id} via title search")
+                except Exception as e:
+                    control.log(f"Artwork: TVDB title search error: {e}")
+            if discovered:
+                # Re-fetch artwork with newly discovered IDs (closures see updated meta_ids)
+                f_art, t_art, tv_art = {}, {}, {}
+                if artwork_preference == 0:
+                    f_art = fetch_fanart()
+                elif artwork_preference == 1:
+                    t_art = fetch_tmdb()
+                elif artwork_preference == 2:
+                    tv_art = fetch_tvdb()
+                else:
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+                        f1 = executor.submit(fetch_fanart)
+                        f2 = executor.submit(fetch_tmdb)
+                        f3 = executor.submit(fetch_tvdb)
+                        concurrent.futures.wait([f1, f2, f3])
+                        f_art = f1.result()
+                        t_art = f2.result()
+                        tv_art = f3.result()
+                combined_art = merge_artwork(
+                    f_art, t_art, tv_art,
+                    fanart_limit=artwork_fanart_count,
+                    clearlogo_enabled=artwork_clearlogo_enabled,
+                    clearart_enabled=artwork_clearart_enabled,
+                    banner_enabled=artwork_banner_enabled,
+                    landscape_enabled=artwork_landscape_enabled,
+                    anilist_banner=anilist_banner
+                )
+
     database.update_show_meta(mal_id, meta_ids, combined_art)
 
 
