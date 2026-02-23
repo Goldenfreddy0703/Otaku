@@ -63,6 +63,158 @@ def _cleanup_old_sessions():
         _session_cookies.pop(key, None)
         _session_openers.pop(key, None)
         _session_timestamps.pop(key, None)
+    # Also clean up stale keep-alive connections
+    _keepalive_pool.cleanup()
+
+
+# ==================== True HTTP Keep-Alive Connection Pool ====================
+import threading as _threading
+
+
+class _KeepAlivePool:
+    """Thread-safe pool of persistent http.client connections keyed by (host, port, scheme).
+    Reuses TCP+TLS sockets so repeated requests to the same host skip the handshake."""
+
+    def __init__(self, max_per_host=6, idle_timeout=120):
+        self._lock = _threading.Lock()
+        self._pool = {}          # key -> list of (conn, last_used_time)
+        self._max = max_per_host
+        self._idle = idle_timeout
+        self._ssl_ctx = None     # lazily created
+
+    def _get_ssl_context(self):
+        if self._ssl_ctx is None:
+            try:
+                self._ssl_ctx = ssl.create_default_context(cafile=CERT_FILE)
+            except Exception:
+                self._ssl_ctx = ssl.create_default_context()
+            self._ssl_ctx.set_alpn_protocols(['http/1.1'])
+        return self._ssl_ctx
+
+    def _key(self, parsed):
+        return (parsed.hostname, parsed.port or (443 if parsed.scheme == 'https' else 80), parsed.scheme)
+
+    def _make_conn(self, key):
+        host, port, scheme = key
+        if scheme == 'https':
+            conn = http.client.HTTPSConnection(host, port, timeout=20, context=self._get_ssl_context())
+        else:
+            conn = http.client.HTTPConnection(host, port, timeout=20)
+        return conn
+
+    def acquire(self, parsed):
+        """Get a live connection from the pool or create a new one."""
+        key = self._key(parsed)
+        now = time.time()
+        with self._lock:
+            conns = self._pool.get(key, [])
+            while conns:
+                conn, ts = conns.pop(0)
+                if now - ts < self._idle:
+                    return conn
+                # Too old, close it
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+        return self._make_conn(key)
+
+    def release(self, parsed, conn):
+        """Return a connection to the pool for reuse."""
+        key = self._key(parsed)
+        with self._lock:
+            conns = self._pool.setdefault(key, [])
+            if len(conns) < self._max:
+                conns.append((conn, time.time()))
+            else:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+
+    def discard(self, parsed, conn):
+        """Discard a broken connection."""
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+    def cleanup(self):
+        """Remove idle connections."""
+        now = time.time()
+        with self._lock:
+            for key in list(self._pool.keys()):
+                conns = self._pool[key]
+                alive = []
+                for conn, ts in conns:
+                    if now - ts < self._idle:
+                        alive.append((conn, ts))
+                    else:
+                        try:
+                            conn.close()
+                        except Exception:
+                            pass
+                if alive:
+                    self._pool[key] = alive
+                else:
+                    del self._pool[key]
+
+
+_keepalive_pool = _KeepAlivePool()
+
+
+def _fast_request(url, headers, post_data=None, method='GET', timeout=20, jpost=False):
+    """
+    Fast-path HTTP request using keep-alive connection pool.
+    Returns (body_bytes, status_code, response_headers_dict, url) or None on error.
+    Handles gzip decompression and UTF-8 decoding.
+    """
+    parsed = urllib.parse.urlparse(url)
+    path = parsed.path or '/'
+    if parsed.query:
+        path = f'{path}?{parsed.query}'
+
+    conn = _keepalive_pool.acquire(parsed)
+    try:
+        conn.timeout = int(timeout)
+        body = None
+        if post_data is not None:
+            if jpost:
+                body = json.dumps(post_data).encode('utf-8')
+            elif isinstance(post_data, dict):
+                body = urllib.parse.urlencode(post_data).encode('utf-8')
+            elif isinstance(post_data, str):
+                body = post_data.encode('utf-8')
+            elif isinstance(post_data, bytes):
+                body = post_data
+
+        conn.request(method, path, body=body, headers=headers)
+        resp = conn.getresponse()
+        raw = resp.read()
+        status = resp.status
+        resp_headers = {h[0]: h[1] for h in resp.getheaders()}
+
+        # Decompress gzip
+        if resp_headers.get('Content-Encoding', '').lower() == 'gzip':
+            raw = gzip.GzipFile(fileobj=io.BytesIO(raw)).read()
+
+        # Decode to string
+        ct = resp_headers.get('Content-Type', '').lower()
+        if any(x in ct for x in ['text', 'json', 'xml', 'html', 'javascript']):
+            try:
+                result = raw.decode('utf-8')
+            except UnicodeDecodeError:
+                result = raw.decode('latin-1', errors='ignore')
+        else:
+            result = raw
+
+        # Return connection to pool if all is well
+        _keepalive_pool.release(parsed, conn)
+        return result, str(status), resp_headers, url
+
+    except Exception:
+        _keepalive_pool.discard(parsed, conn)
+        return None
 
 
 def _get_cached_useragent(mobile=False):
@@ -188,11 +340,69 @@ def request(
             verify = False
             _headers.pop('verifypeer')
 
-        handlers = []
-
         # Parse domain for session management
         uri = urllib.parse.urlparse(url)
         domain = uri.scheme + '://' + uri.netloc
+
+        # === FAST PATH: use keep-alive pool for session requests without special features ===
+        _can_fast = (
+            use_session
+            and proxy is None
+            and redirect is not False
+            and tls_version is None
+            and verify is True
+            and output in ('', 'extended')
+            and limit is None
+        )
+        if _can_fast:
+            # Build minimal headers
+            if params is not None:
+                if isinstance(params, dict):
+                    params = urllib.parse.urlencode(params)
+                url = url + '?' + params
+
+            if 'User-Agent' not in _headers:
+                _headers['User-Agent'] = _get_cached_useragent(mobile=mobile)
+            if 'Accept-Language' not in _headers:
+                _headers['Accept-Language'] = 'en-US,en'
+            if 'Accept' not in _headers:
+                _headers['Accept'] = '*/*'
+            if XHR and 'X-Requested-With' not in _headers:
+                _headers['X-Requested-With'] = 'XMLHttpRequest'
+            if cookie is not None and 'Cookie' not in _headers:
+                if isinstance(cookie, dict):
+                    cookie = '; '.join([f'{x}={y}' for x, y in cookie.items()])
+                _headers['Cookie'] = cookie
+            elif 'Cookie' not in _headers and domain in _session_cookies:
+                _headers['Cookie'] = _session_cookies[domain]
+            if compression and 'Accept-Encoding' not in _headers:
+                _headers['Accept-Encoding'] = 'gzip'
+            if referer and 'Referer' not in _headers:
+                _headers['Referer'] = referer
+            if jpost and 'Content-Type' not in _headers:
+                _headers['Content-Type'] = 'application/json'
+            # Connection keep-alive header
+            _headers['Connection'] = 'keep-alive'
+
+            http_method = method or ('POST' if post is not None else 'GET')
+            fast = _fast_request(url, _headers, post_data=post, method=http_method, timeout=timeout, jpost=jpost)
+
+            if fast is not None:
+                result, status_code, resp_headers, resp_url = fast
+                # Store session cookies if present
+                if 'Set-Cookie' in resp_headers:
+                    _session_cookies[domain] = resp_headers['Set-Cookie']
+                    _session_timestamps[domain] = time.time()
+
+                if output == 'extended':
+                    cookie_str = _session_cookies.get(domain, '')
+                    return (result, status_code, resp_headers, _headers, cookie_str, resp_url)
+                else:
+                    return result
+            # If fast path failed (connection error), fall through to urllib path
+            control.log(f'Fast-path failed for {url}, falling back to urllib')
+
+        handlers = []
 
         if proxy is not None:
             handlers += [urllib.request.ProxyHandler(
@@ -668,7 +878,7 @@ def get(url, headers=None, timeout=20, verify=True, cookies=None, params=None):
         print(response.status_code)  # HTTP status
         data = response.json()  # Parse JSON
     """
-    result = request(url, headers=headers or {}, timeout=timeout, verify=verify, cookie=cookies, params=params, output='extended')
+    result = request(url, headers=headers or {}, timeout=timeout, verify=verify, cookie=cookies, params=params, output='extended', use_session=True)
 
     if result and isinstance(result, tuple) and len(result) >= 5:
         content, status_code, response_headers, request_headers, cookie, response_url = result
@@ -712,9 +922,9 @@ def post(url, data=None, json_data=None, headers=None, timeout=20, verify=True, 
         print(response.status_code)
     """
     if json_data:
-        result = request(url, post=json_data, jpost=True, headers=headers or {}, timeout=timeout, verify=verify, cookie=cookies, output='extended')
+        result = request(url, post=json_data, jpost=True, headers=headers or {}, timeout=timeout, verify=verify, cookie=cookies, output='extended', use_session=True)
     else:
-        result = request(url, post=data, headers=headers or {}, timeout=timeout, verify=verify, cookie=cookies, output='extended')
+        result = request(url, post=data, headers=headers or {}, timeout=timeout, verify=verify, cookie=cookies, output='extended', use_session=True)
 
     if result and isinstance(result, tuple) and len(result) >= 5:
         content, status_code, response_headers, request_headers, cookie, response_url = result
@@ -758,9 +968,9 @@ def put(url, data=None, json_data=None, headers=None, timeout=20, verify=True, c
         print(response.status_code)
     """
     if json_data:
-        result = request(url, post=json_data, jpost=True, method='PUT', headers=headers or {}, timeout=timeout, verify=verify, cookie=cookies, output='extended')
+        result = request(url, post=json_data, jpost=True, method='PUT', headers=headers or {}, timeout=timeout, verify=verify, cookie=cookies, output='extended', use_session=True)
     else:
-        result = request(url, post=data, method='PUT', headers=headers or {}, timeout=timeout, verify=verify, cookie=cookies, output='extended')
+        result = request(url, post=data, method='PUT', headers=headers or {}, timeout=timeout, verify=verify, cookie=cookies, output='extended', use_session=True)
 
     if result and isinstance(result, tuple) and len(result) >= 5:
         content, status_code, response_headers, request_headers, cookie, response_url = result
@@ -806,9 +1016,9 @@ def patch(url, data=None, json_data=None, headers=None, timeout=20, verify=True,
         print(response.status_code)
     """
     if json_data:
-        result = request(url, post=json_data, jpost=True, method='PATCH', headers=headers or {}, timeout=timeout, verify=verify, cookie=cookies, output='extended')
+        result = request(url, post=json_data, jpost=True, method='PATCH', headers=headers or {}, timeout=timeout, verify=verify, cookie=cookies, output='extended', use_session=True)
     else:
-        result = request(url, post=data, method='PATCH', headers=headers or {}, timeout=timeout, verify=verify, cookie=cookies, output='extended')
+        result = request(url, post=data, method='PATCH', headers=headers or {}, timeout=timeout, verify=verify, cookie=cookies, output='extended', use_session=True)
 
     if result and isinstance(result, tuple) and len(result) >= 5:
         content, status_code, response_headers, request_headers, cookie, response_url = result
@@ -854,11 +1064,11 @@ def delete(url, data=None, json_data=None, headers=None, timeout=20, verify=True
             print("Deleted successfully")
     """
     if json_data:
-        result = request(url, post=json_data, jpost=True, method='DELETE', headers=headers or {}, timeout=timeout, verify=verify, cookie=cookies, output='extended')
+        result = request(url, post=json_data, jpost=True, method='DELETE', headers=headers or {}, timeout=timeout, verify=verify, cookie=cookies, output='extended', use_session=True)
     elif data:
-        result = request(url, post=data, method='DELETE', headers=headers or {}, timeout=timeout, verify=verify, cookie=cookies, output='extended')
+        result = request(url, post=data, method='DELETE', headers=headers or {}, timeout=timeout, verify=verify, cookie=cookies, output='extended', use_session=True)
     else:
-        result = request(url, method='DELETE', headers=headers or {}, timeout=timeout, verify=verify, cookie=cookies, output='extended')
+        result = request(url, method='DELETE', headers=headers or {}, timeout=timeout, verify=verify, cookie=cookies, output='extended', use_session=True)
 
     if result and isinstance(result, tuple) and len(result) >= 5:
         content, status_code, response_headers, request_headers, cookie, response_url = result
@@ -904,7 +1114,7 @@ def head(url, headers=None, timeout=20, verify=True, cookies=None, params=None):
         if response.ok:
             print("URL is accessible")
     """
-    result = request(url, headers=headers or {}, timeout=timeout, verify=verify, cookie=cookies, params=params, limit='0', output='extended')
+    result = request(url, headers=headers or {}, timeout=timeout, verify=verify, cookie=cookies, params=params, limit='0', output='extended', use_session=True)
 
     if result and isinstance(result, tuple) and len(result) >= 5:
         content, status_code, response_headers, request_headers, cookie, response_url = result

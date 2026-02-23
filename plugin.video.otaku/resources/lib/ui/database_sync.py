@@ -16,6 +16,8 @@ class SyncDatabase:
         self.build_showmeta_table()
         self.build_episode_table()
         self.build_show_data_table()
+        self.build_watchlist_cache_table()
+        self.build_watchlist_activity_table()
         self.build_anilist_enrichment_table()
 
         # If you make changes to the required meta in any indexer that is cached in this database
@@ -178,7 +180,7 @@ class SyncDatabase:
             if cursor.fetchone():
                 # Check if item_order column exists
                 cursor.execute("PRAGMA table_info(watchlist_cache)")
-                columns = [col[1] for col in cursor.fetchall()]
+                columns = [col['name'] for col in cursor.fetchall()]
                 if 'item_order' not in columns:
                     cursor.execute('DROP TABLE watchlist_cache')
 
@@ -194,6 +196,16 @@ class SyncDatabase:
             )''')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_watchlist_service_status ON watchlist_cache(service, status)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_watchlist_last_updated ON watchlist_cache(last_updated)')
+            cursor.connection.commit()
+
+    @staticmethod
+    def build_watchlist_activity_table():
+        with SQL(control.malSyncDB) as cursor:
+            cursor.execute('''CREATE TABLE IF NOT EXISTS watchlist_activity (
+                service TEXT PRIMARY KEY,
+                activity_timestamp TEXT NOT NULL,
+                last_checked INTEGER NOT NULL
+            )''')
             cursor.connection.commit()
 
     @staticmethod
@@ -232,6 +244,7 @@ class SyncDatabase:
         self.build_episode_table()
         self.build_show_data_table()
         self.build_watchlist_cache_table()
+        self.build_watchlist_activity_table()
         self.build_anilist_enrichment_table()
 
         self.set_base_activites()

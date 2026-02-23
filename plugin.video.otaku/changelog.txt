@@ -1,3 +1,24 @@
+Changelog v5.2.73 (2026-02-23):
+- Added true HTTP keep-alive connection pooling to client.py using http.client (no new dependencies)
+- Added _KeepAlivePool class — thread-safe pool of persistent TCP/TLS connections keyed by host
+- Added _fast_request() function — bypasses urllib.request entirely for eligible session requests
+- Added fast-path in request() — routes use_session calls through keep-alive pool, falls back to urllib on failure
+- All client convenience methods (get, post, put, patch, delete, head) now benefit from pooled connections
+- Eliminates ~100-500ms TCP+TLS handshake overhead per repeat request to the same API host
+- Added 3-tier RAM cache layer to database.py using Kodi Window properties for instant cache hits
+- Added settings caching to control.py — getSetting/getBool/getInt/getStr/getNumber cache to dict
+- Added cacheToDisc=True to draw_items() for faster repeat menu navigation
+- Added cached mal_dub JSON loading in divide_flavors.py — reads file once instead of per-call
+- Enabled use_session=True on all client.py convenience methods for automatic session reuse
+- Added activity-based watchlist cache invalidation — detects remote changes in near real-time
+- Activity checks are rate-limited to once every 2 minutes to avoid API spam
+- Cache TTL raised from 30 minutes to 24 hours as safety-net fallback (activity check is primary)
+- Fixed "Clear Cache" not clearing watchlist data (was only clearing general API cache, not watchlist_cache table)
+- Added watchlist_activity DB table for storing last-known activity timestamps per service
+- Added build_watchlist_cache_table() to SyncDatabase init (was missing, only ran on rebuild)
+- Fixed build_watchlist_cache_table KeyError crash — PRAGMA table_info returns dicts not tuples (col['name'] vs col[1])
+- Fixed clear_watchlist_activity crash when table doesn't exist yet (graceful try/except)
+
 Changelog v5.2.72 (2026-02-21):
 - Added AniList enrichment cache — consolidated 20+ separate API calls into ONE batch call on startup
 - Added persistent anilist_enrichment DB table with 7-day TTL for cached AniList metadata

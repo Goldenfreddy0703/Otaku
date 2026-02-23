@@ -36,6 +36,9 @@ pathExists = xbmcvfs.exists
 dataPath = xbmcvfs.translatePath(addonInfo('profile'))
 kodi_version = float(xbmcaddon.Addon('xbmc.addon').getAddonInfo('version')[:4])
 
+# In-memory settings cache — avoids repeated Kodi API calls
+_settings_cache = {}
+
 CONTEXT_ADDON_ID = 'context.otaku'
 CONTEXT_ADDON = xbmcaddon.Addon(CONTEXT_ADDON_ID)
 CONTEXT_ADDON_PATH = CONTEXT_ADDON.getAddonInfo('path')
@@ -147,27 +150,52 @@ def refresh():
 
 def getSetting(key):
     """Get setting as string - kept for backward compatibility"""
-    return settings.getString(key)
+    ck = f's_{key}'
+    if ck in _settings_cache:
+        return _settings_cache[ck]
+    val = settings.getString(key)
+    _settings_cache[ck] = val
+    return val
 
 
 def getBool(key):
     """Get setting as boolean"""
-    return settings.getBool(key)
+    ck = f'b_{key}'
+    if ck in _settings_cache:
+        return _settings_cache[ck]
+    val = settings.getBool(key)
+    _settings_cache[ck] = val
+    return val
 
 
 def getInt(key):
     """Get setting as integer"""
-    return settings.getInt(key)
+    ck = f'i_{key}'
+    if ck in _settings_cache:
+        return _settings_cache[ck]
+    val = settings.getInt(key)
+    _settings_cache[ck] = val
+    return val
 
 
 def getStr(key):
     """Get setting as string"""
-    return settings.getString(key)
+    ck = f'gs_{key}'
+    if ck in _settings_cache:
+        return _settings_cache[ck]
+    val = settings.getString(key)
+    _settings_cache[ck] = val
+    return val
 
 
 def getNumber(key):
     """Get setting as float/number"""
-    return settings.getNumber(key)
+    ck = f'n_{key}'
+    if ck in _settings_cache:
+        return _settings_cache[ck]
+    val = settings.getNumber(key)
+    _settings_cache[ck] = val
+    return val
 
 
 def getStringList(settingid):
@@ -193,26 +221,31 @@ def getNumberList(settingid):
 def setSetting(settingid, value):
     """Set setting as string - kept for backward compatibility"""
     settings.setString(settingid, str(value))
+    _settings_cache.pop(f's_{settingid}', None)
 
 
 def setBool(settingid, value):
     """Set setting as boolean"""
     settings.setBool(settingid, value)
+    _settings_cache.pop(f'b_{settingid}', None)
 
 
 def setInt(settingid, value):
     """Set setting as integer"""
     settings.setInt(settingid, value)
+    _settings_cache.pop(f'i_{settingid}', None)
 
 
 def setStr(settingid, value):
     """Set setting as string"""
     settings.setString(settingid, value)
+    _settings_cache.pop(f'gs_{settingid}', None)
 
 
 def setNumber(settingid, value):
     """Set setting as float/number"""
     settings.setNumber(settingid, value)
+    _settings_cache.pop(f'n_{settingid}', None)
 
 
 def setStringList(settingid, value):
@@ -233,6 +266,12 @@ def setIntList(settingid, value):
 def setNumberList(settingid, value):
     """Set setting as list of numbers"""
     settings.setNumberList(settingid, value)
+
+
+def clearSettingsCache():
+    """Clear the in-memory settings cache (call after settings change)."""
+    _settings_cache.clear()
+    _artwork_cache.clear()
 
 
 def setGlobalProp(property, value):
@@ -481,13 +520,9 @@ def draw_items(video_data, content_type=''):
         xbmcplugin.addSortMethod(HANDLE, xbmcplugin.SORT_METHOD_NONE, "%H. %T", "%R | %P")
     elif content_type == 'tvshows':
         xbmcplugin.addSortMethod(HANDLE, xbmcplugin.SORT_METHOD_NONE, "%L", "%R")
-    xbmcplugin.endOfDirectory(HANDLE, True, False, True)
-    xbmc.sleep(100)
-    if content_type == 'episodes':
-        for _ in range(20):
-            if xbmc.getCondVisibility("Container.HasFiles"):
-                break
-            xbmc.sleep(100)
+    # cacheToDisc=True lets Kodi cache the rendered directory listing
+    # so navigating back is instant without re-executing Python
+    xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=True)
     if getBool('interface.viewtype'):
         if getBool('interface.viewidswitch'):
             # Use integer view types

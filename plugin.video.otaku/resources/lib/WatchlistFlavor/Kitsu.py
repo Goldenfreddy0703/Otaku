@@ -28,6 +28,20 @@ class KitsuWLF(WatchlistFlavorBase):
         }
         return headers
 
+    def get_last_activity_timestamp(self):
+        """Check Kitsu user profile's updatedAt to detect remote changes."""
+        r = client.get(
+            f'{self._URL}/edge/users/{self.user_id}',
+            headers=self.__headers(),
+            params={'fields[users]': 'updatedAt,statsData'}
+        )
+        if not r:
+            return None
+        data = r.json()
+        user_data = data.get('data', {}).get('attributes', {})
+        updated_at = user_data.get('updatedAt', '')
+        return updated_at if updated_at else None
+
     def login(self):
         params = {
             "grant_type": "password",
@@ -123,6 +137,9 @@ class KitsuWLF(WatchlistFlavorBase):
         return actions
 
     def get_watchlist_status(self, status, next_up, offset, page, cache_only=False):
+        # Check for remote changes before using cache
+        self._should_refresh_cache()
+
         from resources.lib.ui.database import (
             get_watchlist_cache, save_watchlist_cache,
             is_watchlist_cache_valid, get_watchlist_cache_count

@@ -53,6 +53,46 @@ class WatchlistFlavorBase:
     def watchlist():
         raise NotImplementedError('Should Not be called Directly')
 
+    def _should_refresh_cache(self):
+        """Check the API's activity endpoint to see if the watchlist has changed remotely.
+        Uses rate-limiting (2 min) so we don't hit the API on every page navigation.
+        Returns True if the cache was invalidated (data changed remotely)."""
+        from resources.lib.ui.database import (
+            get_watchlist_activity, save_watchlist_activity,
+            clear_watchlist_cache, is_cache_valid
+        )
+
+        # Rate limit: only check the activity API every 2 minutes
+        stored = get_watchlist_activity(self._NAME)
+        if stored and is_cache_valid(stored['last_checked'], 0.033):  # 0.033 hours ~ 2 minutes
+            return False  # Recently checked, trust current cache
+
+        try:
+            remote_timestamp = self.get_last_activity_timestamp()
+        except Exception:
+            # On error (network issue, etc.), don't invalidate — serve stale cache
+            return False
+
+        if not remote_timestamp:
+            return False
+
+        if stored and str(stored['activity_timestamp']) == str(remote_timestamp):
+            # Activity hasn't changed since last check, just update the check time
+            save_watchlist_activity(self._NAME, remote_timestamp)
+            return False
+
+        # Activity changed! Clear all watchlist caches for this service and save new timestamp
+        control.log(f"[{self._NAME}] Watchlist activity changed remotely, refreshing cache", level='info')
+        clear_watchlist_cache(self._NAME)
+        save_watchlist_activity(self._NAME, remote_timestamp)
+        return True
+
+    def get_last_activity_timestamp(self):
+        """Override in subclass to return a timestamp/hash from a lightweight API call.
+        Used to detect remote changes without re-fetching the full watchlist.
+        Should return a string that changes whenever the user's anime list is modified."""
+        return None
+
     def build_next_up_item(self, data):
         """
         Shared Next Up episode item builder used by all watchlist flavors.

@@ -21,6 +21,30 @@ class MyAnimeListWLF(WatchlistFlavorBase):
         }
         return headers
 
+    def get_last_activity_timestamp(self):
+        """Check MAL user profile's anime statistics to detect remote changes."""
+        r = client.get(
+            f'{self._URL}/users/@me',
+            headers=self.__headers(),
+            params={'fields': 'anime_statistics'}
+        )
+        if not r:
+            return None
+        data = r.json()
+        stats = data.get('anime_statistics', {})
+        # Build a composite key from counts across all statuses
+        # Any add/delete/move will change at least one of these
+        parts = [
+            str(stats.get('num_items_watching', 0)),
+            str(stats.get('num_items_completed', 0)),
+            str(stats.get('num_items_on_hold', 0)),
+            str(stats.get('num_items_dropped', 0)),
+            str(stats.get('num_items_plan_to_watch', 0)),
+            str(stats.get('num_items', 0)),
+            str(stats.get('num_episodes', 0)),
+        ]
+        return '_'.join(parts)
+
     def login(self):
         from urllib import parse
         parsed = parse.urlparse(self.auth_var)
@@ -111,6 +135,9 @@ class MyAnimeListWLF(WatchlistFlavorBase):
         return actions
 
     def get_watchlist_status(self, status, next_up, offset, page, cache_only=False):
+        # Check for remote changes before using cache
+        self._should_refresh_cache()
+
         # Handle Next Up separately - it needs special episode-level processing
         if next_up and not cache_only:
             return self._get_next_up_episodes(offset, page)

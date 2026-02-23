@@ -4,15 +4,35 @@ import pickle
 import re
 import time
 import threading
+import xbmcgui
 import xbmcvfs
 
 from sqlite3 import OperationalError, dbapi2
 from resources.lib.ui import control
 
+# ==================== RAM Cache Layer ====================
+# Uses Kodi Window(10000) properties for instant in-process cache
+_window = xbmcgui.Window(10000)
+_CACHE_PREFIX = 'otaku_test_cache_'
+
+
+def _mem_get(key):
+    val = _window.getProperty(_CACHE_PREFIX + key)
+    return val if val else None
+
+
+def _mem_set(key, val):
+    _window.setProperty(_CACHE_PREFIX + key, val)
+
+
+def _mem_del(key):
+    _window.clearProperty(_CACHE_PREFIX + key)
+
 
 def get(function, duration, *args, **kwargs):
     """
-    Gets cached value for provided function with optional arguments, or executes and stores the result
+    Gets cached value for provided function with optional arguments, or executes and stores the result.
+    Uses 3-tier cache: RAM (window properties) -> SQLite -> API call.
 
     :param function: Function to be executed
     :param duration: Duration of validity of cache in hours
@@ -22,22 +42,35 @@ def get(function, duration, *args, **kwargs):
     key = hash_function(function, args, kwargs)
     if 'key' in kwargs:
         key += kwargs.pop('key')
+
+    # --- Tier 1: RAM cache (instant) ---
+    mem = _mem_get(key)
+    if mem:
+        try:
+            return ast.literal_eval(mem)
+        except Exception:
+            _mem_del(key)
+
+    # --- Tier 2: SQLite cache ---
     cache_result = cache_get(key)
     if cache_result and is_cache_valid(cache_result['date'], duration):
         try:
             return_data = ast.literal_eval(cache_result['value'])
+            # Promote to RAM for next access
+            _mem_set(key, cache_result['value'])
             return return_data
-        except:
+        except Exception:
             import traceback
             control.log(traceback.format_exc(), level='error')
-            # Cache is corrupted, invalidate it and fetch fresh data
             control.log("Cache corrupted for key: %s, fetching fresh data" % key, level='warning')
-            # Don't return None, fall through to fetch fresh data
 
+    # --- Tier 3: Fresh API call ---
     fresh_result = repr(function(*args, **kwargs))
     cache_insert(key, fresh_result)
     if not fresh_result:
         return cache_result if cache_result else fresh_result
+    # Store in RAM
+    _mem_set(key, fresh_result)
     data = ast.literal_eval(fresh_result)
     return data
 
@@ -98,7 +131,11 @@ def cache_clear():
         cursor.execute("VACUUM")
         cursor.connection.commit()
         cursor.execute('CREATE TABLE IF NOT EXISTS cache (key TEXT, value TEXT, date INTEGER, UNIQUE(key))')
-        control.notify(f'{control.ADDON_NAME}: {control.lang(30086)}', control.lang(30087), time=5000, sound=False)
+    # Also clear watchlist cache, activity timestamps, and enrichment data (stored in malSyncDB)
+    clear_watchlist_cache()
+    clear_watchlist_activity()
+    clear_anilist_enrichment()
+    control.notify(f'{control.ADDON_NAME}: {control.lang(30086)}', control.lang(30087), time=5000, sound=False)
 
 
 def is_cache_valid(cached_time, cache_timeout):
@@ -186,12 +223,47 @@ def clear_watchlist_cache(service=None, status=None):
         cursor.connection.commit()
 
 
-def is_watchlist_cache_valid(service, status, cache_hours=0.5):
-    """Check if watchlist cache is still valid (default 30 minutes)"""
+def is_watchlist_cache_valid(service, status, cache_hours=24):
+    """Check if watchlist cache is still valid (default 24 hours).
+    This is now mainly a safety-net fallback. The primary invalidation
+    mechanism is the activity-based check in each watchlist flavor."""
     last_updated = get_watchlist_cache_last_updated(service, status)
     if not last_updated:
         return False
     return is_cache_valid(last_updated, cache_hours)
+
+
+# ==================== Watchlist Activity Functions ====================
+
+def get_watchlist_activity(service):
+    """Get stored activity record for a watchlist service."""
+    with SQL(control.malSyncDB) as cursor:
+        cursor.execute('SELECT * FROM watchlist_activity WHERE service=?', (service,))
+        return cursor.fetchone()
+
+
+def save_watchlist_activity(service, activity_timestamp):
+    """Save the last known activity timestamp for a service."""
+    now = int(time.time())
+    with SQL(control.malSyncDB) as cursor:
+        cursor.execute(
+            'REPLACE INTO watchlist_activity (service, activity_timestamp, last_checked) VALUES (?, ?, ?)',
+            (service, str(activity_timestamp), now)
+        )
+        cursor.connection.commit()
+
+
+def clear_watchlist_activity(service=None):
+    """Clear stored activity timestamps."""
+    try:
+        with SQL(control.malSyncDB) as cursor:
+            if service:
+                cursor.execute('DELETE FROM watchlist_activity WHERE service=?', (service,))
+            else:
+                cursor.execute('DELETE FROM watchlist_activity')
+            cursor.connection.commit()
+    except Exception:
+        pass  # Table may not exist yet
 
 
 # ==================== AniList Enrichment Cache Functions ====================
@@ -484,6 +556,9 @@ class SQL:
         conn = dbapi2.connect(self.path, timeout=self.timeout)
         conn.row_factory = dict_factory
         conn.execute("PRAGMA FOREIGN_KEYS=1")
+        conn.execute("PRAGMA synchronous = OFF")
+        conn.execute("PRAGMA journal_mode = OFF")
+        conn.execute("PRAGMA mmap_size = 268435456")  # 256MB memory-mapped I/O
         self.cursor = conn.cursor()
         return self.cursor
 
