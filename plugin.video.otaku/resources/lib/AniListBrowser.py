@@ -46,6 +46,58 @@ class AniListBrowser(BrowserBase):
                 return tuple(settings.get('selected_tags', []))
         return ()
 
+    @staticmethod
+    def _normalize_anilist_desc(desc):
+        if not desc:
+            return desc
+        desc = desc.replace('<i>', '[I]').replace('</i>', '[/I]')
+        desc = desc.replace('<b>', '[B]').replace('</b>', '[/B]')
+        desc = desc.replace('<br>', '[CR]')
+        desc = desc.replace('\n', '')
+        return desc
+
+    def _get_localized_show_meta(self, mal_id, fallback_title=None, fallback_plot=None):
+        title = fallback_title
+        plot = fallback_plot
+
+        if not mal_id:
+            return {'title': title, 'plot': plot}
+
+        meta_ids = database.get_unique_ids(mal_id, 'mal_id') or {}
+        if not meta_ids:
+            return {'title': title, 'plot': plot}
+
+        try:
+            from resources.lib.endpoints import tmdb
+            localized_tmdb = database.get(
+                tmdb.get_show_localized_meta,
+                168,
+                meta_ids,
+                key=f'tmdb_show_locale_v1_{mal_id}'
+            )
+        except Exception:
+            localized_tmdb = {}
+
+        if isinstance(localized_tmdb, dict):
+            if localized_tmdb.get('plot'):
+                plot = localized_tmdb.get('plot')
+
+        if not plot:
+            try:
+                from resources.lib.endpoints import tvdb
+                localized_tvdb = database.get(
+                    tvdb.get_show_localized_meta,
+                    168,
+                    meta_ids,
+                    key=f'tvdb_show_locale_v1_{mal_id}'
+                )
+            except Exception:
+                localized_tvdb = {}
+
+            if isinstance(localized_tvdb, dict) and localized_tvdb.get('plot'):
+                plot = localized_tvdb.get('plot')
+        return {'title': title, 'plot': plot}
+
     def get_season_year(self, period='current'):
         import datetime
         date = datetime.datetime.today()
@@ -57,7 +109,7 @@ class AniListBrowser(BrowserBase):
             if 1916 < self.year_type <= year + 1:
                 year = self.year_type
             else:
-                control.notify(control.ADDON_NAME, "Invalid year. Please select a year between 1916 and {0}.".format(year + 1))
+                control.notify(control.ADDON_NAME, control.lang(30460).format(year + 1))
                 return None, None
 
         if self.season_type > -1:
@@ -2063,15 +2115,13 @@ class AniListBrowser(BrowserBase):
         kodi_meta = pickle.loads(show_meta.get('art')) if show_meta else {}
 
         title = res['title'][self.title_lang] or res['title']['romaji']
+        desc = self._normalize_anilist_desc(res.get('description'))
+        localized_meta = self._get_localized_show_meta(mal_id, fallback_title=title, fallback_plot=desc)
+        title = localized_meta.get('title') or title
+        desc = localized_meta.get('plot') or desc
 
         if res.get('relationType'):
             title += ' [I]%s[/I]' % control.colorstr(res['relationType'], 'limegreen')
-
-        if desc := res.get('description'):
-            desc = desc.replace('<i>', '[I]').replace('</i>', '[/I]')
-            desc = desc.replace('<b>', '[B]').replace('</b>', '[/B]')
-            desc = desc.replace('<br>', '[CR]')
-            desc = desc.replace('\n', '')
 
         info = {
             'UniqueIDs': {
@@ -2185,11 +2235,11 @@ class AniListBrowser(BrowserBase):
         ename = res['title']['english']
         titles = f"({name})|({ename})"
 
-        if desc := res.get('description'):
-            desc = desc.replace('<i>', '[I]').replace('</i>', '[/I]')
-            desc = desc.replace('<b>', '[B]').replace('</b>', '[/B]')
-            desc = desc.replace('<br>', '[CR]')
-            desc = desc.replace('\n', '')
+        desc = self._normalize_anilist_desc(res.get('description'))
+
+        localized_meta = self._get_localized_show_meta(mal_id, fallback_title=title_userPreferred, fallback_plot=desc)
+        title_userPreferred = localized_meta.get('title') or title_userPreferred
+        desc = localized_meta.get('plot') or desc
 
         kodi_meta = {
             'name': name,
