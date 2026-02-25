@@ -31,19 +31,80 @@ class _BrowserProxy:
 BROWSER = _BrowserProxy()
 
 
+def _refresh_localized_show_meta(mal_id):
+    """
+    Refresh localized title/plot in show's kodi_meta using TMDB/TVDB fallback.
+    This keeps UI pages that rely on cached kodi_meta in sync with localized metadata.
+    """
+    show = database.get_show(mal_id)
+    if not show or not show.get('kodi_meta'):
+        return
+
+    try:
+        kodi_meta = pickle.loads(show.get('kodi_meta'))
+    except Exception:
+        return
+
+    current_title = kodi_meta.get('title_userPreferred') or kodi_meta.get('name')
+    current_plot = kodi_meta.get('plot')
+    meta_ids = database.get_unique_ids(mal_id, 'mal_id') or {}
+    if not meta_ids:
+        return
+
+    localized_title = current_title
+    localized_plot = current_plot
+
+    try:
+        from resources.lib.endpoints import tmdb
+        localized_tmdb = database.get(
+            tmdb.get_show_localized_meta,
+            168,
+            meta_ids,
+            key=f'tmdb_show_locale_v1_{mal_id}'
+        )
+    except Exception:
+        localized_tmdb = {}
+
+    if isinstance(localized_tmdb, dict):
+        if localized_tmdb.get('plot'):
+            localized_plot = localized_tmdb.get('plot')
+
+    if not localized_plot:
+        try:
+            from resources.lib.endpoints import tvdb
+            localized_tvdb = database.get(
+                tvdb.get_show_localized_meta,
+                168,
+                meta_ids,
+                key=f'tvdb_show_locale_v1_{mal_id}'
+            )
+        except Exception:
+            localized_tvdb = {}
+
+        if isinstance(localized_tvdb, dict):
+            if not localized_plot and localized_tvdb.get('plot'):
+                localized_plot = localized_tvdb.get('plot')
+
+    changed = False
+    if localized_plot and localized_plot != kodi_meta.get('plot'):
+        kodi_meta['plot'] = localized_plot
+        changed = True
+
+    if changed:
+        database.update_kodi_meta(mal_id, kodi_meta)
+
+
 def get_anime_init(mal_id):
     # Lazy import indexers - only import what's actually needed
     show_meta = database.get_show_meta(mal_id)
-    show = database.get_show(mal_id)
-
-    # Ensure both shows and shows_meta tables are populated
-    # shows_meta can exist from collect_meta batch runs without the shows entry
-    if not show_meta or not show:
+    if not show_meta:
         BROWSER.get_anime(mal_id)
         show_meta = database.get_show_meta(mal_id)
-        show = database.get_show(mal_id)
-        if not show_meta or not show:
+        if not show_meta:
             return [], 'episodes'
+
+    # Ensure cached show metadata is localized for UI screens that read from kodi_meta
+    _refresh_localized_show_meta(mal_id)
 
     if control.getBool('override.meta.api'):
         # Import only the specified indexer when override is enabled
@@ -164,9 +225,6 @@ def get_next_up_meta(mal_id, episode_num):
                     if info.get('rating'):
                         episode_meta['rating'] = info['rating'].get('score')
                     
-                    # If we have good data, return early
-                    if episode_meta['title'] and episode_meta['title'] != f'Episode {episode_num}':
-                        return episode_meta
         except (IndexError, TypeError, KeyError) as e:
             control.log(f"Episode cache lookup failed for {mal_id} ep {episode_num}: {str(e)}")
 
@@ -207,6 +265,61 @@ def get_next_up_meta(mal_id, episode_num):
                         break
         except Exception as e:
             control.log(f"AniZip episode meta fetch failed: {str(e)}")
+
+    # Try TMDB localized metadata (e.g. Italian) to improve title/plot language
+    try:
+        from resources.lib.ui import utils
+        from resources.lib.endpoints import tmdb
+
+        meta_ids = database.get_unique_ids(mal_id, 'mal_id') or {}
+        if meta_ids:
+            show = database.get_show(mal_id) or {}
+            kodi_meta = {}
+            if show.get('kodi_meta'):
+                try:
+                    kodi_meta = pickle.loads(show['kodi_meta'])
+                except Exception:
+                    kodi_meta = {}
+
+            title_candidates = [
+                kodi_meta.get('title_userPreferred'),
+                kodi_meta.get('tvshowtitle'),
+                kodi_meta.get('name')
+            ]
+            title_candidates = [x for x in title_candidates if x]
+            season_num = utils.get_season(title_candidates, mal_id) if title_candidates else 1
+
+            localized = database.get(
+                tmdb.get_episode_localized_meta,
+                168,
+                meta_ids,
+                int(season_num),
+                int(episode_num),
+                key=f'tmdb_ep_locale_v2_{mal_id}_{season_num}_{episode_num}'
+            )
+
+            if isinstance(localized, dict):
+                if localized.get('title'):
+                    episode_meta['title'] = localized.get('title')
+                if localized.get('plot'):
+                    episode_meta['plot'] = localized.get('plot')
+            if not (isinstance(localized, dict) and (localized.get('title') or localized.get('plot'))):
+                from resources.lib.endpoints import tvdb
+                localized_tvdb = database.get(
+                    tvdb.get_episode_localized_meta,
+                    168,
+                    meta_ids,
+                    int(season_num),
+                    int(episode_num),
+                    key=f'tvdb_ep_locale_v1_{mal_id}_{season_num}_{episode_num}'
+                )
+                if isinstance(localized_tvdb, dict):
+                    if localized_tvdb.get('title'):
+                        episode_meta['title'] = localized_tvdb.get('title')
+                    if localized_tvdb.get('plot'):
+                        episode_meta['plot'] = localized_tvdb.get('plot')
+    except Exception as e:
+        control.log(f"TMDB localized episode meta fetch failed: {str(e)}")
 
     # Final fallback
     if not episode_meta['title']:

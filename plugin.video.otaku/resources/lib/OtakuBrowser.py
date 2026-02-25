@@ -35,6 +35,58 @@ class OtakuBrowser(BrowserBase):
                 return (', '.join(genres))
         return ()
 
+    @staticmethod
+    def _normalize_desc(desc):
+        if not desc:
+            return desc
+        desc = desc.replace('<i>', '[I]').replace('</i>', '[/I]')
+        desc = desc.replace('<b>', '[B]').replace('</b>', '[/B]')
+        desc = desc.replace('<br>', '[CR]')
+        desc = desc.replace('\n', '')
+        return desc
+
+    def _get_localized_show_meta(self, mal_id, fallback_title=None, fallback_plot=None):
+        title = fallback_title
+        plot = fallback_plot
+
+        if not mal_id:
+            return {'title': title, 'plot': plot}
+
+        meta_ids = database.get_unique_ids(mal_id, 'mal_id') or {}
+        if not meta_ids:
+            return {'title': title, 'plot': plot}
+
+        try:
+            from resources.lib.endpoints import tmdb
+            localized_tmdb = database.get(
+                tmdb.get_show_localized_meta,
+                168,
+                meta_ids,
+                key=f'tmdb_show_locale_v1_{mal_id}'
+            )
+        except Exception:
+            localized_tmdb = {}
+
+        if isinstance(localized_tmdb, dict):
+            if localized_tmdb.get('plot'):
+                plot = localized_tmdb.get('plot')
+
+        if not plot:
+            try:
+                from resources.lib.endpoints import tvdb
+                localized_tvdb = database.get(
+                    tvdb.get_show_localized_meta,
+                    168,
+                    meta_ids,
+                    key=f'tvdb_show_locale_v1_{mal_id}'
+                )
+            except Exception:
+                localized_tvdb = {}
+
+            if isinstance(localized_tvdb, dict) and localized_tvdb.get('plot'):
+                plot = localized_tvdb.get('plot')
+        return {'title': title, 'plot': plot}
+
     def process_otaku_view(self, mal_res, base_plugin_url, page):
         # Support direct, nested, and list 'entry' (e.g., relations response)
         mal_items_flat = []
@@ -122,7 +174,7 @@ class OtakuBrowser(BrowserBase):
             if 1916 < self.year_type <= year + 1:
                 year = self.year_type
             else:
-                control.notify(control.ADDON_NAME, "Invalid year. Please select a year between 1916 and {0}.".format(year + 1))
+                control.notify(control.ADDON_NAME, control.lang(30460).format(year + 1))
                 return None, None, None, None, None, None, None, None, None, None, None, None, None, None
 
         if self.season_type:
@@ -1698,21 +1750,19 @@ class OtakuBrowser(BrowserBase):
         if title is None:
             title = ''
 
+        plot = mal_res.get('synopsis') if mal_res and mal_res.get('synopsis') else None
+        if not plot and anilist_res and anilist_res.get('description'):
+            plot = self._normalize_desc(anilist_res.get('description'))
+
+        localized_meta = self._get_localized_show_meta(mal_id, fallback_title=title, fallback_plot=plot)
+        title = localized_meta.get('title') or title
+        plot = localized_meta.get('plot') or plot
+
         # Add relation info
         if mal_res and mal_res.get('relation'):
             title += ' [I]%s[/I]' % control.colorstr(mal_res['relation'], 'limegreen')
         elif anilist_res and anilist_res.get('relationType'):
             title += ' [I]%s[/I]' % control.colorstr(anilist_res['relationType'], 'limegreen')
-
-        # Plot/synopsis
-        plot = mal_res.get('synopsis') if mal_res and mal_res.get('synopsis') else None
-        if not plot and anilist_res and anilist_res.get('description'):
-            desc = anilist_res['description']
-            desc = desc.replace('<i>', '[I]').replace('</i>', '[/I]')
-            desc = desc.replace('<b>', '[B]').replace('</b>', '[/B]')
-            desc = desc.replace('<br>', '[CR]')
-            desc = desc.replace('\n', '')
-            plot = desc
 
         # Genres
         genre = [x['name'] for x in mal_res.get('genres', [])] if mal_res else None
@@ -1947,12 +1997,11 @@ class OtakuBrowser(BrowserBase):
         # Plot
         plot = mal_res.get('synopsis') if mal_res and 'synopsis' in mal_res else None
         if not plot and anilist_res and anilist_res.get('description'):
-            desc = anilist_res['description']
-            desc = desc.replace('<i>', '[I]').replace('</i>', '[/I]')
-            desc = desc.replace('<b>', '[B]').replace('</b>', '[/B]')
-            desc = desc.replace('<br>', '[CR]')
-            desc = desc.replace('\n', '')
-            plot = desc
+            plot = self._normalize_desc(anilist_res.get('description'))
+
+        localized_meta = self._get_localized_show_meta(mal_id, fallback_title=title_userPreferred, fallback_plot=plot)
+        title_userPreferred = localized_meta.get('title') or title_userPreferred
+        plot = localized_meta.get('plot') or plot
 
         # Duration
         duration = self.duration_to_seconds(mal_res.get('duration')) if mal_res and 'duration' in mal_res else None
