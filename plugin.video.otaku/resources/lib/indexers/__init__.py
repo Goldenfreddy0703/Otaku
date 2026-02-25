@@ -8,6 +8,43 @@ from resources.lib.ui import database, control, utils
 
 def parse_episodes(res, eps_watched, dub_data=None):
     parsed = pickle.loads(res['kodi_meta'])
+    # Apply localized TMDB episode metadata also in read path (cached episode lists)
+    try:
+        from resources.lib.endpoints import tmdb
+        localized = database.get(
+            tmdb.get_episode_localized_meta,
+            168,
+            database.get_unique_ids(res.get('mal_id'), 'mal_id'),
+            int(res.get('season') or 1),
+            int(res.get('number') or 0),
+            key=f'tmdb_ep_locale_v2_{res.get("mal_id")}_{res.get("season")}_{res.get("number")}'
+        )
+        if isinstance(localized, dict):
+            if localized.get('title'):
+                parsed['info']['title'] = localized.get('title')
+            if localized.get('plot'):
+                parsed['info']['plot'] = localized.get('plot')
+        if not (isinstance(localized, dict) and (localized.get('title') or localized.get('plot'))):
+            from resources.lib.endpoints import tvdb
+            localized_tvdb = database.get(
+                tvdb.get_episode_localized_meta,
+                168,
+                database.get_unique_ids(res.get('mal_id'), 'mal_id'),
+                int(res.get('season') or 1),
+                int(res.get('number') or 0),
+                key=f'tvdb_ep_locale_v1_{res.get("mal_id")}_{res.get("season")}_{res.get("number")}'
+            )
+            if isinstance(localized_tvdb, dict):
+                if localized_tvdb.get('title'):
+                    parsed['info']['title'] = localized_tvdb.get('title')
+                if localized_tvdb.get('plot'):
+                    parsed['info']['plot'] = localized_tvdb.get('plot')
+    except Exception as e:
+        control.log(
+            f"TMDB localized metadata read-path failed for {res.get('mal_id')} ep {res.get('number')}: {str(e)}",
+            level='warning'
+        )
+
     if eps_watched and int(eps_watched) >= res['number']:
         parsed['info']['playcount'] = 1
     if control.getBool('interface.cleantitles') and parsed['info'].get('playcount') != 1:
@@ -84,6 +121,42 @@ def should_hide_unaired_episode(aired_date_str):
 
 
 def update_database(mal_id, update_time, res, url, image, info, season, episode, episodes, title, fanart, poster, clearart, clearlogo, dub_data, filler, anidb_ep_id=None):
+    # Apply localized episode metadata from TMDB when available
+    try:
+        from resources.lib.endpoints import tmdb
+        localized = database.get(
+            tmdb.get_episode_localized_meta,
+            168,
+            database.get_unique_ids(mal_id, 'mal_id'),
+            int(season),
+            int(episode),
+            key=f'tmdb_ep_locale_v2_{mal_id}_{season}_{episode}'
+        )
+        if isinstance(localized, dict):
+            if localized.get('title'):
+                title = localized.get('title')
+                info['title'] = localized.get('title')
+            if localized.get('plot'):
+                info['plot'] = localized.get('plot')
+        if not (isinstance(localized, dict) and (localized.get('title') or localized.get('plot'))):
+            from resources.lib.endpoints import tvdb
+            localized_tvdb = database.get(
+                tvdb.get_episode_localized_meta,
+                168,
+                database.get_unique_ids(mal_id, 'mal_id'),
+                int(season),
+                int(episode),
+                key=f'tvdb_ep_locale_v1_{mal_id}_{season}_{episode}'
+            )
+            if isinstance(localized_tvdb, dict):
+                if localized_tvdb.get('title'):
+                    title = localized_tvdb.get('title')
+                    info['title'] = localized_tvdb.get('title')
+                if localized_tvdb.get('plot'):
+                    info['plot'] = localized_tvdb.get('plot')
+    except Exception as e:
+        control.log(f"TMDB localized metadata lookup failed for {mal_id} ep {episode}: {str(e)}")
+
     code = endpoints.get_second_label(info, dub_data)
     if not code and control.getBool('jz.filler'):
         filler = code = control.colorstr(filler, color="red") if filler == 'Filler' else filler
