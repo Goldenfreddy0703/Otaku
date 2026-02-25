@@ -386,8 +386,7 @@ def update_episode_column(mal_id, episode, column, value):
 
 def get_show_data(mal_id):
     with SQL(control.malSyncDB) as cursor:
-        db_query = 'SELECT * FROM show_data WHERE mal_id IN (%s)' % mal_id
-        cursor.execute(db_query)
+        cursor.execute('SELECT * FROM show_data WHERE mal_id=?', (mal_id,))
         show_data = cursor.fetchone()
         return show_data
 
@@ -411,14 +410,14 @@ def get_episode(mal_id, episode=None):
 
 def get_show(mal_id):
     with SQL(control.malSyncDB) as cursor:
-        cursor.execute('SELECT * FROM shows WHERE mal_id IN (%s)' % mal_id)
+        cursor.execute('SELECT * FROM shows WHERE mal_id=?', (mal_id,))
         shows = cursor.fetchone()
         return shows
 
 
 def get_show_meta(mal_id):
     with SQL(control.malSyncDB) as cursor:
-        cursor.execute('SELECT * FROM shows_meta WHERE mal_id IN (%s)' % mal_id)
+        cursor.execute('SELECT * FROM shows_meta WHERE mal_id=?', (mal_id,))
         shows = cursor.fetchone()
         return shows
 
@@ -566,12 +565,12 @@ class SQL:
         self.cursor.close()
         if self.lock.locked():
             self.lock.release()
-        if exc_type:
-            import traceback
-            control.log('database error', level='error')
-            control.log(f"{''.join(traceback.format_exception(exc_type, exc_val, exc_tb))}", level='error')
         if exc_type is OperationalError:
             import traceback
-            control.log('database error', level='error')
+            control.log('database OperationalError', level='error')
             control.log(f"{''.join(traceback.format_exception(exc_type, exc_val, exc_tb))}", level='error')
             return True
+        elif exc_type:
+            import traceback
+            control.log('database error', level='error')
+            control.log(f"{''.join(traceback.format_exception(exc_type, exc_val, exc_tb))}", level='error')

@@ -221,31 +221,37 @@ def getNumberList(settingid):
 def setSetting(settingid, value):
     """Set setting as string - kept for backward compatibility"""
     settings.setString(settingid, str(value))
-    _settings_cache.pop(f's_{settingid}', None)
+    # Evict all cached variants of this key
+    for prefix in ('s_', 'gs_', 'b_', 'i_', 'n_'):
+        _settings_cache.pop(f'{prefix}{settingid}', None)
 
 
 def setBool(settingid, value):
     """Set setting as boolean"""
     settings.setBool(settingid, value)
-    _settings_cache.pop(f'b_{settingid}', None)
+    for prefix in ('s_', 'gs_', 'b_', 'i_', 'n_'):
+        _settings_cache.pop(f'{prefix}{settingid}', None)
 
 
 def setInt(settingid, value):
     """Set setting as integer"""
     settings.setInt(settingid, value)
-    _settings_cache.pop(f'i_{settingid}', None)
+    for prefix in ('s_', 'gs_', 'b_', 'i_', 'n_'):
+        _settings_cache.pop(f'{prefix}{settingid}', None)
 
 
 def setStr(settingid, value):
     """Set setting as string"""
     settings.setString(settingid, value)
-    _settings_cache.pop(f'gs_{settingid}', None)
+    for prefix in ('s_', 'gs_', 'b_', 'i_', 'n_'):
+        _settings_cache.pop(f'{prefix}{settingid}', None)
 
 
 def setNumber(settingid, value):
     """Set setting as float/number"""
     settings.setNumber(settingid, value)
-    _settings_cache.pop(f'n_{settingid}', None)
+    for prefix in ('s_', 'gs_', 'b_', 'i_', 'n_'):
+        _settings_cache.pop(f'{prefix}{settingid}', None)
 
 
 def setStringList(settingid, value):
@@ -543,6 +549,7 @@ def draw_items(video_data, content_type=''):
 
     # move to episode position currently watching
     if content_type == "episodes" and getBool('general.smart.scroll.enable'):
+        xbmc.sleep(500)  # Delay to ensure episode list is fully rendered before trying to scroll
         try:
             num_watched = int(xbmc.getInfoLabel("Container.TotalWatched"))
             total_ep = int(xbmc.getInfoLabel('Container(id).NumItems'))

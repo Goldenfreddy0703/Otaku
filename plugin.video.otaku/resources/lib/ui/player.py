@@ -495,7 +495,9 @@ class WatchlistPlayer(player):
 
     def process_animeskip(self):
         show_meta = database.get_show_meta(self.mal_id)
-        anilist_id = pickle.loads(show_meta['meta_ids'])['anilist_id']
+        if not show_meta or not show_meta.get('meta_ids'):
+            return
+        anilist_id = pickle.loads(show_meta['meta_ids']).get('anilist_id')
 
         if (self.skipintro_aniskip_enable and not self.skipintro_aniskip) or (self.skipoutro_aniskip_enable and not self.skipoutro_aniskip):
             skip_times = anime_skip.get_time_stamps(anime_skip.get_episode_ids(str(anilist_id), int(self.episode)))

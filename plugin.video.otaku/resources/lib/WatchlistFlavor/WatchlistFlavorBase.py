@@ -149,10 +149,6 @@ class WatchlistFlavorBase:
         if total_eps > 0 and next_ep_num > total_eps:
             return None
 
-        # AniList-specific: skip if next episode is the one that hasn't aired yet
-        if next_airing_episode and next_ep_num == next_airing_episode:
-            return None
-
         # Get episode metadata via MetaBrowser (centralized for all watchlists)
         episode_meta = MetaBrowser.get_next_up_meta(mal_id, next_ep_num) if mal_id else {}
 

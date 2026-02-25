@@ -1,7 +1,7 @@
 from resources.lib.ui import client, database
 
-api_info = database.get_info('Anime-Skip')
-client_id = api_info['client_id']
+api_info = database.get_info('Anime-Skip') or {}
+client_id = api_info.get('client_id', '')
 base_url = "https://api.anime-skip.com/graphql"
 
 headers = {
@@ -68,7 +68,7 @@ def get_time_stamps(id_list):
                 from resources.lib.ui import control
                 control.log(f'Anime-Skip timestamp API error: {str(e)}', 'error')
                 continue
-    return {}
+    return []
 
 
 def convert_time_stamps(time_stamp, intro, outro):
@@ -76,14 +76,18 @@ def convert_time_stamps(time_stamp, intro, outro):
         return
     skip_times = {}
     for skip in time_stamp:
+        skip_type = skip.get('type', {}).get('name')
+        skip_at = skip.get('at')
+        if not skip_type or skip_at is None:
+            continue
         if intro:
-            if skip['type']['name'] in ['Intro', 'Branding', 'New Intro']:
-                skip_times['intro'] = {'start': skip['at']}
-            elif skip_times.get('intro') and not skip_times['intro'].get('end') and skip['type']['name'] == 'Canon':
-                skip_times['intro']['end'] = skip['at']
+            if skip_type in ['Intro', 'Branding', 'New Intro']:
+                skip_times['intro'] = {'start': skip_at}
+            elif skip_times.get('intro') and not skip_times['intro'].get('end') and skip_type == 'Canon':
+                skip_times['intro']['end'] = skip_at
         if outro:
-            if skip['type']['name'] in ['Credits', 'Mixed Credits']:
-                skip_times['outro'] = {'start': skip['at']}
-            elif skip_times.get('outro') and skip['type']['name'] == 'Preview':
-                skip_times['outro']['end'] = skip['at']
+            if skip_type in ['Credits', 'Mixed Credits']:
+                skip_times['outro'] = {'start': skip_at}
+            elif skip_times.get('outro') and skip_type == 'Preview':
+                skip_times['outro']['end'] = skip_at
     return skip_times

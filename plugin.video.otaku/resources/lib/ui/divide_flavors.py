@@ -9,8 +9,11 @@ _mal_dub_cache = None
 def _get_mal_dub():
     global _mal_dub_cache
     if _mal_dub_cache is None:
-        with open(control.maldubFile) as file:
-            _mal_dub_cache = json.load(file)
+        try:
+            with open(control.maldubFile) as file:
+                _mal_dub_cache = json.load(file)
+        except (FileNotFoundError, json.JSONDecodeError):
+            _mal_dub_cache = {}
     return _mal_dub_cache
 
 

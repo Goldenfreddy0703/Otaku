@@ -144,15 +144,18 @@ class Premiumize:
     def resolve_hoster(self, source):
         self.manage_storage_space()
         directLink = self.direct_download(source)
-        if directLink['status'] == 'success':
-            if self.addtocloud:
-                self.add_to_cloud(directLink['location'])
-            return directLink['location']
-        return None
+        if not directLink or directLink.get('status') != 'success':
+            return None
+        if self.addtocloud:
+            self.add_to_cloud(directLink.get('location', ''))
+        return directLink.get('location')
 
     def resolve_single_magnet(self, hash_, magnet, episode, pack_select):
         self.manage_storage_space()
-        folder_details = self.direct_download(magnet)['content']
+        dd_result = self.direct_download(magnet)
+        if not dd_result or 'content' not in dd_result:
+            return None
+        folder_details = dd_result['content']
         folder_details = sorted(folder_details, key=lambda i: int(i['size']), reverse=True)
         folder_details = [i for i in folder_details if source_utils.is_file_ext_valid(i['link'])]
         filter_list = [i for i in folder_details]
@@ -202,9 +205,23 @@ class Premiumize:
         stream_link = None
         magnet = source['magnet']
         magnet_data = self.addMagnet(magnet)
+        if not magnet_data or 'id' not in magnet_data:
+            control.log('Premiumize addMagnet failed - no valid response', 'warning')
+            if runinforground:
+                control.progressDialog.close()
+            return None
         transfer_id = magnet_data['id']
         transfer_status = self.transfer_list()
-        status = next((item for item in transfer_status if item['id'] == transfer_id), None)['status']
+        if not transfer_status:
+            if runinforground:
+                control.progressDialog.close()
+            return None
+        status_item = next((item for item in transfer_status if item['id'] == transfer_id), None)
+        if not status_item:
+            if runinforground:
+                control.progressDialog.close()
+            return None
+        status = status_item['status']
 
         if runinbackground:
             control.notify(heading, "The source is downloading to your cloud")
@@ -215,8 +232,15 @@ class Premiumize:
             if runinforground and (control.progressDialog.iscanceled() or control.wait_for_abort(5)):
                 break
             transfer_status = self.transfer_list()
-            status = next((item for item in transfer_status if item['id'] == transfer_id), None).get('status', 'error')
-            progress = next((item for item in transfer_status if item['id'] == transfer_id), None).get('progress', 0)
+            if not transfer_status:
+                status = 'error'
+                break
+            status_item = next((item for item in transfer_status if item['id'] == transfer_id), None)
+            if not status_item:
+                status = 'error'
+                break
+            status = status_item.get('status', 'error')
+            progress = status_item.get('progress', 0)
             if progress is not None:
                 progress *= 100
             else:
@@ -229,7 +253,13 @@ class Premiumize:
         if status == 'finished':
             self.manage_storage_space()
             control.ok_dialog(heading, "This file has been added to your Cloud")
-            folder_details = self.direct_download(magnet)['content']
+            dd_result = self.direct_download(magnet)
+            if not dd_result or 'content' not in dd_result:
+                self.delete_torrent(transfer_id)
+                if runinforground:
+                    control.progressDialog.close()
+                return None
+            folder_details = dd_result['content']
             folder_details = sorted(folder_details, key=lambda i: int(i['size']), reverse=True)
             folder_details = [i for i in folder_details if source_utils.is_file_ext_valid(i['link'])]
             filter_list = [i for i in folder_details]

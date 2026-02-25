@@ -73,7 +73,13 @@ class DebridLink:
     def status(self):
         url = f"{self.api_url[:-3]}/account/infos"
         response = client.get(url, headers=self.headers())
+        if not response:
+            control.ok_dialog(control.ADDON_NAME, 'Failed to get Debrid-Link user info')
+            return
         response = response.json()
+        if 'value' not in response:
+            control.ok_dialog(control.ADDON_NAME, 'Failed to get Debrid-Link user info')
+            return
         username = response['value']['pseudo']
         premium = response['value']['premiumLeft'] > 0
         control.setSetting('debridlink.username', username)
@@ -96,6 +102,8 @@ class DebridLink:
         }
         url = f"{self.api_url[:-3]}/oauth/token"
         response = client.post(url, data=postData, headers={'User-Agent': self.USER_AGENT})
+        if not response:
+            return
         response = response.json()
         if response.get('access_token'):
             self.token = response['access_token']
@@ -112,7 +120,10 @@ class DebridLink:
         return r.json().get('value') if r else None
 
     def resolve_single_magnet(self, hash_, magnet, episode, pack_select):
-        files = self.addMagnet(magnet)['files']
+        magnet_data = self.addMagnet(magnet)
+        if not magnet_data or 'files' not in magnet_data:
+            return None
+        files = magnet_data['files']
         folder_details = [{'link': x['downloadUrl'], 'path': x['name']} for x in files]
         if episode:
             selected_file = source_utils.get_best_match('path', folder_details, episode, pack_select)
@@ -151,12 +162,22 @@ class DebridLink:
         stream_link = None
         magnet = source['magnet']
         magnet_data = self.addMagnet(magnet)
+        if not magnet_data or 'id' not in magnet_data:
+            if runinforground:
+                control.progressDialog.close()
+            return None
         magnet_id = magnet_data['id']
         magnet_status = self.magnet_status(magnet_id)
+        if not magnet_status:
+            if runinforground:
+                control.progressDialog.close()
+            return None
         while magnet_status.get('downloadPercent') < 100.0:
             if runinforground and (control.progressDialog.iscanceled() or control.wait_for_abort(5)):
                 break
             magnet_status = self.magnet_status(magnet_id)
+            if not magnet_status:
+                break
             status = magnet_status.get('name')
             progress = magnet_status.get('downloadPercent')
             speed = magnet_status.get('downloadSpeed')

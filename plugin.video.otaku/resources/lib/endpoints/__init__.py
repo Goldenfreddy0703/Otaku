@@ -17,9 +17,11 @@ def get_second_label(info, dub_data, filler=None):
     #                 code_sub = f'{datetime.fromtimestamp(ep_sched["airingAt"])}'[:-3]
 
     if dub_data:
-        episode = info['episode']
+        episode = info.get('episode')
+        if not episode:
+            return code
         for dub_dat in dub_data:
-            season = int(info['season'])
+            season = int(info.get('season', 1))
             if (int(dub_dat['season']) == season or dub_dat['season'] == 0) and int(dub_dat['episode']) == episode:
                 code_dub = dub_dat["release_time"]
 

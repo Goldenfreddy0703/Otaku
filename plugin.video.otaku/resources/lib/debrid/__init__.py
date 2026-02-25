@@ -81,6 +81,11 @@ class Debrid:
         hash_list = [i['hash'] for i in torrent_list]
         if len(hash_list) > 0:
             premiumizeCache = premiumize.Premiumize().hash_check(hash_list)
+            if not premiumizeCache or 'response' not in premiumizeCache:
+                for torrent in torrent_list:
+                    torrent['debrid_provider'] = 'Premiumize'
+                    self.premiumizeUnCached.append(torrent)
+                return
             premiumizeCache = premiumizeCache['response']
 
             for index, torrent in enumerate(torrent_list):
@@ -93,7 +98,13 @@ class Debrid:
     def torbox_worker(self, torrent_list):
         hash_list = [i['hash'] for i in torrent_list]
         if len(hash_list) > 0:
-            cache_check = [i['hash'] for i in torbox.TorBox().hash_check(hash_list)]
+            torbox_result = torbox.TorBox().hash_check(hash_list)
+            if not torbox_result:
+                for torrent in torrent_list:
+                    torrent['debrid_provider'] = 'TorBox'
+                    self.torboxUnCached.append(torrent)
+                return
+            cache_check = [i['hash'] for i in torbox_result]
             for torrent in torrent_list:
                 torrent['debrid_provider'] = 'TorBox'
                 if torrent['hash'] in cache_check:
@@ -106,6 +117,8 @@ class Debrid:
         hash_list = ["magnet:?xt=urn:btih:" + i['hash'] for i in torrent_list]
         if len(hash_list) > 0:
             response = easydebrid.EasyDebrid().lookup_link(hash_list)
+            if not response:
+                return
             cached_flags = response.get("cached", [])
             for torrent, is_cached in zip(torrent_list, cached_flags):
                 torrent['debrid_provider'] = 'EasyDebrid'

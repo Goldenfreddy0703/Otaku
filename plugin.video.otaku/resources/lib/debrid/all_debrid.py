@@ -123,8 +123,15 @@ class AllDebrid:
         return r.json()['data'] if r else None
 
     def resolve_single_magnet(self, hash_, magnet, episode, pack_select):
-        magnet_id = self.addMagnet(magnet)['magnets'][0]['id']
-        details = self.magnet_status(magnet_id)['magnets']['files']
+        magnet_data = self.addMagnet(magnet)
+        if not magnet_data or 'magnets' not in magnet_data or not magnet_data['magnets']:
+            return None
+        magnet_id = magnet_data['magnets'][0]['id']
+        status_data = self.magnet_status(magnet_id)
+        if not status_data or 'magnets' not in status_data or 'files' not in status_data['magnets']:
+            self.delete_magnet(magnet_id)
+            return None
+        details = status_data['magnets']['files']
         folder_details = []
         for x in details:
             self.collect_files(x, folder_details)
@@ -195,8 +202,17 @@ class AllDebrid:
         stream_link = None
         magnet = source['magnet']
         magnet_data = self.addMagnet(magnet)
+        if not magnet_data or 'magnets' not in magnet_data or not magnet_data['magnets']:
+            if runinforground:
+                control.progressDialog.close()
+            return None
         magnet_id = magnet_data['magnets'][0]['id']
         magnet_status = self.magnet_status(magnet_id)
+        if not magnet_status or 'magnets' not in magnet_status:
+            self.delete_magnet(magnet_id)
+            if runinforground:
+                control.progressDialog.close()
+            return None
         status = magnet_status['magnets']['status']
 
         if runinbackground:
@@ -209,6 +225,9 @@ class AllDebrid:
             if runinforground and (control.progressDialog.iscanceled() or control.wait_for_abort(5)):
                 break
             magnet_status = self.magnet_status(magnet_id)
+            if not magnet_status or 'magnets' not in magnet_status:
+                status = 'Error'
+                break
             status = magnet_status['magnets']['status']
             total_size = magnet_status['magnets'].get('size', 0)  # Update total_size in the loop
             try:

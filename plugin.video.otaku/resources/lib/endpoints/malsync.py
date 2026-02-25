@@ -8,7 +8,7 @@ def get_slugs(mal_id, site=''):
     if site in ['Gogoanime', 'Zoro', 'animepahe']:
         response = client.get(f'{baseUrl}/mal/anime/{mal_id}')
         if response:
-            resp = response.json()['Sites'].get(site)
+            resp = response.json().get('Sites', {}).get(site)
             if resp:
                 for key in resp.keys():
                     slugs.append(resp[key].get('url'))
@@ -19,7 +19,7 @@ def get_title(mal_id, site=''):
     if site in ['Gogoanime', 'Zoro', 'animepahe']:
         response = client.get(f'{baseUrl}/mal/anime/{mal_id}')
         if response:
-            resp = response.json()['Sites'].get(site)
+            resp = response.json().get('Sites', {}).get(site)
             if resp:
                 for key in resp.keys():
                     title = resp[key].get('title')

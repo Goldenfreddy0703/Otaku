@@ -36,7 +36,11 @@ class BaseWindow(xbmcgui.WindowXMLDialog):
             return
 
         if actionArgs.get('mal_id'):
-            self.item_information = pickle.loads(database.get_show(actionArgs['mal_id'])['kodi_meta'])
+            show_data = database.get_show(actionArgs['mal_id'])
+            if show_data and show_data.get('kodi_meta'):
+                self.item_information = pickle.loads(show_data['kodi_meta'])
+            else:
+                self.item_information = {}
         elif actionArgs.get('playnext'):
             self.item_information = actionArgs
         else:

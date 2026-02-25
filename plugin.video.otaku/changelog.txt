@@ -1,3 +1,25 @@
+Changelog v5.2.75 (2026-02-25):
+- TorBox auth: replaced API key input dialog with OAuth device code flow (like RD/AD/PM/DL)
+
+Changelog v5.2.74 (2026-02-24):
+- Fixed Content-Type header missing on form POST in http.client fast path (broke RD/MAL/AD/DL auth)
+- Fixed HTTP redirect handling (301/302/303/307/308) in _fast_request() keep-alive pool
+- Fixed settings cache cross-prefix stale values
+- Fixed smart scroll: added delay due to recent changes
+- Fixed ONAs excluded from Next Up when user is caught up (GitHub #115)
+- Hardened all debrid modules and endpoint files with null guards and safe .get() access
+- Fixed sort_select fallback overwriting itself 4 times (only last survived)
+- Fixed anichart_window crash on pickle.loads(None)
+- Fixed player.py: animeskip None guard, audio stream safe access with fallback
+- Fixed divide_flavors crash on missing mal_dub JSON file
+- Fixed client.py mutable default argument headers={}
+- Fixed get_meta.py unnecessary ThreadPoolExecutor overhead
+- Fixed migrate_artwork.py calling non-existent function
+- Fixed module-level crashes in anime_skip, fanart, tmdb when DB entries missing
+- Fixed response.json() crashes on non-JSON API responses in fanart, tmdb, tvdb, mal
+- Fixed mal.py pagination KeyError and corrupted JSON cache handling
+- Fixed endpoints/__init__.py KeyError on episode/season dict access
+
 Changelog v5.2.73 (2026-02-23):
 - Added true HTTP keep-alive connection pooling to client.py using http.client (no new dependencies)
 - Added _KeepAlivePool class — thread-safe pool of persistent TCP/TLS connections keyed by host

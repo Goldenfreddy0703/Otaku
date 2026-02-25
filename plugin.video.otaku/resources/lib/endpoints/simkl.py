@@ -61,7 +61,7 @@ class Simkl:
                 return None
 
         for entry in self.simkl_cache:
-            if entry['ids']['mal'] == str(mal_id):
+            if entry.get('ids', {}).get('mal') == str(mal_id):
                 return entry
         return None
 

@@ -249,10 +249,6 @@ try:
         sort_options = json.load(f)
 except FileNotFoundError:
     sort_options = default_sort_options
-    sort_options = default_sub_options
-    sort_options = default_dub_options
-    sort_options = default_multi_audio_options
-    sort_options = default_multi_sub_options
 
 
 class SortSelect(BaseWindow):

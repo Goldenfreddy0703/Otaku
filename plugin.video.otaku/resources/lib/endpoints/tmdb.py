@@ -1,7 +1,7 @@
 from resources.lib.ui import client, database
 
-api_info = database.get_info('TMDB')
-apiKey = api_info['api_key']
+api_info = database.get_info('TMDB') or {}
+apiKey = api_info.get('api_key', '')
 baseUrl = "https://api.themoviedb.org/3/"
 thumbPath = "https://image.tmdb.org/t/p/w500"
 backgroundPath = "https://image.tmdb.org/t/p/original"
@@ -18,7 +18,10 @@ def getArt(meta_ids, mtype, limit=None):
                 "api_key": apiKey
             }
             response = client.get(f'{baseUrl}find/{tvdb}', params=params)
-            res = response.json() if response else {}
+            try:
+                res = response.json() if response else {}
+            except (ValueError, AttributeError):
+                res = {}
             res = res.get('tv_results')
             if res:
                 mid = res[0].get('id')
@@ -29,7 +32,10 @@ def getArt(meta_ids, mtype, limit=None):
             "api_key": apiKey
         }
         response = client.get(f'{baseUrl}{mtype[0:5]}/{mid}/images', params=params)
-        res = response.json() if response else {}
+        try:
+            res = response.json() if response else {}
+        except (ValueError, AttributeError):
+            res = {}
 
         if res:
             # Backdrops are for fanart (wide 16:9 background images)
@@ -78,7 +84,10 @@ def get_episode_titles(tmdb_id, season_number, episode_number):
         "api_key": apiKey
     }
     response = client.get(f'{baseUrl}tv/{tmdb_id}/season/{season_number}/episode/{episode_number}/translations', params=params)
-    res = response.json() if response else {}
+    try:
+        res = response.json() if response else {}
+    except (ValueError, AttributeError):
+        res = {}
 
     # Extract English name, fallback to Japanese if not found
     translations = res.get('translations', [])

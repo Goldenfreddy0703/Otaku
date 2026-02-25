@@ -16,7 +16,9 @@ def get_route(mal_id):
     response = client.get(f"{base_url}/anime", params=params)
     if response:
         data = response.json()
-        return data['anime'][0]['route']
+        anime_list = data.get('anime', [])
+        if anime_list:
+            return anime_list[0].get('route', '')
     return ''
 
 
@@ -38,14 +40,16 @@ def get_dub_time(mal_id):
 
                 if '-' in dub_text:
                     match = re.match(r'Episodes (\d+)-(\d+)', dub_text)
-                    ep_begin = int(match.group(1))
-                    ep_end = int(match.group(2))
-                    for ep_number in range(ep_begin, ep_end):
-                        add_to_list(ep_number, date_time)
+                    if match:
+                        ep_begin = int(match.group(1))
+                        ep_end = int(match.group(2))
+                        for ep_number in range(ep_begin, ep_end):
+                            add_to_list(ep_number, date_time)
                 else:
                     match = re.match(r'Episode (\d+)', dub_text)
-                    ep_number = int(match.group(1))
-                    add_to_list(ep_number, date_time)
+                    if match:
+                        ep_number = int(match.group(1))
+                        add_to_list(ep_number, date_time)
                 return dub_list
 
 

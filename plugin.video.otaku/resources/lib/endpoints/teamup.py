@@ -16,6 +16,8 @@ def get_dub_data(en_title):
         # match first word or first two words (separated by {space} )
         regex = r'([^ ]+)' if '-' in en_title else r'([^ ]+) ?([^ ]+)?'
         match = re.match(regex, en_title)
+        if not match:
+            return
         if match.group(0).lower() == 'the':
             regex = r'([^ ]+) ?([^ ]+)?'
             match = re.match(regex, en_title)
@@ -27,7 +29,7 @@ def get_dub_data(en_title):
         }
         response = client.get(f'{api_url}/{token}/events', headers=headers, params=params)
         if response:
-            teamup_data = response.json()['events']
+            teamup_data = response.json().get('events', [])
 
             dub_list = []
             for teamup_dat in teamup_data:

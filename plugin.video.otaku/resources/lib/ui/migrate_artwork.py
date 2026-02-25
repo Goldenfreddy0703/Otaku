@@ -43,130 +43,128 @@ def migrate_artwork_database():
 
     # Get all show metadata entries
     try:
-        conn = database._get_connection_shows()
-        cursor = conn.cursor()
-        cursor.execute("SELECT mal_id, art, meta_ids FROM shows_meta")
-        rows = cursor.fetchall()
+        with database.SQL(control.malSyncDB) as cursor:
+            cursor.execute("SELECT mal_id, art, meta_ids FROM shows_meta")
+            rows = cursor.fetchall()
 
-        control.log(f"Found {len(rows)} metadata entries to process")
+            control.log(f"Found {len(rows)} metadata entries to process")
 
-        for row in rows:
-            stats['entries_processed'] += 1
-            mal_id, art_blob, meta_ids_blob = row
+            for row in rows:
+                stats['entries_processed'] += 1
+                mal_id, art_blob, meta_ids_blob = row
 
-            try:
-                # Unpickle existing art data
-                art = pickle.loads(art_blob)
-                meta_ids = pickle.loads(meta_ids_blob)
+                try:
+                    # Unpickle existing art data
+                    art = pickle.loads(art_blob)
+                    meta_ids = pickle.loads(meta_ids_blob)
 
-                original_size = len(art_blob)
-                updated = False
-                images_before = 0
-                images_after = 0
+                    original_size = len(art_blob)
+                    updated = False
+                    images_before = 0
+                    images_after = 0
 
-                # Count original images
-                for key in ['fanart', 'thumb', 'clearart', 'clearlogo', 'landscape', 'banner']:
-                    if key in art and isinstance(art[key], list):
-                        images_before += len(art[key])
+                    # Count original images
+                    for key in ['fanart', 'thumb', 'clearart', 'clearlogo', 'landscape', 'banner']:
+                        if key in art and isinstance(art[key], list):
+                            images_before += len(art[key])
 
-                # Apply fanart limit
-                if 'fanart' in art and isinstance(art['fanart'], list):
-                    if len(art['fanart']) > artwork_fanart_count:
-                        art['fanart'] = art['fanart'][:artwork_fanart_count]
+                    # Apply fanart limit
+                    if 'fanart' in art and isinstance(art['fanart'], list):
+                        if len(art['fanart']) > artwork_fanart_count:
+                            art['fanart'] = art['fanart'][:artwork_fanart_count]
+                            updated = True
+
+                    # Apply landscape/thumb limit (always 1 - users only need one thumbnail)
+                    if 'thumb' in art and isinstance(art['thumb'], list):
+                        if len(art['thumb']) > 1:
+                            art['thumb'] = art['thumb'][:1]
+                            updated = True
+
+                    # Convert clearart to single string
+                    if 'clearart' in art and isinstance(art['clearart'], list) and art['clearart']:
+                        art['clearart'] = random.choice(art['clearart'])
                         updated = True
 
-                # Apply landscape/thumb limit (always 1 - users only need one thumbnail)
-                if 'thumb' in art and isinstance(art['thumb'], list):
-                    if len(art['thumb']) > 1:
-                        art['thumb'] = art['thumb'][:1]
-                        updated = True
+                    # Convert clearlogo to single string (or remove if disabled)
+                    if 'clearlogo' in art:
+                        if not artwork_clearlogo_enabled:
+                            del art['clearlogo']
+                            updated = True
+                        elif isinstance(art['clearlogo'], list) and art['clearlogo']:
+                            art['clearlogo'] = random.choice(art['clearlogo'])
+                            updated = True
 
-                # Convert clearart to single string
-                if 'clearart' in art and isinstance(art['clearart'], list) and art['clearart']:
-                    art['clearart'] = random.choice(art['clearart'])
-                    updated = True
+                    # Convert landscape to single string (or remove if disabled)
+                    if 'landscape' in art:
+                        if not artwork_landscape_enabled:
+                            del art['landscape']
+                            updated = True
+                        elif isinstance(art['landscape'], list) and art['landscape']:
+                            art['landscape'] = random.choice(art['landscape'])
+                            updated = True
 
-                # Convert clearlogo to single string (or remove if disabled)
-                if 'clearlogo' in art:
-                    if not artwork_clearlogo_enabled:
-                        del art['clearlogo']
-                        updated = True
-                    elif isinstance(art['clearlogo'], list) and art['clearlogo']:
-                        art['clearlogo'] = random.choice(art['clearlogo'])
-                        updated = True
+                    # Remove banner if disabled
+                    if 'banner' in art and not artwork_banner_enabled:
+                        if isinstance(art['banner'], list) and art['banner']:
+                            art['banner'] = random.choice(art['banner'])
+                            updated = True
+                        elif not artwork_banner_enabled:
+                            del art['banner']
+                            updated = True
 
-                # Convert landscape to single string (or remove if disabled)
-                if 'landscape' in art:
-                    if not artwork_landscape_enabled:
-                        del art['landscape']
-                        updated = True
-                    elif isinstance(art['landscape'], list) and art['landscape']:
-                        art['landscape'] = random.choice(art['landscape'])
-                        updated = True
+                    # Count final images
+                    for key in ['fanart', 'thumb']:
+                        if key in art and isinstance(art[key], list):
+                            images_after += len(art[key])
+                    images_after += sum(1 for key in ['clearart', 'clearlogo', 'landscape', 'banner']
+                                       if key in art and isinstance(art[key], str))
 
-                # Remove banner if disabled
-                if 'banner' in art and not artwork_banner_enabled:
-                    if isinstance(art['banner'], list) and art['banner']:
-                        art['banner'] = random.choice(art['banner'])
-                        updated = True
-                    elif not artwork_banner_enabled:
-                        del art['banner']
-                        updated = True
+                    # Update database if changes were made
+                    if updated:
+                        new_art_blob = pickle.dumps(art)
+                        new_size = len(new_art_blob)
 
-                # Count final images
-                for key in ['fanart', 'thumb']:
-                    if key in art and isinstance(art[key], list):
-                        images_after += len(art[key])
-                images_after += sum(1 for key in ['clearart', 'clearlogo', 'landscape', 'banner']
-                                   if key in art and isinstance(art[key], str))
+                        cursor.execute(
+                            "UPDATE shows_meta SET art = ? WHERE mal_id = ?",
+                            (new_art_blob, mal_id)
+                        )
 
-                # Update database if changes were made
-                if updated:
-                    new_art_blob = pickle.dumps(art)
-                    new_size = len(new_art_blob)
+                        stats['entries_updated'] += 1
+                        stats['images_removed'] += (images_before - images_after)
 
-                    cursor.execute(
-                        "UPDATE shows_meta SET art = ? WHERE mal_id = ?",
-                        (new_art_blob, mal_id)
-                    )
+                        size_reduction = original_size - new_size
+                        if stats['entries_updated'] % 10 == 0:
+                            control.log(f"Processed {stats['entries_updated']} entries... "
+                                        f"(MAL ID {mal_id}: {images_before} -> {images_after} images, "
+                                        f"{size_reduction} bytes saved)")
 
-                    stats['entries_updated'] += 1
-                    stats['images_removed'] += (images_before - images_after)
+                except Exception as e:
+                    stats['errors'] += 1
+                    control.log(f"Error processing MAL ID {mal_id}: {str(e)}")
+                    continue
 
-                    size_reduction = original_size - new_size
-                    if stats['entries_updated'] % 10 == 0:
-                        control.log(f"Processed {stats['entries_updated']} entries... "
-                                  f"(MAL ID {mal_id}: {images_before} -> {images_after} images, "
-                                  f"{size_reduction} bytes saved)")
+            # Commit changes
+            cursor.connection.commit()
 
-            except Exception as e:
-                stats['errors'] += 1
-                control.log(f"Error processing MAL ID {mal_id}: {str(e)}")
-                continue
+            # Log final statistics
+            control.log("=" * 60)
+            control.log("Artwork Database Migration Complete!")
+            control.log(f"Entries processed: {stats['entries_processed']}")
+            control.log(f"Entries updated: {stats['entries_updated']}")
+            control.log(f"Images removed: {stats['images_removed']}")
+            control.log(f"Errors: {stats['errors']}")
+            control.log(f"Estimated database size reduction: ~{stats['images_removed'] * 50}KB")
+            control.log("=" * 60)
 
-        # Commit changes
-        conn.commit()
-        cursor.close()
+            # Show notification to user
+            if stats['entries_updated'] > 0:
+                control.notify(
+                    heading="Artwork Migration Complete",
+                    message=f"Optimized {stats['entries_updated']} entries, removed {stats['images_removed']} images",
+                    time=5000
+                )
 
-        # Log final statistics
-        control.log("=" * 60)
-        control.log("Artwork Database Migration Complete!")
-        control.log(f"Entries processed: {stats['entries_processed']}")
-        control.log(f"Entries updated: {stats['entries_updated']}")
-        control.log(f"Images removed: {stats['images_removed']}")
-        control.log(f"Errors: {stats['errors']}")
-        control.log(f"Estimated database size reduction: ~{stats['images_removed'] * 50}KB")
-        control.log("=" * 60)
-
-        # Show notification to user
-        if stats['entries_updated'] > 0:
-            control.notify(
-                heading="Artwork Migration Complete",
-                message=f"Optimized {stats['entries_updated']} entries, removed {stats['images_removed']} images",
-                time=5000
-            )
-
-        return stats
+            return stats
 
     except Exception as e:
         control.log(f"Migration failed: {str(e)}")

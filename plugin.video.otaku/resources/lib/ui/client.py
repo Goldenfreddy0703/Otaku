@@ -167,54 +167,84 @@ def _fast_request(url, headers, post_data=None, method='GET', timeout=20, jpost=
     """
     Fast-path HTTP request using keep-alive connection pool.
     Returns (body_bytes, status_code, response_headers_dict, url) or None on error.
-    Handles gzip decompression and UTF-8 decoding.
+    Handles gzip decompression, UTF-8 decoding, and HTTP redirects.
     """
-    parsed = urllib.parse.urlparse(url)
-    path = parsed.path or '/'
-    if parsed.query:
-        path = f'{path}?{parsed.query}'
+    max_redirects = 5
+    current_url = url
+    current_method = method
+    current_body_data = post_data
 
-    conn = _keepalive_pool.acquire(parsed)
-    try:
-        conn.timeout = int(timeout)
-        body = None
-        if post_data is not None:
-            if jpost:
-                body = json.dumps(post_data).encode('utf-8')
-            elif isinstance(post_data, dict):
-                body = urllib.parse.urlencode(post_data).encode('utf-8')
-            elif isinstance(post_data, str):
-                body = post_data.encode('utf-8')
-            elif isinstance(post_data, bytes):
-                body = post_data
+    for _ in range(max_redirects):
+        parsed = urllib.parse.urlparse(current_url)
+        path = parsed.path or '/'
+        if parsed.query:
+            path = f'{path}?{parsed.query}'
 
-        conn.request(method, path, body=body, headers=headers)
-        resp = conn.getresponse()
-        raw = resp.read()
-        status = resp.status
-        resp_headers = {h[0]: h[1] for h in resp.getheaders()}
+        conn = _keepalive_pool.acquire(parsed)
+        try:
+            conn.timeout = int(timeout)
+            body = None
+            if current_body_data is not None:
+                if jpost:
+                    body = json.dumps(current_body_data).encode('utf-8')
+                elif isinstance(current_body_data, dict):
+                    body = urllib.parse.urlencode(current_body_data).encode('utf-8')
+                elif isinstance(current_body_data, str):
+                    body = current_body_data.encode('utf-8')
+                elif isinstance(current_body_data, bytes):
+                    body = current_body_data
 
-        # Decompress gzip
-        if resp_headers.get('Content-Encoding', '').lower() == 'gzip':
-            raw = gzip.GzipFile(fileobj=io.BytesIO(raw)).read()
+            conn.request(current_method, path, body=body, headers=headers)
+            resp = conn.getresponse()
+            raw = resp.read()
+            status = resp.status
+            resp_headers = {h[0]: h[1] for h in resp.getheaders()}
 
-        # Decode to string
-        ct = resp_headers.get('Content-Type', '').lower()
-        if any(x in ct for x in ['text', 'json', 'xml', 'html', 'javascript']):
-            try:
-                result = raw.decode('utf-8')
-            except UnicodeDecodeError:
-                result = raw.decode('latin-1', errors='ignore')
-        else:
-            result = raw
+            # Handle redirects (301, 302, 303, 307, 308)
+            if status in (301, 302, 303, 307, 308) and 'Location' in resp_headers:
+                redirect_url = resp_headers['Location']
+                # Handle relative redirects
+                if redirect_url.startswith('/'):
+                    redirect_url = f'{parsed.scheme}://{parsed.netloc}{redirect_url}'
+                elif not redirect_url.startswith('http'):
+                    redirect_url = urllib.parse.urljoin(current_url, redirect_url)
 
-        # Return connection to pool if all is well
-        _keepalive_pool.release(parsed, conn)
-        return result, str(status), resp_headers, url
+                _keepalive_pool.release(parsed, conn)
 
-    except Exception:
-        _keepalive_pool.discard(parsed, conn)
-        return None
+                # 303 always converts to GET; 301/302 convert POST to GET
+                if status == 303 or (status in (301, 302) and current_method == 'POST'):
+                    current_method = 'GET'
+                    current_body_data = None
+                    # Remove content headers that don't apply to GET
+                    headers = {k: v for k, v in headers.items() if k.lower() not in ('content-type', 'content-length')}
+
+                current_url = redirect_url
+                continue
+
+            # Decompress gzip
+            if resp_headers.get('Content-Encoding', '').lower() == 'gzip':
+                raw = gzip.GzipFile(fileobj=io.BytesIO(raw)).read()
+
+            # Decode to string
+            ct = resp_headers.get('Content-Type', '').lower()
+            if any(x in ct for x in ['text', 'json', 'xml', 'html', 'javascript']):
+                try:
+                    result = raw.decode('utf-8')
+                except UnicodeDecodeError:
+                    result = raw.decode('latin-1', errors='ignore')
+            else:
+                result = raw
+
+            # Return connection to pool if all is well
+            _keepalive_pool.release(parsed, conn)
+            return result, str(status), resp_headers, current_url
+
+        except Exception:
+            _keepalive_pool.discard(parsed, conn)
+            return None
+
+    # Max redirects exceeded
+    return None
 
 
 def _get_cached_useragent(mobile=False):
@@ -307,7 +337,7 @@ def request(
         verify=True,
         proxy=None,
         post=None,
-        headers={},
+        headers=None,
         mobile=False,
         XHR=False,
         limit=None,
@@ -381,6 +411,8 @@ def request(
                 _headers['Referer'] = referer
             if jpost and 'Content-Type' not in _headers:
                 _headers['Content-Type'] = 'application/json'
+            elif post is not None and not jpost and 'Content-Type' not in _headers:
+                _headers['Content-Type'] = 'application/x-www-form-urlencoded'
             # Connection keep-alive header
             _headers['Connection'] = 'keep-alive'
 

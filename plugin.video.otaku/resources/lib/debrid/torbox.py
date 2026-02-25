@@ -1,6 +1,6 @@
-import xbmcgui
-
 from resources.lib.ui import source_utils, client, control
+
+from datetime import datetime, timezone
 
 
 class TorBox:
@@ -8,16 +8,89 @@ class TorBox:
         self.token = control.getSetting('torbox.token')
         self.autodelete = control.getBool('torbox.autodelete')
         self.BaseUrl = "https://api.torbox.app/v1/api"
+        self.OauthTimeStep = 0
+        self.OauthTimeout = 0
+        self.OauthTotalTimeout = 0
 
     def headers(self):
         return {'Authorization': f"Bearer {self.token}"}
 
     def auth(self):
-        self.token = control.input_dialog("Enter API KEY for TorBox:", self.token, xbmcgui.INPUT_ALPHANUM)
-        control.setSetting('torbox.token', self.token)
-        auth_done = self.status()
-        if not auth_done:
-            control.ok_dialog(f'{control.ADDON_NAME}: TorBox Auth', "Invalid API KEY!")
+        params = {'app': 'Otaku'}
+        r = client.get(f'{self.BaseUrl}/user/auth/device/start', params=params)
+        if not r or not r.ok:
+            control.ok_dialog(control.ADDON_NAME, 'Failed to connect to TorBox')
+            return
+
+        try:
+            resp = r.json().get('data', {})
+        except (ValueError, KeyError):
+            control.ok_dialog(control.ADDON_NAME, 'TorBox API error')
+            return
+
+        if not resp:
+            control.ok_dialog(control.ADDON_NAME, 'TorBox: Failed to get device code')
+            return
+
+        device_code = resp.get('device_code', '')
+        user_code = resp.get('code', '')
+        verification_url = resp.get('friendly_verification_url') or resp.get('verification_url', 'https://tor.box/link')
+        interval = int(resp.get('interval', 5))
+
+        # Calculate expires_in from expires_at timestamp
+        expires_at = resp.get('expires_at', '')
+        try:
+            expires_dt = datetime.fromisoformat(expires_at.replace('Z', '+00:00'))
+            expires_in = max(int((expires_dt - datetime.now(timezone.utc)).total_seconds()), 60)
+        except (ValueError, TypeError):
+            expires_in = 600
+
+        copied = control.copy2clip(user_code)
+        display_dialog = (f"{control.lang(30081).format(control.colorstr(verification_url))}[CR]"
+                          f"{control.lang(30082).format(control.colorstr(user_code))}")
+        if copied:
+            display_dialog = f"{display_dialog}[CR]{control.lang(30083)}"
+        control.progressDialog.create(f'{control.ADDON_NAME}: TorBox Auth', display_dialog)
+        control.progressDialog.update(100)
+
+        self.OauthTotalTimeout = self.OauthTimeout = expires_in
+        self.OauthTimeStep = interval
+
+        auth_done = False
+        while not auth_done and self.OauthTimeout > 0:
+            self.OauthTimeout -= self.OauthTimeStep
+            control.sleep(self.OauthTimeStep * 1000)
+            auth_done = self.auth_loop(device_code)
+        control.progressDialog.close()
+
+        if auth_done:
+            self.status()
+
+    def auth_loop(self, device_code):
+        if control.progressDialog.iscanceled():
+            self.OauthTimeout = 0
+            return False
+        control.progressDialog.update(int(self.OauthTimeout / self.OauthTotalTimeout * 100))
+        data = {'device_code': device_code}
+        r = client.post(f'{self.BaseUrl}/user/auth/device/token', json_data=data)
+        if r and r.ok:
+            try:
+                result = r.json()
+                resp = result.get('data', {})
+                if isinstance(resp, str):
+                    # data is the token string directly
+                    self.token = resp
+                    control.setSetting('torbox.token', self.token)
+                    return True
+                elif isinstance(resp, dict) and resp:
+                    token = resp.get('access_token') or resp.get('token') or resp.get('api_token') or resp.get('auth_token')
+                    if token:
+                        self.token = token
+                        control.setSetting('torbox.token', self.token)
+                        return True
+            except (ValueError, KeyError):
+                pass
+        return False
 
     def status(self):
         r = client.get(f'{self.BaseUrl}/user/me', headers=self.headers())
@@ -90,8 +163,13 @@ class TorBox:
 
     def resolve_single_magnet(self, hash_, magnet, episode, pack_select):
         torrent = self.addMagnet(magnet)
+        if not torrent or 'torrent_id' not in torrent:
+            return None
         torrent_id = torrent['torrent_id']
         torrent_info = self.get_torrent_info(torrent_id)
+        if not torrent_info or 'files' not in torrent_info:
+            self.delete_torrent(torrent_id)
+            return None
         folder_details = [{'fileId': x['id'], 'path': x['name']} for x in torrent_info['files']]
 
         if episode:
@@ -123,9 +201,19 @@ class TorBox:
         stream_link = None
         magnet = source['magnet']
         torrent = self.addMagnet(magnet)
+        if not torrent or 'torrent_id' not in torrent:
+            control.log('TorBox addMagnet failed - no valid response', 'warning')
+            if runinforground:
+                control.progressDialog.close()
+            return None
         torrent_id = torrent['torrent_id']
         torrent_info = self.get_torrent_info(torrent_id)
-        status = torrent_info['download_state']
+        if not torrent_info:
+            self.delete_torrent(torrent_id)
+            if runinforground:
+                control.progressDialog.close()
+            return None
+        status = torrent_info.get('download_state', 'error')
 
         if runinbackground:
             control.notify(heading, "The source is downloading to your cloud")
@@ -136,6 +224,9 @@ class TorBox:
             if runinforground and (control.progressDialog.iscanceled() or control.wait_for_abort(5)):
                 break
             torrent_info = self.get_torrent_info(torrent_id)
+            if not torrent_info:
+                status = 'error'
+                break
             status = torrent_info.get('download_state', 'error')
             progress = torrent_info.get('progress', 0) * 100
             peers = torrent_info.get('peers', 0)

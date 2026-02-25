@@ -90,6 +90,8 @@ class Anilist:
                 "type": media_type
             }
             result = client.request(self._BASE_URL, post={'query': query, 'variables': variables}, jpost=True)
+            if not result:
+                break
             results = json.loads(result)
             page_data = results.get('data', {}).get('Page', {})
             media = page_data.get('media', [])

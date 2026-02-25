@@ -104,17 +104,11 @@ def update_meta(mal_id, mtype='tv', anilist_banner=None):
     tvdb_art = {}
 
     if artwork_preference == 0:  # Fanart-TV only
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-            fanart_future = executor.submit(fetch_fanart)
-            fanart_art = fanart_future.result()
+        fanart_art = fetch_fanart()
     elif artwork_preference == 1:  # TMDb only
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-            tmdb_future = executor.submit(fetch_tmdb)
-            tmdb_art = tmdb_future.result()
+        tmdb_art = fetch_tmdb()
     elif artwork_preference == 2:  # TVDB only
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-            tvdb_future = executor.submit(fetch_tvdb)
-            tvdb_art = tvdb_future.result()
+        tvdb_art = fetch_tvdb()
     else:  # All providers (3 or default)
         with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
             fanart_future = executor.submit(fetch_fanart)

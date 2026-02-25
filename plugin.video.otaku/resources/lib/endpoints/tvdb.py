@@ -17,7 +17,10 @@ def get_auth_token():
     response = client.post(f'{baseUrl}/login', json_data=data, headers=headers)
 
     if response:
-        res = response.json()
+        try:
+            res = response.json()
+        except (ValueError, AttributeError):
+            return None
         return res.get('data', {}).get('token')
     return None
 
@@ -69,7 +72,10 @@ def getArt(meta_ids, mtype, limit=None):
     if not response:
         return art
 
-    res = response.json()
+    try:
+        res = response.json()
+    except (ValueError, AttributeError):
+        return art
     data = res.get('data', {})
 
     if not data:

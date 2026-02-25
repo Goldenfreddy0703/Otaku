@@ -1,7 +1,7 @@
 from resources.lib.ui import client, control, database
 
-api_info = database.get_info('Fanart-TV')
-api_key = api_info['api_key']
+api_info = database.get_info('Fanart-TV') or {}
+api_key = api_info.get('api_key', '')
 baseUrl = "https://webservice.fanart.tv/v3"
 lang = ['en', 'ja', '']
 headers = {'Api-Key': api_key}
@@ -12,7 +12,10 @@ def getArt(meta_ids, mtype, limit=None):
     art = {}
     if mid := meta_ids.get('themoviedb_id') if mtype == 'movies' else meta_ids.get('thetvdb_id'):
         response = client.get(f'{baseUrl}/{mtype}/{mid}', headers=headers)
-        res = response.json() if response else {}
+        try:
+            res = response.json() if response else {}
+        except (ValueError, AttributeError):
+            res = {}
         if res:
             if mtype == 'movies':
                 if res.get('moviebackground'):
@@ -40,7 +43,7 @@ def getArt(meta_ids, mtype, limit=None):
                 art['clearart'] = items[:limit] if limit else items
 
             if res.get('clearlogo'):
-                items = sorted([item for item in res['clearlogo'] if item.get('lang') in lang], key=lambda x: int(x['id']))
+                items = sorted([item for item in res['clearlogo'] if item.get('lang') in lang], key=lambda x: int(x.get('id', 0)))
                 logos = []
                 try:
                     logos.append(next(x['url'] for x in items if x['lang'] == language))
@@ -53,7 +56,7 @@ def getArt(meta_ids, mtype, limit=None):
                         pass
                 art['clearlogo'] = logos
             elif res.get('hdtvlogo'):
-                items = sorted([item for item in res['hdtvlogo'] if item.get('lang') in lang], key=lambda x: int(x['id']))
+                items = sorted([item for item in res['hdtvlogo'] if item.get('lang') in lang], key=lambda x: int(x.get('id', 0)))
                 logos = []
                 try:
                     logos.append(next(x['url'] for x in items if x['lang'] == language))
@@ -66,7 +69,7 @@ def getArt(meta_ids, mtype, limit=None):
                         pass
                 art['clearlogo'] = logos
             elif res.get('hdmovielogo'):
-                items = sorted([item for item in res['hdmovielogo'] if item.get('lang') in lang], key=lambda x: int(x['id']))
+                items = sorted([item for item in res['hdmovielogo'] if item.get('lang') in lang], key=lambda x: int(x.get('id', 0)))
                 logos = []
                 try:
                     logos.append(next(x['url'] for x in items if x['lang'] == language))

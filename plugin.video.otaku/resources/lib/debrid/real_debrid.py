@@ -258,12 +258,18 @@ class RealDebrid:
         If the torrent cannot be selected, returns (None, None, None).
         """
         magnet_data = self.addMagnet(magnet)
+        if not magnet_data or 'id' not in magnet_data:
+            control.ok_dialog(control.ADDON_NAME, "BAD LINK")
+            return None, None, None
         if not self.torrentSelect(magnet_data['id']):
             self.deleteTorrent(magnet_data['id'])
             control.ok_dialog(control.ADDON_NAME, "BAD LINK")
             return None, None, None
         torrent_id = magnet_data['id']
         torrent_info = self.torrentInfo(torrent_id)
+        if not torrent_info:
+            self.deleteTorrent(torrent_id)
+            return None, None, None
         status = torrent_info.get('status', 'error')
         return torrent_id, status, torrent_info
 
@@ -274,6 +280,11 @@ class RealDebrid:
         stream_link = None
         magnet = source['magnet']
         magnet_data = self.addMagnet(magnet)
+        if not magnet_data or 'id' not in magnet_data:
+            control.ok_dialog(control.ADDON_NAME, "BAD LINK")
+            if runinforground:
+                control.progressDialog.close()
+            return None
 
         if not self.torrentSelect(magnet_data['id']):
             self.deleteTorrent(magnet_data['id'])
@@ -283,6 +294,11 @@ class RealDebrid:
 
         torrent_id = magnet_data['id']
         torrent_info = self.torrentInfo(torrent_id)
+        if not torrent_info:
+            self.deleteTorrent(torrent_id)
+            if runinforground:
+                control.progressDialog.close()
+            return None
         status = torrent_info['status']
 
         if runinbackground:
@@ -294,6 +310,9 @@ class RealDebrid:
             if runinforground and (control.progressDialog.iscanceled() or control.wait_for_abort(5)):
                 break
             torrent_info = self.torrentInfo(torrent_id)
+            if not torrent_info:
+                status = 'error'
+                break
             status = torrent_info.get('status', 'error')
             progress = torrent_info.get('progress', 0)
             seeders = torrent_info.get('seeders', 0)
