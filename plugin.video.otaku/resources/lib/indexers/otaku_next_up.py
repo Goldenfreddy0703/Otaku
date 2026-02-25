@@ -209,6 +209,26 @@ class Otaku_Next_Up_API:
             or (kitsu_meta['attributes'].get('synopsis') if kitsu_meta and kitsu_meta.get('attributes') and kitsu_meta['attributes'].get('synopsis') else None)
             or 'No plot available'
         )
+
+        # Try TMDB localized translation for episode title/plot (language based on Kodi locale)
+        try:
+            from resources.lib.endpoints import tmdb
+            localized = database.get(
+                tmdb.get_episode_localized_meta,
+                168,
+                database.get_unique_ids(mal_id, 'mal_id'),
+                int(season),
+                int(episode),
+                key=f'tmdb_ep_locale_v2_{mal_id}_{season}_{episode}'
+            )
+            if isinstance(localized, dict):
+                if localized.get('title'):
+                    title = localized.get('title')
+                if localized.get('plot'):
+                    plot = localized.get('plot')
+        except Exception as e:
+            control.log(f"TMDB localized episode lookup failed for {mal_id} ep {episode}: {str(e)}")
+
         info = {
             'UniqueIDs': {
                 'mal_id': str(mal_id),
@@ -371,8 +391,8 @@ class Otaku_Next_Up_API:
         tvshowtitle = kodi_meta['title_userPreferred']
         if not (eps_watched := kodi_meta.get('eps_watched')) and control.getBool('interface.watchlist.data'):
             from resources.lib.WatchlistFlavor import WatchlistFlavor
-            flavor = WatchlistFlavor.get_first_enabled_flavor()
-            if flavor:
+            flavor = WatchlistFlavor.get_update_flavor()
+            if flavor and flavor.flavor_name in control.enabled_watchlists():
                 data = flavor.get_watchlist_anime_entry(mal_id)
                 if data.get('eps_watched'):
                     eps_watched = kodi_meta['eps_watched'] = data['eps_watched']

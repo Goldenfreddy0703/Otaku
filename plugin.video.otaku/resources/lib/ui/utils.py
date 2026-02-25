@@ -85,12 +85,12 @@ def parse_history_view(res, cm):
 
 
 def search_history(search_array, format):
-    cm = [('Remove from Item', 'remove_search_item'), ("Edit Search Item...", "edit_search_item")]
+    cm = [(control.lang(30456), 'remove_search_item'), (control.lang(30457), "edit_search_item")]
     format_to_url, format_to_url_2 = get_format_to_url_mappings()
 
-    result = [allocate_item("New Search", format_to_url.get(format), True, False, [], 'new_search.png', {})]
+    result = [allocate_item(control.lang(30458), format_to_url.get(format), True, False, [], 'new_search.png', {})]
     mapfun = partial(parse_history_view, cm=cm)
-    result.append(allocate_item("Clear Search History...", format_to_url_2.get(format), False, False, [], 'clear_search_history.png', {}))
+    result.append(allocate_item(control.lang(30459), format_to_url_2.get(format), False, False, [], 'clear_search_history.png', {}))
     result += list(map(mapfun, search_array))
     return result
 
