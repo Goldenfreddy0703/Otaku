@@ -131,7 +131,7 @@ class AniListWLF(WatchlistFlavorBase):
         ]
         return actions
 
-    def get_watchlist_status(self, status, next_up, offset, page):
+    def get_watchlist_status(self, status, next_up, offset, page, cache_only=False):
         query = '''
         query ($userId: Int, $userName: String, $status: MediaListStatus, $type: MediaType, $sort: [MediaListSort], $forceSingleCompletedList: Boolean) {
             MediaListCollection(userId: $userId, userName: $userName, status: $status, type: $type, sort: $sort, forceSingleCompletedList: $forceSingleCompletedList) {
@@ -222,7 +222,7 @@ class AniListWLF(WatchlistFlavorBase):
             'sort': self.__get_sort(),
             'forceSingleCompletedList': False
         }
-        return self.process_status_view(query, variables, next_up, status, offset, page)
+        return self.process_status_view(query, variables, next_up, status, offset, page, cache_only)
 
     @staticmethod
     def handle_paging(hasmore, base_url, page):
@@ -232,9 +232,9 @@ class AniListWLF(WatchlistFlavorBase):
         name = "Next Page (%d)" % next_page
         return [utils.allocate_item(name, f'{base_url}?page={next_page}', True, False, [], 'next.png', {'plot': name}, fanart='next.png')]
 
-    def process_status_view(self, query, variables, next_up, status, offset, page):
+    def process_status_view(self, query, variables, next_up, status, offset, page, cache_only=False):
         # Handle Next Up separately - it needs special episode-level processing
-        if next_up:
+        if next_up and not cache_only:
             return self._get_next_up_episodes(query, variables, status, offset, page)
 
         from resources.lib.ui.database import (
@@ -259,6 +259,10 @@ class AniListWLF(WatchlistFlavorBase):
                         entries.append(entrie)
             if entries:
                 save_watchlist_cache(self._NAME, status, entries)
+
+        # If cache_only, we're done - raw data is cached.
+        if cache_only:
+            return []
 
         # Get items from cache
         total_count = get_watchlist_cache_count(self._NAME, status)
