@@ -102,7 +102,7 @@ def prefetch_watchlist():
     # Map flavor to all its status names
     status_map = {
         'mal': ['watching', 'completed', 'on_hold', 'dropped', 'plan_to_watch'],
-        'anilist': ['CURRENT', 'COMPLETED', 'PAUSED', 'DROPPED', 'PLANNING', 'REWATCHING'],
+        'anilist': ['CURRENT', 'COMPLETED', 'PAUSED', 'DROPPED', 'PLANNING', 'REPEATING'],
         'kitsu': ['current', 'completed', 'on_hold', 'dropped', 'planned'],
         'simkl': ['watching', 'completed', 'on_hold', 'dropped', 'plantowatch']
     }

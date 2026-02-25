@@ -214,9 +214,15 @@ class AniListWLF(WatchlistFlavorBase):
         }
         '''
 
+        user_id = None
+        try:
+            user_id = int(self.user_id) if self.user_id else None
+        except (TypeError, ValueError):
+            user_id = None
+
         variables = {
-            'userId': int(self.user_id),
-            'username': self.username,
+            'userId': user_id,
+            'userName': self.username,
             'status': status,
             'type': 'ANIME',
             'sort': self.__get_sort(),
@@ -252,9 +258,11 @@ class AniListWLF(WatchlistFlavorBase):
             r = client.post(self._URL, headers=self.__headers(), json_data={'query': query, 'variables': variables})
             results = r.json() if r else {}
             lists = results.get('data', {}).get('MediaListCollection', {}).get('lists', [])
+            if not isinstance(lists, list):
+                lists = []
             entries = []
             for mlist in lists:
-                for entrie in mlist['entries']:
+                for entrie in (mlist.get('entries') or []):
                     if entrie not in entries:
                         entries.append(entrie)
             if entries:
@@ -292,7 +300,15 @@ class AniListWLF(WatchlistFlavorBase):
             entries.reverse()
 
         # Map to views
-        all_results = list(map(self.base_watchlist_status_view, entries))
+        def safe_base_view(entry):
+            try:
+                return self.base_watchlist_status_view(entry)
+            except Exception as e:
+                anilist_id = ((entry or {}).get('media') or {}).get('id')
+                control.log(f"AniList category item failed (id={anilist_id}): {str(e)}", level='warning')
+                return None
+
+        all_results = list(map(safe_base_view, entries))
         all_results = [r for r in all_results if r is not None]
 
         # Add paging if enabled
@@ -335,9 +351,11 @@ class AniListWLF(WatchlistFlavorBase):
             r = client.post(self._URL, headers=self.__headers(), json_data={'query': query, 'variables': next_up_variables})
             results = r.json() if r else {}
             lists = results.get('data', {}).get('MediaListCollection', {}).get('lists', [])
+            if not isinstance(lists, list):
+                lists = []
             entries = []
             for mlist in lists:
-                for entrie in mlist['entries']:
+                for entrie in (mlist.get('entries') or []):
                     if entrie not in entries:
                         entries.append(entrie)
 
@@ -653,7 +671,7 @@ class AniListWLF(WatchlistFlavorBase):
             'status': res.get('status'),
             'mediatype': 'tvshow',
             'country': [res.get('countryOfOrigin', '')],
-            'studio': [x['node'].get('name') for x in res['studios'].get('edges')]
+            'studio': [x['node'].get('name') for x in (res.get('studios') or {}).get('edges', [])]
         }
 
         if res['episodes'] != 0 and progress == res['episodes']:
@@ -699,7 +717,7 @@ class AniListWLF(WatchlistFlavorBase):
 
         show_meta = database.get_show_meta(mal_id)
         kodi_meta = pickle.loads(show_meta.get('art')) if show_meta else {}
-        image = res['coverImage']['extraLarge']
+        image = (res.get('coverImage') or {}).get('extraLarge')
         base = {
             "name": '%s - %d/%d' % (title, progress, res['episodes'] if res['episodes'] else 0),
             "url": f'watchlist_to_ep/{mal_id}/{progress}',
