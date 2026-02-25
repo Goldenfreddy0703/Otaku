@@ -1,3 +1,5 @@
+import time
+
 from resources.lib.ui import client, control, database
 
 api_info = database.get_info('TVDB')
@@ -5,10 +7,19 @@ api_key = api_info.get('api_key') if api_info else None
 baseUrl = "https://api4.thetvdb.com/v4"
 lang = ['eng', 'jpn']
 language = ["jpn", 'eng'][control.getInt("titlelanguage")]
+_AUTH_TOKEN = None
+_AUTH_TOKEN_TIME = 0
+_AUTH_TOKEN_TTL = 3600
 
 
 def get_auth_token():
     """Get authentication token for TVDB API v4"""
+    global _AUTH_TOKEN, _AUTH_TOKEN_TIME
+
+    now = int(time.time())
+    if _AUTH_TOKEN and (now - _AUTH_TOKEN_TIME) < _AUTH_TOKEN_TTL:
+        return _AUTH_TOKEN
+
     if not api_key:
         return None
 
@@ -17,33 +28,12 @@ def get_auth_token():
     response = client.post(f'{baseUrl}/login', json_data=data, headers=headers)
 
     if response:
-        try:
-            res = response.json()
-        except (ValueError, AttributeError):
-            return None
-        return res.get('data', {}).get('token')
-    return None
-
-
-def searchByTitle(title, mtype):
-    """Search TVDB by title and return the discovered TVDB ID, or None."""
-    if not title or not api_key:
-        return None
-    token = get_auth_token()
-    if not token:
-        return None
-    headers = {'Authorization': f'Bearer {token}'}
-    search_type = 'movie' if mtype == 'movies' else 'series'
-    params = {'query': title, 'type': search_type}
-    try:
-        response = client.get(f'{baseUrl}/search', params=params, headers=headers)
-        res = response.json() if response else {}
-        results = res.get('data', [])
-        if results:
-            tvdb_id = results[0].get('tvdb_id') or results[0].get('id')
-            return int(tvdb_id) if tvdb_id else None
-    except Exception:
-        pass
+        res = response.json()
+        token = res.get('data', {}).get('token')
+        if token:
+            _AUTH_TOKEN = token
+            _AUTH_TOKEN_TIME = now
+            return token
     return None
 
 
@@ -72,10 +62,7 @@ def getArt(meta_ids, mtype, limit=None):
     if not response:
         return art
 
-    try:
-        res = response.json()
-    except (ValueError, AttributeError):
-        return art
+    res = response.json()
     data = res.get('data', {})
 
     if not data:
@@ -166,3 +153,120 @@ def getArt(meta_ids, mtype, limit=None):
                 art['clearlogo'] = logos
 
     return art
+
+
+def _map_tvdb_langs():
+    langs = []
+    try:
+        import xbmc
+        lang_code = xbmc.getLanguage(xbmc.ISO_639_1, region=True)
+        if lang_code:
+            iso = lang_code.split('_')[0].lower()
+            langs.append({'it': 'ita', 'en': 'eng', 'ja': 'jpn'}.get(iso, iso))
+    except Exception:
+        pass
+
+    langs.extend(['ita', 'eng', 'jpn'])
+    seen = set()
+    result = []
+    for l in langs:
+        if l and l not in seen:
+            seen.add(l)
+            result.append(l)
+    return result
+
+
+def _tvdb_headers():
+    token = get_auth_token()
+    if not token:
+        return None
+    return {'Authorization': f'Bearer {token}'}
+
+
+def _get_tvdb_id(meta_ids):
+    if not isinstance(meta_ids, dict):
+        return None
+    return meta_ids.get('thetvdb_id') or meta_ids.get('tvdb')
+
+
+def _get_season_id(headers, tvdb_id, season_number):
+    response = client.get(f'{baseUrl}/series/{tvdb_id}/extended', headers=headers)
+    data = response.json() if response else {}
+    seasons = data.get('data', {}).get('seasons') or []
+    for season in seasons:
+        s_num = season.get('number')
+        s_type = season.get('type') or {}
+        s_type_name = (s_type.get('name') or s_type.get('type') or '').lower()
+        if int(s_num or -1) == int(season_number) and 'aired' in s_type_name:
+            return season.get('id')
+    for season in seasons:
+        if int(season.get('number') or -1) == int(season_number):
+            return season.get('id')
+    return None
+
+
+def _get_episode_id(headers, season_id, episode_number):
+    response = client.get(f'{baseUrl}/seasons/{season_id}/extended', headers=headers)
+    data = response.json() if response else {}
+    episodes = data.get('data', {}).get('episodes') or []
+    for ep in episodes:
+        if int(ep.get('number') or -1) == int(episode_number):
+            return ep.get('id')
+    return None
+
+
+def get_episode_localized_meta(meta_ids, season_number, episode_number, preferred_languages=None):
+    """
+    Return localized episode metadata from TVDB translations.
+    """
+    tvdb_id = _get_tvdb_id(meta_ids)
+    if not tvdb_id or season_number is None or episode_number is None:
+        return {}
+
+    headers = _tvdb_headers()
+    if not headers:
+        return {}
+
+    season_id = _get_season_id(headers, tvdb_id, season_number)
+    if not season_id:
+        return {}
+
+    episode_id = _get_episode_id(headers, season_id, episode_number)
+    if not episode_id:
+        return {}
+
+    langs = preferred_languages or _map_tvdb_langs()
+    for lang_code in langs:
+        response = client.get(f'{baseUrl}/episodes/{episode_id}/translations/{lang_code}', headers=headers)
+        data = response.json() if response else {}
+
+        ep_data = data.get('data') or {}
+        title = ep_data.get('name')
+        plot = ep_data.get('overview')
+        if title or plot:
+            return {'title': title, 'plot': plot}
+    return {}
+
+
+def get_show_localized_meta(meta_ids, preferred_languages=None):
+    """
+    Return localized show metadata (title/plot) from TVDB translations.
+    """
+    tvdb_id = _get_tvdb_id(meta_ids)
+    if not tvdb_id:
+        return {}
+
+    headers = _tvdb_headers()
+    if not headers:
+        return {}
+
+    langs = preferred_languages or _map_tvdb_langs()
+    for lang_code in langs:
+        response = client.get(f'{baseUrl}/series/{tvdb_id}/translations/{lang_code}', headers=headers)
+        data = response.json() if response else {}
+        show_data = data.get('data') or {}
+        title = show_data.get('name')
+        plot = show_data.get('overview')
+        if title or plot:
+            return {'title': title, 'plot': plot}
+    return {}
