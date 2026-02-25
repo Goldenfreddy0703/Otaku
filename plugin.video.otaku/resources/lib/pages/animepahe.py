@@ -5,7 +5,7 @@ from resources.lib.ui import database, source_utils
 from resources.lib.ui.BrowserBase import BrowserBase
 from resources.lib.endpoints import malsync
 
-
+ 
 class Sources(BrowserBase):
     _BASE_URL = 'https://animepahe.si/'
     _headers = {

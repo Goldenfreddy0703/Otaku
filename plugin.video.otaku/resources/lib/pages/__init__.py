@@ -1,7 +1,7 @@
 import threading
 import time
 
-from resources.lib.pages import nyaa, animetosho, debrid_cloudfiles, animixplay, aniwave, animepahe, hianime, watchnixtoons2, localfiles
+from resources.lib.pages import nyaa, animetosho, debrid_cloudfiles, animixplay, aniwave, animepahe, hianime, watchnixtoons2, localfiles, animeworld
 from resources.lib.ui import control, database
 from resources.lib.windows.get_sources_window import GetSources
 from resources.lib.windows import sort_select
@@ -42,7 +42,7 @@ class Sources(GetSources):
     def __init__(self, xml_file, location, actionArgs=None):
         super(Sources, self).__init__(xml_file, location, actionArgs)
         self.torrentProviders = ['nyaa', 'animetosho']
-        self.embedProviders = ['animepahe', 'animix', 'aniwave', 'hianime', 'watchnixtoons2']
+        self.embedProviders = ['animepahe', 'animix', 'aniwave', 'hianime', 'watchnixtoons2', 'animeworld']
         self.CloudProviders = ['Cloud Inspection']
         self.localProviders = ['Local Inspection']
         self.remainingProviders = self.embedProviders + self.torrentProviders + self.localProviders + self.CloudProviders
@@ -171,6 +171,21 @@ class Sources(GetSources):
         else:
             self.remainingProviders.remove('watchnixtoons2')
 
+        animeworld_enabled = control.getBool('provider.animeworld')
+        # On some existing profiles new boolean settings can be temporarily unset.
+        # Treat missing value as enabled (matching the XML default).
+        if not animeworld_enabled and control.getSetting('provider.animeworld') == '':
+            animeworld_enabled = True
+
+        control.log(f"AnimeWorld: enabled={animeworld_enabled}")
+        if animeworld_enabled:
+            control.log("AnimeWorld: starting worker thread")
+            t = threading.Thread(target=self.animeworld_worker, args=(mal_id, episode, rescrape))
+            t.start()
+            self.threads.append(t)
+        else:
+            self.remainingProviders.remove('animeworld')
+
         timeout = 60 if rescrape else control.getInt('general.timeout')
         start_time = time.perf_counter()
         runtime = 0
@@ -296,6 +311,11 @@ class Sources(GetSources):
         else:
             self.embedSources += database.get(watchnixtoons2.Sources().get_sources, 8, mal_id, episode, media_type, key='watchnixtoons2')
         self.remainingProviders.remove('watchnixtoons2')
+
+    def animeworld_worker(self, mal_id, episode, rescrape):
+        # Avoid stale empty cache while provider is being stabilized.
+        self.embedSources += animeworld.Sources().get_sources(mal_id, episode)
+        self.remainingProviders.remove('animeworld')
 
     # Local & Cloud #
     def user_local_inspection(self, query, mal_id, episode):

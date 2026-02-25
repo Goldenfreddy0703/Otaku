@@ -40,6 +40,9 @@ class Sources(BrowserBase):
             data=params,
             headers=headers
         )
+        if not r:
+            control.log("AniWave: Empty search response")
+            return []
 
         if 'NOT FOUND' in r:
             r1 = database.get(
