@@ -493,10 +493,7 @@ class AniListWLF(WatchlistFlavorBase):
         if res['episodes'] != 0 and progress == res['episodes']:
             info['playcount'] = 1
 
-        try:
-            info['duration'] = res.get('duration') * 60
-        except TypeError:
-            pass
+        info['duration'] = control.safe_call(lambda: res.get('duration') * 60)
 
         try:
             if res['trailer']['site'] == 'youtube':
@@ -506,10 +503,7 @@ class AniListWLF(WatchlistFlavorBase):
         except TypeError:
             pass
 
-        try:
-            info['rating'] = {'score': res.get('averageScore') / 10.0}
-        except TypeError:
-            pass
+        info['rating'] = control.safe_call(lambda: {'score': res.get('averageScore') / 10.0})
 
         desc = res.get('description')
         if desc:

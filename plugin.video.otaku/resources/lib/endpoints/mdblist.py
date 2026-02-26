@@ -115,10 +115,7 @@ class MDBListAPI:
                                 continue
 
                             # Try to convert score to float
-                            try:
-                                score = float(score)
-                            except (ValueError, TypeError):
-                                score = 0.0
+                            score = control.safe_call(float, score, default=0.0)
 
                             # Map source to rating type
                             # Note: IMDb and MAL use 0-10 scale, Trakt and TMDb use 0-100 scale
@@ -137,10 +134,7 @@ class MDBListAPI:
 
                     # Get average score (already 0-100 scale from API)
                     avg_score = item.get('score_average', 0)
-                    try:
-                        rating_dict['score_average'] = int(avg_score) if avg_score else 0
-                    except (ValueError, TypeError):
-                        rating_dict['score_average'] = 0
+                    rating_dict['score_average'] = control.safe_call(int, avg_score, default=0) if avg_score else 0
 
                     ratings_map[int(mal_id)] = rating_dict
 

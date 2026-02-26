@@ -144,6 +144,9 @@ class WatchlistFlavorBase:
                 max_aired = airing_anime['current_episode']
                 if next_ep_num > max_aired:
                     return None
+            # Also use AniList's nextAiringEpisode as a fallback filter
+            if next_airing_episode and next_ep_num >= next_airing_episode:
+                return None
 
         # Skip if next episode would be beyond known total
         if total_eps > 0 and next_ep_num > total_eps:
@@ -151,6 +154,12 @@ class WatchlistFlavorBase:
 
         # Get episode metadata via MetaBrowser (centralized for all watchlists)
         episode_meta = MetaBrowser.get_next_up_meta(mal_id, next_ep_num) if mal_id else {}
+
+        # Fallback: if episode has an aired date in the future, hide it
+        if not control.getBool('playlist.unaired') and episode_meta.get('aired'):
+            from resources.lib.indexers import should_hide_unaired_episode
+            if should_hide_unaired_episode(episode_meta['aired']):
+                return None
 
         # Get season number
         season = utils.get_season([show_title], mal_id) if show_title and mal_id else 1

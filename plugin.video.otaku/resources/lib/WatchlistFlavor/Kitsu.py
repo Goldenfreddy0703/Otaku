@@ -500,10 +500,7 @@ class KitsuWLF(WatchlistFlavorBase):
 
         # Duration
         duration = None
-        try:
-            duration = eres['attributes']['episodeLength'] * 60
-        except TypeError:
-            pass
+        duration = control.safe_call(lambda: eres['attributes']['episodeLength'] * 60)
         if not duration and anilist_res and anilist_res.get('duration'):
             duration = anilist_res.get('duration') * 60 if isinstance(anilist_res.get('duration'), int) else anilist_res.get('duration')
 
@@ -687,9 +684,8 @@ class KitsuWLF(WatchlistFlavorBase):
         }
         result = client.get(f'{self._URL}/edge/library-entries', headers=self.__headers(), params=params)
         result = result.json() if result else {}
-        try:
-            item_dict = result['data'][0]['attributes']
-        except (IndexError, KeyError):
+        item_dict = control.safe_call(lambda: result['data'][0]['attributes'])
+        if not item_dict:
             return {}
 
         # Get total episodes from included anime data

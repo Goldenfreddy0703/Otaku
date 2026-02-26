@@ -585,10 +585,7 @@ class MyAnimeListWLF(WatchlistFlavorBase):
                 year = int(start_date.get('year', 0) or 0) if start_date.get('year') is not None else None
             else:
                 premiered = str(start_date)
-                try:
-                    year = int(str(start_date)[:4])
-                except Exception:
-                    pass
+                year = control.safe_call(lambda: int(str(start_date)[:4]))
 
         # Cast
         cast = None

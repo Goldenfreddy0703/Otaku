@@ -625,7 +625,7 @@ class SimklWLF(WatchlistFlavorBase):
                 "ids": {
                     "mal": mal_id
                 },
-                "episodes": [{'number': i} for i in range(1, int(episode) + 1)]
+                "episodes": [{'number': int(episode)}]
             }]
         }
         r = client.post(f'{self._URL}/sync/history', headers=self.__headers(), json_data=data)

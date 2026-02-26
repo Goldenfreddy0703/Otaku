@@ -1,4 +1,4 @@
-from resources.lib.ui import client, database
+from resources.lib.ui import client, control, database
 import xml.etree.ElementTree as ET
 
 api_info = database.get_info('AniDB')
@@ -18,9 +18,8 @@ def get_episode_meta(anidb_id):
     r = client.get(base_url, params=params)
     episode_meta = {}
     if r:
-        try:
-            root = ET.fromstring(r.text)
-        except ET.ParseError:
+        root = control.safe_call(ET.fromstring, r.text, log_msg='AniDB XML parse error')
+        if not root:
             return episode_meta
         # namespaces = {'xml': 'http://www.w3.org/XML/1998/namespace'}
         for episode in root.findall('.//episode'):

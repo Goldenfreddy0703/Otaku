@@ -1,4 +1,4 @@
-from resources.lib.ui import client, database
+from resources.lib.ui import client, control, database
 
 api_info = database.get_info('TMDB') or {}
 apiKey = api_info.get('api_key', '')
@@ -18,10 +18,7 @@ def getArt(meta_ids, mtype, limit=None):
                 "api_key": apiKey
             }
             response = client.get(f'{baseUrl}find/{tvdb}', params=params)
-            try:
-                res = response.json() if response else {}
-            except (ValueError, AttributeError):
-                res = {}
+            res = control.safe_json(response)
             res = res.get('tv_results')
             if res:
                 mid = res[0].get('id')
@@ -32,10 +29,7 @@ def getArt(meta_ids, mtype, limit=None):
             "api_key": apiKey
         }
         response = client.get(f'{baseUrl}{mtype[0:5]}/{mid}/images', params=params)
-        try:
-            res = response.json() if response else {}
-        except (ValueError, AttributeError):
-            res = {}
+        res = control.safe_json(response)
 
         if res:
             # Backdrops are for fanart (wide 16:9 background images)
@@ -67,14 +61,11 @@ def searchByTitle(title, mtype):
         'query': title,
         'api_key': apiKey
     }
-    try:
-        response = client.get(f'{baseUrl}search/{search_type}', params=params)
-        res = response.json() if response else {}
-        results = res.get('results', [])
-        if results:
-            return results[0].get('id')
-    except Exception:
-        pass
+    response = client.get(f'{baseUrl}search/{search_type}', params=params)
+    res = control.safe_json(response)
+    results = res.get('results', [])
+    if results:
+        return results[0].get('id')
     return None
 
 
@@ -84,10 +75,7 @@ def get_episode_titles(tmdb_id, season_number, episode_number):
         "api_key": apiKey
     }
     response = client.get(f'{baseUrl}tv/{tmdb_id}/season/{season_number}/episode/{episode_number}/translations', params=params)
-    try:
-        res = response.json() if response else {}
-    except (ValueError, AttributeError):
-        res = {}
+    res = control.safe_json(response)
 
     # Extract English name, fallback to Japanese if not found
     translations = res.get('translations', [])

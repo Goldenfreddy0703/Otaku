@@ -98,20 +98,11 @@ class JikanAPI:
         if eps_watched and int(eps_watched) >= episode:
             info['playcount'] = 1
 
-        try:
-            info['rating'] = {'score': float(res['score'])}
-        except (KeyError, TypeError):
-            pass
+        info['rating'] = control.safe_call(lambda: {'score': float(res['score'])})
 
-        try:
-            info['aired'] = res['aired'][:10]
-        except (KeyError, TypeError):
-            pass
+        info['aired'] = control.safe_call(lambda: res['aired'][:10])
 
-        try:
-            filler = filler_data[episode - 1]
-        except (IndexError, TypeError):
-            filler = ''
+        filler = control.safe_call(lambda: filler_data[episode - 1], default='')
 
         parsed = indexers.update_database(mal_id, update_time, res, url, image, info, season, episode, episodes, title, fanart, poster, clearart, clearlogo, dub_data, filler)
         return parsed

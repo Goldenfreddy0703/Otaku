@@ -530,6 +530,7 @@ def draw_items(video_data, content_type=''):
     # so navigating back is instant without re-executing Python
     xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=True)
     if getBool('interface.viewtype'):
+        xbmc.sleep(100)  # Delay to ensure directory is rendered before changing view
         if getBool('interface.viewidswitch'):
             # Use integer view types
             if content_type == '' or content_type == 'addons':
@@ -643,6 +644,37 @@ def arc4(t, n):
         s[e], s[u] = s[u], s[e]
         h += chr((n[c] if isinstance(n[c], int) else ord(n[c])) ^ s[(s[e] + s[u]) % 256])
     return h
+
+
+def safe_call(func, *args, default=None, log_msg='', **kwargs):
+    """Call func(*args, **kwargs), returning default on any exception.
+    Optionally logs the error via control.log() if log_msg is provided."""
+    try:
+        return func(*args, **kwargs)
+    except Exception as e:
+        if log_msg:
+            log(f'{log_msg}: {e}', 'error')
+        return default
+
+
+def safe_json(response, default=None):
+    """Safely parse a response as JSON, returning default on failure."""
+    if default is None:
+        default = {}
+    if not response:
+        return default
+    try:
+        return response.json()
+    except (ValueError, AttributeError, TypeError):
+        return default
+
+
+def safe_next(iterable, default=None):
+    """Safe wrapper around next() that returns default on StopIteration."""
+    try:
+        return next(iterable)
+    except StopIteration:
+        return default
 
 
 def print(string, *args):

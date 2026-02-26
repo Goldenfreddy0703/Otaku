@@ -15,14 +15,8 @@ def get_auth_token():
     headers = {'Content-Type': 'application/json'}
     data = {'apikey': api_key}
     response = client.post(f'{baseUrl}/login', json_data=data, headers=headers)
-
-    if response:
-        try:
-            res = response.json()
-        except (ValueError, AttributeError):
-            return None
-        return res.get('data', {}).get('token')
-    return None
+    res = control.safe_json(response)
+    return res.get('data', {}).get('token')
 
 
 def searchByTitle(title, mtype):
@@ -35,15 +29,12 @@ def searchByTitle(title, mtype):
     headers = {'Authorization': f'Bearer {token}'}
     search_type = 'movie' if mtype == 'movies' else 'series'
     params = {'query': title, 'type': search_type}
-    try:
-        response = client.get(f'{baseUrl}/search', params=params, headers=headers)
-        res = response.json() if response else {}
-        results = res.get('data', [])
-        if results:
-            tvdb_id = results[0].get('tvdb_id') or results[0].get('id')
-            return int(tvdb_id) if tvdb_id else None
-    except Exception:
-        pass
+    response = client.get(f'{baseUrl}/search', params=params, headers=headers)
+    res = control.safe_json(response)
+    results = res.get('data', [])
+    if results:
+        tvdb_id = results[0].get('tvdb_id') or results[0].get('id')
+        return control.safe_call(int, tvdb_id) if tvdb_id else None
     return None
 
 
@@ -72,10 +63,7 @@ def getArt(meta_ids, mtype, limit=None):
     if not response:
         return art
 
-    try:
-        res = response.json()
-    except (ValueError, AttributeError):
-        return art
+    res = control.safe_json(response)
     data = res.get('data', {})
 
     if not data:
@@ -143,24 +131,21 @@ def getArt(meta_ids, mtype, limit=None):
         if clearlogo_images:
             logos = []
             # Try to get logo in preferred language
-            try:
-                logos.append(next(x['url'] for x in clearlogo_images if x['lang'] == language))
-            except StopIteration:
-                pass
+            logo = control.safe_next(x['url'] for x in clearlogo_images if x['lang'] == language)
+            if logo:
+                logos.append(logo)
 
             # If no preferred language logo, try any language in our list
             if not logos:
-                try:
-                    logos.append(next(x['url'] for x in clearlogo_images if x['lang'] in lang))
-                except StopIteration:
-                    pass
+                logo = control.safe_next(x['url'] for x in clearlogo_images if x['lang'] in lang)
+                if logo:
+                    logos.append(logo)
 
             # If still no logo, take first available
             if not logos and clearlogo_images:
-                try:
-                    logos.append(clearlogo_images[0]['url'])
-                except (IndexError, KeyError):
-                    pass
+                logo = control.safe_call(lambda: clearlogo_images[0]['url'])
+                if logo:
+                    logos.append(logo)
 
             if logos:
                 art['clearlogo'] = logos

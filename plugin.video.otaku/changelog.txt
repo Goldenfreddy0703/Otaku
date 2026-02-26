@@ -1,3 +1,9 @@
+Changelog v5.2.76 (2026-02-26):
+- Fixed Next Up showing unaired episodes: added fallback aired-date filter + nextAiringEpisode guard (GitHub #450)
+- Fixed Simkl marking ALL previous episodes as watched with today's date on each episode update
+- Added safe_call, safe_json, safe_next helpers to control.py for centralized error handling
+- Refactored try/except patterns across files to use new helpers
+
 Changelog v5.2.75 (2026-02-25):
 - TorBox auth: replaced API key input dialog with OAuth device code flow (like RD/AD/PM/DL)
 

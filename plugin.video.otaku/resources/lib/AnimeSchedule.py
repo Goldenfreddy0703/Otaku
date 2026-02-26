@@ -467,10 +467,7 @@ class AnimeScheduleCalendar:
             parts = mal_link.split('/anime/')
             if len(parts) > 1:
                 mal_id_str = parts[1].split('/')[0]
-                try:
-                    return int(mal_id_str)
-                except ValueError:
-                    pass
+                return control.safe_call(int, mal_id_str)
 
         return None
 
@@ -540,15 +537,8 @@ class AnimeScheduleCalendar:
         ratings_map = {}
         anilist_ratings_map = {}
         if mal_ids:
-            try:
-                ratings_map = mdblist.get_ratings_for_mal_ids(mal_ids)
-            except Exception:
-                pass
-
-            try:
-                anilist_ratings_map = anilist.get_anilist_ratings_for_mal_ids(mal_ids)
-            except Exception:
-                pass
+            ratings_map = control.safe_call(mdblist.get_ratings_for_mal_ids, mal_ids, default={})
+            anilist_ratings_map = control.safe_call(anilist.get_anilist_ratings_for_mal_ids, mal_ids, default={})
 
         formatted_items = []
 

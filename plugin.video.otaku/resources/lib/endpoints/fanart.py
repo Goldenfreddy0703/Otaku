@@ -12,10 +12,7 @@ def getArt(meta_ids, mtype, limit=None):
     art = {}
     if mid := meta_ids.get('themoviedb_id') if mtype == 'movies' else meta_ids.get('thetvdb_id'):
         response = client.get(f'{baseUrl}/{mtype}/{mid}', headers=headers)
-        try:
-            res = response.json() if response else {}
-        except (ValueError, AttributeError):
-            res = {}
+        res = control.safe_json(response)
         if res:
             if mtype == 'movies':
                 if res.get('moviebackground'):
@@ -45,40 +42,34 @@ def getArt(meta_ids, mtype, limit=None):
             if res.get('clearlogo'):
                 items = sorted([item for item in res['clearlogo'] if item.get('lang') in lang], key=lambda x: int(x.get('id', 0)))
                 logos = []
-                try:
-                    logos.append(next(x['url'] for x in items if x['lang'] == language))
-                except StopIteration:
-                    pass
+                logo = control.safe_next(x['url'] for x in items if x['lang'] == language)
+                if logo:
+                    logos.append(logo)
                 if not logos:
-                    try:
-                        logos.append(next(x['url'] for x in items))
-                    except StopIteration:
-                        pass
+                    logo = control.safe_next(x['url'] for x in items)
+                    if logo:
+                        logos.append(logo)
                 art['clearlogo'] = logos
             elif res.get('hdtvlogo'):
                 items = sorted([item for item in res['hdtvlogo'] if item.get('lang') in lang], key=lambda x: int(x.get('id', 0)))
                 logos = []
-                try:
-                    logos.append(next(x['url'] for x in items if x['lang'] == language))
-                except StopIteration:
-                    pass
+                logo = control.safe_next(x['url'] for x in items if x['lang'] == language)
+                if logo:
+                    logos.append(logo)
                 if not logos:
-                    try:
-                        logos.append(next(x['url'] for x in items))
-                    except StopIteration:
-                        pass
+                    logo = control.safe_next(x['url'] for x in items)
+                    if logo:
+                        logos.append(logo)
                 art['clearlogo'] = logos
             elif res.get('hdmovielogo'):
                 items = sorted([item for item in res['hdmovielogo'] if item.get('lang') in lang], key=lambda x: int(x.get('id', 0)))
                 logos = []
-                try:
-                    logos.append(next(x['url'] for x in items if x['lang'] == language))
-                except StopIteration:
-                    pass
+                logo = control.safe_next(x['url'] for x in items if x['lang'] == language)
+                if logo:
+                    logos.append(logo)
                 if not logos:
-                    try:
-                        logos.append(next(x['url'] for x in items))
-                    except StopIteration:
-                        pass
+                    logo = control.safe_next(x['url'] for x in items)
+                    if logo:
+                        logos.append(logo)
                 art['clearlogo'] = logos
     return art

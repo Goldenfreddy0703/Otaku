@@ -117,16 +117,10 @@ class ANIDBAPI:
         if eps_watched and int(eps_watched) >= episode:
             info['playcount'] = 1
 
-        try:
-            if res.get('airdate'):
-                info['aired'] = res.get('airdate')[:10]
-        except Exception:
-            pass
+        if res.get('airdate'):
+            info['aired'] = control.safe_call(lambda: res.get('airdate')[:10])
 
-        try:
-            filler = filler_data[episode - 1]
-        except (IndexError, TypeError):
-            filler = ''
+        filler = control.safe_call(lambda: filler_data[episode - 1], default='')
 
         anidb_ep_id = res.get('anidb_id')
 

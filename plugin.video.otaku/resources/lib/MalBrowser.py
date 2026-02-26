@@ -1628,10 +1628,7 @@ class MalBrowser(BrowserBase):
     def database_update_show(self, res):
         mal_id = res['mal_id']
 
-        try:
-            start_date = res['aired']['from']
-        except TypeError:
-            start_date = None
+        start_date = control.safe_call(lambda: res['aired']['from'])
 
         title_userPreferred = res[self.title_lang] or res['title']
 

@@ -1,4 +1,4 @@
-from resources.lib.ui import client, database
+from resources.lib.ui import client, control, database
 
 api_info = database.get_info('Anime-Skip') or {}
 client_id = api_info.get('client_id', '')
@@ -27,18 +27,14 @@ def get_episode_ids(anilist_id, episode):
 
     response = client.post(base_url, headers=headers, json_data={'query': query, 'variables': variables})
     if response and response.ok:
-        try:
-            data = response.json()
-            res = data.get('data', {}).get('findShowsByExternalId', [])
-            id_list = []
-            for resx in res:
-                for x in resx.get('episodes', []):
-                    if x.get('number') and int(x['number']) == episode:
-                        id_list.append(x['id'])
-            return id_list
-        except (ValueError, KeyError, TypeError) as e:
-            from resources.lib.ui import control
-            control.log(f'Anime-Skip API error: {str(e)}', 'error')
+        data = control.safe_json(response)
+        res = data.get('data', {}).get('findShowsByExternalId', [])
+        id_list = []
+        for resx in res:
+            for x in resx.get('episodes', []):
+                if x.get('number') and int(x['number']) == episode:
+                    id_list.append(x['id'])
+        return id_list
     return []
 
 
@@ -59,15 +55,10 @@ def get_time_stamps(id_list):
         variables['episodeId'] = id_list[x]
         response = client.post(base_url, headers=headers, json_data={'query': query, 'variables': variables})
         if response and response.ok:
-            try:
-                data = response.json()
-                res = data.get('data', {}).get('findTimestampsByEpisodeId', [])
-                if res:
-                    return res
-            except (ValueError, KeyError, TypeError) as e:
-                from resources.lib.ui import control
-                control.log(f'Anime-Skip timestamp API error: {str(e)}', 'error')
-                continue
+            data = control.safe_json(response)
+            res = data.get('data', {}).get('findTimestampsByEpisodeId', [])
+            if res:
+                return res
     return []
 
 

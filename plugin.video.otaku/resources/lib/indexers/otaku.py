@@ -343,40 +343,20 @@ class OtakuAPI:
             info['playcount'] = 1
 
         # Fallback logic for rating
-        rating = None
-        try:
-            rating = float(anidb_meta.get('rating')) if anidb_meta and anidb_meta.get('rating') else None
-        except Exception:
-            pass
+        rating = control.safe_call(float, anidb_meta.get('rating')) if anidb_meta and anidb_meta.get('rating') else None
         if rating is None and simkl_meta and simkl_meta.get('rating'):
-            try:
-                rating = float(simkl_meta['rating'])
-            except Exception:
-                pass
+            rating = control.safe_call(float, simkl_meta['rating'])
         if rating is None and jikan_meta and jikan_meta.get('score'):
-            try:
-                rating = float(jikan_meta['score'])
-            except Exception:
-                pass
+            rating = control.safe_call(float, jikan_meta['score'])
         if rating is None and anizip_meta and anizip_meta.get('rating'):
-            try:
-                rating = float(anizip_meta['rating'])
-            except Exception:
-                pass
+            rating = control.safe_call(float, anizip_meta['rating'])
         if rating is None and kitsu_meta and kitsu_meta.get('attributes') and kitsu_meta['attributes'].get('rating'):
-            try:
-                rating = float(kitsu_meta['attributes']['rating'])
-            except Exception:
-                pass
+            rating = control.safe_call(float, kitsu_meta['attributes']['rating'])
         if rating is not None:
             info['rating'] = {'score': rating}
 
         # Fallback logic for aired date
-        aired = None
-        try:
-            aired = anidb_meta.get('airdate')[:10] if anidb_meta and anidb_meta.get('airdate') else None
-        except Exception:
-            pass
+        aired = control.safe_call(lambda: anidb_meta.get('airdate')[:10]) if anidb_meta and anidb_meta.get('airdate') else None
         if not aired and simkl_meta and simkl_meta.get('date'):
             aired = simkl_meta['date'][:10]
         if not aired and jikan_meta and jikan_meta.get('aired'):
@@ -388,10 +368,7 @@ class OtakuAPI:
         if aired:
             info['aired'] = aired
 
-        try:
-            filler = filler_data[episode - 1]
-        except (IndexError, TypeError):
-            filler = ''
+        filler = control.safe_call(lambda: filler_data[episode - 1], default='')
 
         parsed = indexers.update_database(mal_id, update_time, res, url, image, info, season, episode, episodes, title, fanart, poster, clearart, clearlogo, dub_data, filler)
         return parsed

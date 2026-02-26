@@ -1,4 +1,4 @@
-from resources.lib.ui import client
+from resources.lib.ui import client, control
 
 
 def get_skip_times(mal_id, episodenum, skip_type):
@@ -10,9 +10,5 @@ def get_skip_times(mal_id, episodenum, skip_type):
     }
     response = client.get(url, params=params)
     if response and response.ok:
-        try:
-            return response.json()
-        except (ValueError, KeyError) as e:
-            from resources.lib.ui import control
-            control.log(f'AniSkip API error: {str(e)}', 'error')
+        return control.safe_call(response.json, log_msg='AniSkip API error')
     return None

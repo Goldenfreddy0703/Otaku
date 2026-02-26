@@ -78,25 +78,13 @@ def update_meta(mal_id, mtype='tv', anilist_banner=None):
 
     # Scrape art from providers based on preference (only if fanart is enabled)
     def fetch_fanart():
-        try:
-            return fanart.getArt(meta_ids, mtype, limit=artwork_fanart_count)
-        except Exception as e:
-            control.log(f"Fanart.tv fetch failed: {str(e)}")
-            return {}
+        return control.safe_call(fanart.getArt, meta_ids, mtype, limit=artwork_fanart_count, default={}, log_msg='Fanart.tv fetch failed')
 
     def fetch_tmdb():
-        try:
-            return tmdb.getArt(meta_ids, mtype, limit=artwork_fanart_count)
-        except Exception as e:
-            control.log(f"TMDB fetch failed: {str(e)}")
-            return {}
+        return control.safe_call(tmdb.getArt, meta_ids, mtype, limit=artwork_fanart_count, default={}, log_msg='TMDB fetch failed')
 
     def fetch_tvdb():
-        try:
-            return tvdb.getArt(meta_ids, mtype, limit=artwork_fanart_count)
-        except Exception as e:
-            control.log(f"TVDB fetch failed: {str(e)}")
-            return {}
+        return control.safe_call(tvdb.getArt, meta_ids, mtype, limit=artwork_fanart_count, default={}, log_msg='TVDB fetch failed')
 
     # Determine which providers to fetch from based on preference
     fanart_art = {}

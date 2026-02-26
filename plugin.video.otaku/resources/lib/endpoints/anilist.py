@@ -340,9 +340,8 @@ class Anilist:
         if not mal_id:
             return None
 
-        try:
-            mal_id = int(mal_id)
-        except (ValueError, TypeError):
+        mal_id = control.safe_call(int, mal_id)
+        if not mal_id:
             return None
 
         # AniList GraphQL query for single banner

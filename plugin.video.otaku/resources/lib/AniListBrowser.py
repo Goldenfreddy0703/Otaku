@@ -2119,10 +2119,7 @@ class AniListBrowser(BrowserBase):
         except TypeError:
             pass
 
-        try:
-            info['duration'] = res['duration'] * 60
-        except TypeError:
-            pass
+        info['duration'] = control.safe_call(lambda: res['duration'] * 60)
 
         try:
             if res['trailer']['site'] == 'youtube':
@@ -2168,16 +2165,9 @@ class AniListBrowser(BrowserBase):
         if not mal_id:
             return
 
-        try:
-            start_date = res['startDate']
-            start_date = '{}-{:02}-{:02}'.format(start_date['year'], start_date['month'], start_date['day'])
-        except TypeError:
-            start_date = None
+        start_date = control.safe_call(lambda: '{}-{:02}-{:02}'.format(res['startDate']['year'], res['startDate']['month'], res['startDate']['day']))
 
-        try:
-            duration = res['duration'] * 60
-        except (KeyError, TypeError):
-            duration = 0
+        duration = control.safe_call(lambda: res['duration'] * 60, default=0)
 
         title_userPreferred = res['title'][self.title_lang] or res['title']['romaji']
 
@@ -2265,10 +2255,7 @@ class AniListBrowser(BrowserBase):
             genres_list = results['data']['genres']
         # if 'Hentai' in genres_list:
         #     genres_list.remove('Hentai')
-        try:
-            tags_list = [x['name'] for x in results['data']['tags'] if not x['isAdult']]
-        except KeyError:
-            tags_list = []
+        tags_list = control.safe_call(lambda: [x['name'] for x in results['data']['tags'] if not x['isAdult']], default=[])
         multiselect = control.multiselect_dialog(control.lang(30040), genres_list + tags_list, preselect=[])
         if not multiselect:
             return []
@@ -2466,10 +2453,7 @@ class AniListBrowser(BrowserBase):
         else:
             genres_list = results['data']['genres']
 
-        try:
-            tags_list = [x['name'] for x in results['data']['tags'] if not x['isAdult']]
-        except KeyError:
-            tags_list = []
+        tags_list = control.safe_call(lambda: [x['name'] for x in results['data']['tags'] if not x['isAdult']], default=[])
 
         multiselect = control.multiselect_dialog(control.lang(30040), genres_list + tags_list, preselect=[])
         if not multiselect:

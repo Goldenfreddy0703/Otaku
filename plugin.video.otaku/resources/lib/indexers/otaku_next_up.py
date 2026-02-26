@@ -232,30 +232,16 @@ class Otaku_Next_Up_API:
             info['playcount'] = 1
 
         # Fallback logic for rating
-        rating = None
-        try:
-            rating = float(simkl_meta.get('rating')) if simkl_meta and simkl_meta.get('rating') else None
-        except Exception:
-            pass
+        rating = control.safe_call(float, simkl_meta.get('rating')) if simkl_meta and simkl_meta.get('rating') else None
         if rating is None and anizip_meta and anizip_meta.get('rating'):
-            try:
-                rating = float(anizip_meta['rating'])
-            except Exception:
-                pass
+            rating = control.safe_call(float, anizip_meta['rating'])
         if rating is None and kitsu_meta and kitsu_meta.get('attributes') and kitsu_meta['attributes'].get('rating'):
-            try:
-                rating = float(kitsu_meta['attributes']['rating'])
-            except Exception:
-                pass
+            rating = control.safe_call(float, kitsu_meta['attributes']['rating'])
         if rating is not None:
             info['rating'] = {'score': rating}
 
         # Fallback logic for aired date
-        aired = None
-        try:
-            aired = simkl_meta.get('date')[:10] if not aired and simkl_meta and simkl_meta.get('date') else aired
-        except Exception:
-            pass
+        aired = control.safe_call(lambda: simkl_meta.get('date')[:10]) if simkl_meta and simkl_meta.get('date') else None
         if not aired and anizip_meta and anizip_meta.get('airDate'):
             aired = anizip_meta['airDate'][:10]
         if not aired and kitsu_meta and kitsu_meta.get('attributes') and kitsu_meta['attributes'].get('airdate'):
@@ -263,10 +249,7 @@ class Otaku_Next_Up_API:
         if aired:
             info['aired'] = aired
 
-        try:
-            filler = filler_data[episode - 1]
-        except (IndexError, TypeError):
-            filler = ''
+        filler = control.safe_call(lambda: filler_data[episode - 1], default='')
 
         parsed = indexers.update_database(mal_id, update_time, res, url, image, info, season, episode, episodes, title, fanart, poster, clearart, clearlogo, dub_data, filler)
         return parsed
