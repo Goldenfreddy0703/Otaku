@@ -4661,10 +4661,4 @@ def UPDATE_NETWORK_STATUS(payload, params):
     _update_network_status()
 
 
-@Route('migration_process')
-def MIGRATION_PROCESS(payload, params):
-    from resources.lib.ui.database_sync import SyncDatabase
-    confirm = control.yesno_dialog(control.ADDON_NAME, control.lang(30438))
-    if confirm == 0:
-        return
-    SyncDatabase().migration_process()
+

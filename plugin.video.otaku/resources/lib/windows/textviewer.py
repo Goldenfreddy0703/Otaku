@@ -5,7 +5,6 @@ class TextViewerXML(WindowXMLDialog):
     def __init__(self, xmlFilename: str, scriptPath: str, *args, **kwargs):
         super().__init__(xmlFilename, scriptPath)
         self.heading = kwargs.get('heading')
-        self.migration_text = kwargs.get('migration_text')
         self.instructions_text = kwargs.get('instructions_text')
         self.changelog_text = kwargs.get('changelog_text')
         self.news_text = kwargs.get('news_text')
@@ -42,5 +41,4 @@ class TextViewerXML(WindowXMLDialog):
         self.setProperty('otaku.news_text', self.news_text)
         self.setProperty('otaku.changelog_text', self.changelog_text)
         self.setProperty('otaku.text', self.instructions_text)
-        self.setProperty('otaku.text', self.migration_text)
         self.setProperty('otaku.heading', self.heading)

@@ -2173,7 +2173,7 @@
 				</setting>
 				<setting id="nextup.enabled" type="boolean" label="30455" help="">
 					<level>0</level>
-					<default>false</default>
+					<default>true</default>
 					<control type="toggle"/>
 					<dependencies>
 						<dependency type="visible" setting="watchlist.update.enabled">true</dependency>
@@ -3647,19 +3647,8 @@
 				</setting>
 			</group>
 
-			<!-- Migration Process -->
-			<group id="8" label="30435" help="">
-				<setting id="migration_process" type="action" label="30436" help="30437">
-					<level>0</level>
-					<data>RunPlugin(plugin://plugin.video.otaku/migration_process?setting=true)</data>
-					<control type="button" format="action">
-						<close>true</close>
-					</control>
-				</setting>
-			</group>
-
 			<!-- Hidden Settings -->
-			<group id="9" label="" help="">
+			<group id="8" label="" help="">
 				<!-- Internal cache storage (not user-facing) -->
 				<setting id="cache.useragent" type="string" label="" help="">
 					<level>4</level>

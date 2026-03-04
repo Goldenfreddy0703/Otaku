@@ -198,19 +198,6 @@ def getInstructions():
     del windows
 
 
-def getMigration():
-    migration_path = os.path.join(control.ADDON_PATH, 'migration.txt')
-
-    with open(migration_path, encoding='utf-8') as migration_file:
-        migration_text = migration_file.read()
-
-    heading = '[B]%s -  v%s - Migration[/B]' % (control.ADDON_NAME, control.ADDON_VERSION)
-    from resources.lib.windows.textviewer import TextViewerXML
-    windows = TextViewerXML('textviewer_1.xml', control.ADDON_PATH, heading=heading, migration_text=migration_text)
-    windows.run()
-    del windows
-
-
 def toggle_reuselanguageinvoker(forced_state=None):
     def _store_and_reload(output):
         with open(file_path, "w+") as addon_xml_:
@@ -249,54 +236,7 @@ def version_check():
         control.log(f"### {reuselang} Re-uselanguageinvoker")
 
 
-def apply_migration_settings():
-    if os.path.exists(control.migrationSettings):
-        try:
-            with open(control.migrationSettings, 'r', encoding='utf-8') as f:
-                migration_data = json.load(f)
-            # Restore each setting from the migration file
-            for key, value in migration_data.items():
-                try:
-                    # Try bool
-                    if isinstance(value, bool):
-                        control.setBool(key, value)
-                    # Try int (but not bool, since bool is a subclass of int)
-                    elif isinstance(value, int) and not isinstance(value, bool):
-                        control.setInt(key, value)
-                    # Fallback to string
-                    else:
-                        control.setSetting(key, str(value))
-                except Exception as e:
-                    control.log(f"Error setting {key}: {e}")
-                    control.setSetting(key, str(value))
-            os.remove(control.migrationSettings)
-            control.ok_dialog(control.ADDON_NAME, "Migration complete. Watchlist Settings have been restored.")
-            getMigration()
-            # Ask the user if they would like to go throught the setup wizard
-            # Here the button labels are:
-            # Button 0: "Yes"   | Button 1: "No"
-            choice = control.yesno_dialog(
-                control.ADDON_NAME + ' - ' + control.lang(30415),
-                "Welcome back to Otaku!!!\nSense most of your settings have been deleted, would you like to go through the setup wizard?",
-                "No", "Yes",
-            )
-
-            # Yes selected
-            if choice == 1:
-                control.setBool('first_time', False)
-                control.execute('RunPlugin(plugin://plugin.video.otaku/setup_wizard)')
-
-            # No selected
-            elif choice == 0:
-                control.setBool('first_time', False)
-
-            control.log("Migration settings successfully applied and file removed.")
-        except Exception as e:
-            control.log(f"Error applying migration settings: {e}")
-
-
 if __name__ == "__main__":
-    apply_migration_settings()  # Apply migration settings if available
     control.log('##################  RUNNING MAINTENANCE  ######################')
     version_check()
     database_sync.SyncDatabase()

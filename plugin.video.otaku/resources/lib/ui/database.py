@@ -1,323 +1,633 @@
+"""
+database.py – Otaku Database & Caching Layer
+=============================================
+Clean, organized caching and metadata storage.
+
+Architecture
+------------
+SQL          – Thread-safe SQLite context manager (module-level lock)
+Memory Cache – Window-property RAM cache with expiry
+General Cache– 3-tier caching: RAM → SQLite → fresh API call
+Shows        – Anime show / meta / episode CRUD
+Mappings     – Cross-service ID lookups
+Watchlist    – Per-service watchlist cache with activity invalidation
+Enrichment   – AniList supplementary metadata cache
+History      – Per-category search history
+Maintenance  – Cache clearing helpers
+"""
+
 import ast
 import hashlib
 import pickle
 import re
 import time
 import threading
+
 import xbmcgui
 import xbmcvfs
 
 from sqlite3 import OperationalError, dbapi2
 from resources.lib.ui import control
 
-# ==================== RAM Cache Layer ====================
-# Uses Kodi Window(10000) properties for instant in-process cache
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  SQL – Thread-Safe SQLite Context Manager
+# ═══════════════════════════════════════════════════════════════════════════
+
+_db_lock = threading.Lock()
+
+
+def _dict_factory(cursor, row):
+    """Row factory that returns dicts keyed by column name."""
+    return {col[0]: row[idx] for idx, col in enumerate(cursor.description)}
+
+
+class SQL:
+    """Thread-safe SQLite context manager with optimized PRAGMAs.
+
+    Uses a *module-level* lock so concurrent threads cannot
+    corrupt data.  Always closes the connection on exit.
+
+    Usage::
+
+        with SQL(db_path) as cursor:
+            cursor.execute('SELECT ...')
+            cursor.connection.commit()   # needed for writes
+    """
+
+    def __init__(self, path, timeout=60):
+        self.path = path
+        self.timeout = timeout
+
+    def __enter__(self):
+        _db_lock.acquire()
+        try:
+            xbmcvfs.mkdir(control.dataPath)
+            self._conn = dbapi2.connect(self.path, timeout=self.timeout)
+            self._conn.row_factory = _dict_factory
+            self._conn.execute("PRAGMA foreign_keys = ON")
+            self._conn.execute("PRAGMA synchronous = OFF")
+            self._conn.execute("PRAGMA journal_mode = OFF")
+            self._conn.execute("PRAGMA mmap_size = 268435456")  # 256 MB mmap I/O
+            self._cursor = self._conn.cursor()
+            return self._cursor
+        except Exception:
+            _db_lock.release()
+            raise
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        try:
+            self._conn.close()
+        except Exception:
+            pass
+        finally:
+            _db_lock.release()
+
+        if exc_type:
+            import traceback
+            msg = ('database OperationalError'
+                   if exc_type is OperationalError else 'database error')
+            control.log(msg, level='error')
+            control.log(''.join(traceback.format_exception(
+                exc_type, exc_val, exc_tb)), level='error')
+            return exc_type is OperationalError
+        return False
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  Memory Cache – Kodi Window Properties with Expiry
+# ═══════════════════════════════════════════════════════════════════════════
+
 _window = xbmcgui.Window(10000)
-_CACHE_PREFIX = 'otaku_test_cache_'
+_MEM_PREFIX = 'otaku_test_'
 
 
 def _mem_get(key):
-    val = _window.getProperty(_CACHE_PREFIX + key)
-    return val if val else None
+    """Return parsed data or *None* if missing / expired."""
+    raw = _window.getProperty(_MEM_PREFIX + key)
+    if not raw:
+        return None
+    try:
+        sep = raw.index('|')
+        if int(raw[:sep]) > int(time.time()):
+            return ast.literal_eval(raw[sep + 1:])
+    except Exception:
+        pass
+    _window.clearProperty(_MEM_PREFIX + key)
+    return None
 
 
-def _mem_set(key, val):
-    _window.setProperty(_CACHE_PREFIX + key, val)
+def _mem_set(key, value_repr, hours):
+    """Store *value_repr* (a ``repr()`` string) with an expiry of *hours*."""
+    expires = int(time.time() + hours * 3600)
+    _window.setProperty(_MEM_PREFIX + key, f"{expires}|{value_repr}")
 
 
 def _mem_del(key):
-    _window.clearProperty(_CACHE_PREFIX + key)
+    """Remove a single key from the RAM cache."""
+    _window.clearProperty(_MEM_PREFIX + key)
 
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  Lazy Table Initialization (once per session)
+# ═══════════════════════════════════════════════════════════════════════════
+
+_tables_ready = set()
+
+
+def _ensure_table(db_path, name, ddl):
+    """Run *ddl* only the first time (*db_path*, *name*) is seen."""
+    tag = f"{db_path}:{name}"
+    if tag in _tables_ready:
+        return
+    with SQL(db_path) as cur:
+        cur.execute(ddl)
+        cur.connection.commit()
+    _tables_ready.add(tag)
+
+
+def _init_cache_table():
+    _ensure_table(
+        control.cacheFile, 'cache',
+        'CREATE TABLE IF NOT EXISTS cache '
+        '(key TEXT UNIQUE, value TEXT, date INTEGER)'
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  General Cache – 3-Tier: RAM → SQLite → Fresh API Call
+# ═══════════════════════════════════════════════════════════════════════════
 
 def get(function, duration, *args, **kwargs):
-    """
-    Gets cached value for provided function with optional arguments, or executes and stores the result.
-    Uses 3-tier cache: RAM (window properties) -> SQLite -> API call.
+    """Cached function call with 3-tier lookup.
 
-    :param function: Function to be executed
-    :param duration: Duration of validity of cache in hours
-    :param args: Optional arguments for the provided function
-    :param kwargs: Optional keyword arguments for the provided function
+    :param function:  Callable to execute on cache miss.
+    :param duration:  Cache validity in **hours**.
+    :param args/kwargs:  Forwarded to *function* on miss.
+        Special kwarg ``key`` is popped and appended to the cache key.
     """
-    key = hash_function(function, args, kwargs)
+    key = _hash_function(function, args, kwargs)
     if 'key' in kwargs:
         key += kwargs.pop('key')
 
-    # --- Tier 1: RAM cache (instant) ---
+    # --- Tier 1: RAM (instant) ---
     mem = _mem_get(key)
-    if mem:
-        try:
-            return ast.literal_eval(mem)
-        except Exception:
-            _mem_del(key)
+    if mem is not None:
+        return mem
 
-    # --- Tier 2: SQLite cache ---
-    cache_result = cache_get(key)
-    if cache_result and is_cache_valid(cache_result['date'], duration):
-        try:
-            return_data = ast.literal_eval(cache_result['value'])
-            # Promote to RAM for next access
-            _mem_set(key, cache_result['value'])
-            return return_data
-        except Exception:
-            import traceback
-            control.log(traceback.format_exc(), level='error')
-            control.log("Cache corrupted for key: %s, fetching fresh data" % key, level='warning')
+    # --- Tier 2: SQLite ---
+    _init_cache_table()
+    with SQL(control.cacheFile) as cur:
+        cur.execute('SELECT value, date FROM cache WHERE key=?', (key,))
+        row = cur.fetchone()
 
-    # --- Tier 3: Fresh API call ---
-    fresh_result = repr(function(*args, **kwargs))
-    cache_insert(key, fresh_result)
-    if not fresh_result:
-        return cache_result if cache_result else fresh_result
-    # Store in RAM
-    _mem_set(key, fresh_result)
-    data = ast.literal_eval(fresh_result)
-    return data
+    if row and is_cache_valid(row['date'], duration):
+        try:
+            data = ast.literal_eval(row['value'])
+            _mem_set(key, row['value'], duration)
+            return data
+        except Exception:
+            control.log(
+                f"Cache corrupt for key {key}, fetching fresh data",
+                level='warning')
+
+    # --- Tier 3: Fresh call ---
+    result = function(*args, **kwargs)
+    result_repr = repr(result)
+    _cache_write(key, result_repr)
+    _mem_set(key, result_repr, duration)
+    return result
 
 
 def remove(function, *args, **kwargs):
-    # type: (function, object) -> object or None
-    """
-    Removes cached value for provided function with optional arguments
-    :param function: Function results to be deleted from cache
-    :param args: Optional arguments for the provided function
-    """
+    """Remove the cached value for a function call."""
     try:
-        key = hash_function(function, args, kwargs)
-        cache_remove(key)
+        key = _hash_function(function, args, kwargs)
+        _cache_delete(key)
+        _mem_del(key)
         return True
-
     except Exception:
         return False
 
 
-def hash_function(function_instance, *args):
-    function_name = re.sub(r'.+\smethod\s|.+function\s|\sat\s.+|\sof\s.+', '', repr(function_instance))
-    return function_name + generate_md5(args)
+# — helpers ------------------------------------------------------------------
+
+def _hash_function(func, args, kwargs):
+    name = re.sub(
+        r'.+\smethod\s|.+function\s|\sat\s.+|\sof\s.+', '', repr(func))
+    return name + generate_md5((args, kwargs))
 
 
 def generate_md5(*args):
-    md5_hash = hashlib.md5()
-    [md5_hash.update(str(arg).encode()) for arg in args]
-    return str(md5_hash.hexdigest())
+    """MD5 hex-digest of the string representation of *args*."""
+    md5 = hashlib.md5()
+    for arg in args:
+        md5.update(str(arg).encode())
+    return md5.hexdigest()
+
+
+def is_cache_valid(cached_time, hours):
+    """True when *cached_time* (epoch) is younger than *hours*."""
+    return (int(time.time()) - cached_time) < (hours * 3600)
+
+
+def _cache_write(key, value_repr):
+    _init_cache_table()
+    with SQL(control.cacheFile) as cur:
+        cur.execute(
+            'REPLACE INTO cache (key, value, date) VALUES (?, ?, ?)',
+            (key, value_repr, int(time.time())))
+        cur.connection.commit()
+
+
+def _cache_delete(key):
+    with SQL(control.cacheFile) as cur:
+        cur.execute('DELETE FROM cache WHERE key=?', (key,))
+        cur.connection.commit()
+
+
+# — backward-compat aliases (kept for any external callers) -----------------
+
+def hash_function(function_instance, *args):
+    function_name = re.sub(
+        r'.+\smethod\s|.+function\s|\sat\s.+|\sof\s.+', '',
+        repr(function_instance))
+    return function_name + generate_md5(args)
 
 
 def cache_get(key):
-    with SQL(control.cacheFile) as cursor:
-        cursor.execute('SELECT * FROM cache WHERE key=?', (key,))
-        results = cursor.fetchone()
-        return results
+    _init_cache_table()
+    with SQL(control.cacheFile) as cur:
+        cur.execute('SELECT * FROM cache WHERE key=?', (key,))
+        return cur.fetchone()
 
 
 def cache_insert(key, value):
-    now = int(time.time())
-    with SQL(control.cacheFile) as cursor:
-        cursor.execute('CREATE TABLE IF NOT EXISTS cache (key TEXT, value TEXT, date INTEGER, UNIQUE(key))')
-        cursor.execute('CREATE UNIQUE INDEX IF NOT EXISTS ix_cache ON cache (key)')
-        cursor.execute('REPLACE INTO cache (key, value, date) VALUES (?, ?, ?)', (key, value, now))
-        cursor.connection.commit()
+    _cache_write(key, value)
 
 
 def cache_remove(key):
-    with SQL(control.cacheFile) as cursor:
-        cursor.execute('DELETE FROM cache WHERE key = ?', (key,))
-        cursor.connection.commit()
-        cursor.close()
+    _cache_delete(key)
 
 
 def cache_clear():
-    with SQL(control.cacheFile) as cursor:
-        cursor.execute("DROP TABLE IF EXISTS cache")
-        cursor.execute("VACUUM")
-        cursor.connection.commit()
-        cursor.execute('CREATE TABLE IF NOT EXISTS cache (key TEXT, value TEXT, date INTEGER, UNIQUE(key))')
-    # Also clear watchlist cache, activity timestamps, and enrichment data (stored in malSyncDB)
+    """Wipe general cache, watchlist cache, activity, and enrichment data."""
+    with SQL(control.cacheFile) as cur:
+        cur.execute("DROP TABLE IF EXISTS cache")
+        cur.execute("VACUUM")
+        cur.connection.commit()
+    _tables_ready.discard(f"{control.cacheFile}:cache")
+
     clear_watchlist_cache()
     clear_watchlist_activity()
     clear_anilist_enrichment()
-    control.notify(f'{control.ADDON_NAME}: {control.lang(30086)}', control.lang(30087), time=5000, sound=False)
+
+    control.notify(
+        f'{control.ADDON_NAME}: {control.lang(30086)}',
+        control.lang(30087), time=5000, sound=False)
 
 
-def is_cache_valid(cached_time, cache_timeout):
-    now = int(time.time())
-    diff = now - cached_time
-    return (cache_timeout * 3600) > diff
+# ═══════════════════════════════════════════════════════════════════════════
+#  Show Operations
+# ═══════════════════════════════════════════════════════════════════════════
+
+def get_show(mal_id):
+    with SQL(control.malSyncDB) as cur:
+        cur.execute('SELECT * FROM shows WHERE mal_id=?', (mal_id,))
+        return cur.fetchone()
 
 
-# ==================== Watchlist Cache Functions ====================
+def update_show(mal_id, kodi_meta, anime_schedule_route=''):
+    with SQL(control.malSyncDB) as cur:
+        cur.execute('PRAGMA foreign_keys=OFF')
+        cur.execute(
+            'REPLACE INTO shows '
+            '(mal_id, kodi_meta, anime_schedule_route) VALUES (?, ?, ?)',
+            (mal_id, kodi_meta, anime_schedule_route))
+        cur.execute('PRAGMA foreign_keys=ON')
+        cur.connection.commit()
+
+
+def get_show_meta(mal_id):
+    with SQL(control.malSyncDB) as cur:
+        cur.execute('SELECT * FROM shows_meta WHERE mal_id=?', (mal_id,))
+        return cur.fetchone()
+
+
+def update_show_meta(mal_id, meta_ids, art):
+    with SQL(control.malSyncDB) as cur:
+        cur.execute('PRAGMA foreign_keys=OFF')
+        cur.execute(
+            'REPLACE INTO shows_meta (mal_id, meta_ids, art) VALUES (?, ?, ?)',
+            (mal_id, pickle.dumps(meta_ids), pickle.dumps(art)))
+        cur.execute('PRAGMA foreign_keys=ON')
+        cur.connection.commit()
+
+
+def update_kodi_meta(mal_id, kodi_meta):
+    with SQL(control.malSyncDB) as cur:
+        cur.execute(
+            'UPDATE shows SET kodi_meta=? WHERE mal_id=?',
+            (pickle.dumps(kodi_meta), mal_id))
+        cur.connection.commit()
+
+
+def add_mapping_id(mal_id, column, value):
+    with SQL(control.malSyncDB) as cur:
+        cur.execute(
+            f'UPDATE shows SET {column}=? WHERE mal_id=?', (value, mal_id))
+        cur.connection.commit()
+
+
+def get_show_data(mal_id):
+    with SQL(control.malSyncDB) as cur:
+        cur.execute('SELECT * FROM show_data WHERE mal_id=?', (mal_id,))
+        return cur.fetchone()
+
+
+def update_show_data(mal_id, data, last_updated=''):
+    with SQL(control.malSyncDB) as cur:
+        cur.execute('PRAGMA foreign_keys=OFF')
+        cur.execute(
+            'REPLACE INTO show_data '
+            '(mal_id, data, last_updated) VALUES (?, ?, ?)',
+            (mal_id, pickle.dumps(data), last_updated))
+        cur.execute('PRAGMA foreign_keys=ON')
+        cur.connection.commit()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  Episode Operations
+# ═══════════════════════════════════════════════════════════════════════════
+
+def get_episode(mal_id, episode=None):
+    with SQL(control.malSyncDB) as cur:
+        if episode:
+            cur.execute(
+                'SELECT * FROM episodes WHERE mal_id=? AND number=?',
+                (mal_id, episode))
+        else:
+            cur.execute(
+                'SELECT * FROM episodes WHERE mal_id=?', (mal_id,))
+        return cur.fetchone()
+
+
+def get_episode_list(mal_id):
+    with SQL(control.malSyncDB) as cur:
+        cur.execute('SELECT * FROM episodes WHERE mal_id=?', (mal_id,))
+        return cur.fetchall()
+
+
+def update_episode(mal_id, season, number, update_time, kodi_meta,
+                   filler='', anidb_ep_id=''):
+    with SQL(control.malSyncDB) as cur:
+        cur.execute(
+            'REPLACE INTO episodes '
+            '(mal_id, season, kodi_meta, last_updated, number, filler, anidb_ep_id) '
+            'VALUES (?, ?, ?, ?, ?, ?, ?)',
+            (mal_id, season, kodi_meta, update_time, number, filler, anidb_ep_id))
+        cur.connection.commit()
+
+
+def update_episode_column(mal_id, episode, column, value):
+    with SQL(control.malSyncDB) as cur:
+        cur.execute(
+            f'UPDATE episodes SET {column}=? WHERE mal_id=? AND number=?',
+            (value, mal_id, episode))
+        cur.connection.commit()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  Mapping & Info Lookups
+# ═══════════════════════════════════════════════════════════════════════════
+
+def get_mappings(anime_id, send_id):
+    with SQL(control.mappingDB) as cur:
+        cur.execute(
+            f'SELECT * FROM anime WHERE {send_id}=?', (anime_id,))
+        rows = cur.fetchall()
+        return rows[0] if rows else {}
+
+
+def get_unique_ids(anime_id, send_id):
+    with SQL(control.mappingDB) as cur:
+        cur.execute(
+            f'SELECT mal_id, mal_dub_id, anilist_id, kitsu_id, anidb_id, '
+            f'simkl_id, thetvdb_id, themoviedb_id, imdb_id, trakt_id '
+            f'FROM anime WHERE {send_id}=?', (anime_id,))
+        row = cur.fetchone()
+        if not row:
+            return {}
+        return {
+            'mal_id':     row.get('mal_id'),
+            'mal_dub_id': row.get('mal_dub_id'),
+            'anilist_id': row.get('anilist_id'),
+            'kitsu_id':   row.get('kitsu_id'),
+            'anidb':      row.get('anidb_id'),
+            'simkl':      row.get('simkl_id'),
+            'tvdb':       row.get('thetvdb_id'),
+            'tmdb':       row.get('themoviedb_id'),
+            'imdb':       row.get('imdb_id'),
+            'trakt':      row.get('trakt_id'),
+        }
+
+
+def get_mal_ids(anime_id, send_id):
+    with SQL(control.mappingDB) as cur:
+        cur.execute(
+            f'SELECT * FROM anime WHERE {send_id}=?', (anime_id,))
+        return cur.fetchall() or []
+
+
+def get_info(api_name):
+    with SQL(control.infoDB) as cur:
+        cur.execute('SELECT * FROM info WHERE api_name=?', (api_name,))
+        return cur.fetchone()
+
+
+def remove_from_database(table, mal_id):
+    with SQL(control.malSyncDB) as cur:
+        cur.execute(f'DELETE FROM {table} WHERE mal_id=?', (mal_id,))
+        cur.connection.commit()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  Watchlist Cache
+# ═══════════════════════════════════════════════════════════════════════════
 
 def get_watchlist_cache(service, status, limit=None, offset=0):
-    """Get cached watchlist items with optional pagination"""
-    with SQL(control.malSyncDB) as cursor:
+    """Cached watchlist items, optionally paginated."""
+    with SQL(control.malSyncDB) as cur:
         if limit:
-            cursor.execute(
-                'SELECT * FROM watchlist_cache WHERE service=? AND status=? ORDER BY id LIMIT ? OFFSET ?',
-                (service, status, limit, offset)
-            )
+            cur.execute(
+                'SELECT * FROM watchlist_cache '
+                'WHERE service=? AND status=? ORDER BY id LIMIT ? OFFSET ?',
+                (service, status, limit, offset))
         else:
-            cursor.execute(
-                'SELECT * FROM watchlist_cache WHERE service=? AND status=? ORDER BY id',
-                (service, status)
-            )
-        return cursor.fetchall()
+            cur.execute(
+                'SELECT * FROM watchlist_cache '
+                'WHERE service=? AND status=? ORDER BY id',
+                (service, status))
+        return cur.fetchall()
 
 
 def get_watchlist_cache_count(service, status):
-    """Get total count of cached items for a service/status"""
-    with SQL(control.malSyncDB) as cursor:
-        cursor.execute(
-            'SELECT COUNT(*) as count FROM watchlist_cache WHERE service=? AND status=?',
-            (service, status)
-        )
-        result = cursor.fetchone()
-        return result['count'] if result else 0
+    """Count of cached items for a service / status pair."""
+    with SQL(control.malSyncDB) as cur:
+        cur.execute(
+            'SELECT COUNT(*) as count FROM watchlist_cache '
+            'WHERE service=? AND status=?', (service, status))
+        row = cur.fetchone()
+        return row['count'] if row else 0
 
 
 def get_watchlist_cache_last_updated(service, status):
-    """Get the last updated timestamp for cached watchlist"""
-    with SQL(control.malSyncDB) as cursor:
-        cursor.execute(
-            'SELECT MIN(last_updated) as last_updated FROM watchlist_cache WHERE service=? AND status=?',
-            (service, status)
-        )
-        result = cursor.fetchone()
-        return result['last_updated'] if result else None
+    """Oldest update timestamp for a service / status pair."""
+    with SQL(control.malSyncDB) as cur:
+        cur.execute(
+            'SELECT MIN(last_updated) as last_updated FROM watchlist_cache '
+            'WHERE service=? AND status=?', (service, status))
+        row = cur.fetchone()
+        return row['last_updated'] if row else None
 
 
 def save_watchlist_cache(service, status, items):
-    """Save watchlist items to cache (replaces existing cache for service/status)"""
+    """Replace all cache entries for a service / status pair."""
     now = int(time.time())
-    with SQL(control.malSyncDB) as cursor:
-        # Clear existing cache for this service/status
-        cursor.execute('DELETE FROM watchlist_cache WHERE service=? AND status=?', (service, status))
-        # Insert new items with order index
+    with SQL(control.malSyncDB) as cur:
+        cur.execute(
+            'DELETE FROM watchlist_cache WHERE service=? AND status=?',
+            (service, status))
         for idx, item in enumerate(items):
-            mal_id = None
-            # Extract mal_id based on service structure
-            if service == 'simkl':
-                mal_id = item.get('show', {}).get('ids', {}).get('mal')
-            elif service == 'kitsu':
-                mal_id = item.get('mal_id')  # Will be set during processing
-            elif service == 'mal':
-                mal_id = item.get('node', {}).get('id')
-            elif service == 'anilist':
-                mal_id = item.get('media', {}).get('idMal')
+            cur.execute(
+                'INSERT INTO watchlist_cache '
+                '(service, status, mal_id, item_order, data, last_updated) '
+                'VALUES (?, ?, ?, ?, ?, ?)',
+                (service, status, _extract_mal_id(service, item),
+                 idx, pickle.dumps(item), now))
+        cur.connection.commit()
 
-            data = pickle.dumps(item)
-            cursor.execute(
-                'INSERT INTO watchlist_cache (service, status, mal_id, item_order, data, last_updated) VALUES (?, ?, ?, ?, ?, ?)',
-                (service, status, mal_id, idx, data, now)
-            )
-        cursor.connection.commit()
+
+def _extract_mal_id(service, item):
+    """Pull MAL ID from a watchlist item based on service structure."""
+    extractors = {
+        'simkl':   lambda i: i.get('show', {}).get('ids', {}).get('mal'),
+        'kitsu':   lambda i: i.get('mal_id'),
+        'mal':     lambda i: i.get('node', {}).get('id'),
+        'anilist': lambda i: i.get('media', {}).get('idMal'),
+    }
+    fn = extractors.get(service)
+    return fn(item) if fn else None
 
 
 def clear_watchlist_cache(service=None, status=None):
-    """Clear watchlist cache, optionally filtered by service and/or status"""
-    with SQL(control.malSyncDB) as cursor:
+    """Clear cache, optionally filtered by service and/or status."""
+    with SQL(control.malSyncDB) as cur:
         if service and status:
-            cursor.execute('DELETE FROM watchlist_cache WHERE service=? AND status=?', (service, status))
+            cur.execute(
+                'DELETE FROM watchlist_cache WHERE service=? AND status=?',
+                (service, status))
         elif service:
-            cursor.execute('DELETE FROM watchlist_cache WHERE service=?', (service,))
+            cur.execute(
+                'DELETE FROM watchlist_cache WHERE service=?', (service,))
         else:
-            cursor.execute('DELETE FROM watchlist_cache')
-        cursor.connection.commit()
+            cur.execute('DELETE FROM watchlist_cache')
+        cur.connection.commit()
 
 
 def is_watchlist_cache_valid(service, status, cache_hours=24):
-    """Check if watchlist cache is still valid (default 24 hours).
-    This is now mainly a safety-net fallback. The primary invalidation
-    mechanism is the activity-based check in each watchlist flavor."""
-    last_updated = get_watchlist_cache_last_updated(service, status)
-    if not last_updated:
-        return False
-    return is_cache_valid(last_updated, cache_hours)
+    """Safety-net fallback (primary invalidation is activity-based)."""
+    last = get_watchlist_cache_last_updated(service, status)
+    return is_cache_valid(last, cache_hours) if last else False
 
 
-# ==================== Watchlist Activity Functions ====================
+# ═══════════════════════════════════════════════════════════════════════════
+#  Watchlist Activity  (activity-based cache invalidation)
+# ═══════════════════════════════════════════════════════════════════════════
 
 def get_watchlist_activity(service):
-    """Get stored activity record for a watchlist service."""
-    with SQL(control.malSyncDB) as cursor:
-        cursor.execute('SELECT * FROM watchlist_activity WHERE service=?', (service,))
-        return cursor.fetchone()
+    """Stored activity record for a watchlist service."""
+    with SQL(control.malSyncDB) as cur:
+        cur.execute(
+            'SELECT * FROM watchlist_activity WHERE service=?', (service,))
+        return cur.fetchone()
 
 
 def save_watchlist_activity(service, activity_timestamp):
     """Save the last known activity timestamp for a service."""
-    now = int(time.time())
-    with SQL(control.malSyncDB) as cursor:
-        cursor.execute(
-            'REPLACE INTO watchlist_activity (service, activity_timestamp, last_checked) VALUES (?, ?, ?)',
-            (service, str(activity_timestamp), now)
-        )
-        cursor.connection.commit()
+    with SQL(control.malSyncDB) as cur:
+        cur.execute(
+            'REPLACE INTO watchlist_activity '
+            '(service, activity_timestamp, last_checked) VALUES (?, ?, ?)',
+            (service, str(activity_timestamp), int(time.time())))
+        cur.connection.commit()
 
 
 def clear_watchlist_activity(service=None):
     """Clear stored activity timestamps."""
     try:
-        with SQL(control.malSyncDB) as cursor:
+        with SQL(control.malSyncDB) as cur:
             if service:
-                cursor.execute('DELETE FROM watchlist_activity WHERE service=?', (service,))
+                cur.execute(
+                    'DELETE FROM watchlist_activity WHERE service=?',
+                    (service,))
             else:
-                cursor.execute('DELETE FROM watchlist_activity')
-            cursor.connection.commit()
+                cur.execute('DELETE FROM watchlist_activity')
+            cur.connection.commit()
     except Exception:
-        pass  # Table may not exist yet
+        pass  # table may not exist on first run
 
 
-# ==================== AniList Enrichment Cache Functions ====================
+# ═══════════════════════════════════════════════════════════════════════════
+#  AniList Enrichment Cache
+# ═══════════════════════════════════════════════════════════════════════════
 
 def get_all_watchlist_mal_ids():
-    """Get all unique MAL IDs from the watchlist cache across all services."""
-    with SQL(control.malSyncDB) as cursor:
-        cursor.execute('SELECT DISTINCT mal_id FROM watchlist_cache WHERE mal_id IS NOT NULL')
-        rows = cursor.fetchall()
-        mal_ids = []
-        for row in rows:
-            try:
-                mal_ids.append(int(row['mal_id']))
-            except (ValueError, TypeError):
-                pass
-        return mal_ids
+    """All unique MAL IDs across every cached watchlist entry."""
+    with SQL(control.malSyncDB) as cur:
+        cur.execute(
+            'SELECT DISTINCT mal_id FROM watchlist_cache '
+            'WHERE mal_id IS NOT NULL')
+        rows = cur.fetchall()
+    result = []
+    for row in rows:
+        try:
+            result.append(int(row['mal_id']))
+        except (ValueError, TypeError):
+            pass
+    return result
 
 
-def save_anilist_enrichment_batch(anilist_data_list):
-    """Save a list of AniList media objects to the enrichment cache, keyed by idMal."""
-    if not anilist_data_list:
+def save_anilist_enrichment_batch(data_list):
+    """Save AniList media objects keyed by ``idMal``."""
+    if not data_list:
         return
     now = int(time.time())
-    with SQL(control.malSyncDB) as cursor:
-        for item in anilist_data_list:
+    with SQL(control.malSyncDB) as cur:
+        for item in data_list:
             mal_id = item.get('idMal')
             if not mal_id:
                 continue
-            data = pickle.dumps(item)
-            cursor.execute(
-                'REPLACE INTO anilist_enrichment (mal_id, data, last_updated) VALUES (?, ?, ?)',
-                (int(mal_id), data, now)
-            )
-        cursor.connection.commit()
+            cur.execute(
+                'REPLACE INTO anilist_enrichment '
+                '(mal_id, data, last_updated) VALUES (?, ?, ?)',
+                (int(mal_id), pickle.dumps(item), now))
+        cur.connection.commit()
 
 
 def get_anilist_enrichment_batch(mal_ids, max_age_hours=168):
-    """
-    Get cached AniList enrichment data for given MAL IDs.
-    Returns dict {mal_id: anilist_data_dict}.
-    Entries older than max_age_hours (default 7 days) are excluded.
-    """
+    """Cached AniList enrichment for given MAL IDs (default 7 days max)."""
     if not mal_ids:
         return {}
-    result = {}
     cutoff = int(time.time()) - (max_age_hours * 3600)
-    with SQL(control.malSyncDB) as cursor:
-        placeholders = ','.join('?' for _ in mal_ids)
-        cursor.execute(
-            f'SELECT * FROM anilist_enrichment WHERE mal_id IN ({placeholders}) AND last_updated > ?',
-            [int(mid) for mid in mal_ids] + [cutoff]
-        )
-        rows = cursor.fetchall()
-        for row in rows:
+    result = {}
+    with SQL(control.malSyncDB) as cur:
+        ph = ','.join('?' for _ in mal_ids)
+        cur.execute(
+            f'SELECT * FROM anilist_enrichment '
+            f'WHERE mal_id IN ({ph}) AND last_updated > ?',
+            [int(m) for m in mal_ids] + [cutoff])
+        for row in cur.fetchall():
             try:
                 result[row['mal_id']] = pickle.loads(row['data'])
             except Exception:
@@ -326,251 +636,82 @@ def get_anilist_enrichment_batch(mal_ids, max_age_hours=168):
 
 
 def clear_anilist_enrichment():
-    """Clear all AniList enrichment cache."""
-    with SQL(control.malSyncDB) as cursor:
-        cursor.execute('DELETE FROM anilist_enrichment')
-        cursor.connection.commit()
+    """Clear all AniList enrichment data."""
+    with SQL(control.malSyncDB) as cur:
+        cur.execute('DELETE FROM anilist_enrichment')
+        cur.connection.commit()
 
 
-def update_show(mal_id, kodi_meta, anime_schedule_route=''):
-    with SQL(control.malSyncDB) as cursor:
-        cursor.execute('PRAGMA foreign_keys=OFF')
-        cursor.execute('REPLACE INTO shows (mal_id, kodi_meta, anime_schedule_route) VALUES (?, ?, ?)', (mal_id, kodi_meta, anime_schedule_route))
-        cursor.execute('PRAGMA foreign_keys=ON')
-        cursor.connection.commit()
+# ═══════════════════════════════════════════════════════════════════════════
+#  Search History
+# ═══════════════════════════════════════════════════════════════════════════
+
+_SEARCH_TYPES = (
+    'anime', 'movie', 'tv_show', 'tv_short',
+    'special', 'ova', 'ona', 'music',
+)
 
 
-def update_show_meta(mal_id, meta_ids, art):
-    meta_ids = pickle.dumps(meta_ids)
-    art = pickle.dumps(art)
-    with SQL(control.malSyncDB) as cursor:
-        cursor.execute('PRAGMA foreign_keys=OFF')
-        cursor.execute("REPLACE INTO shows_meta (mal_id, meta_ids, art) VALUES (?, ?, ?)", (mal_id, meta_ids, art))
-        cursor.execute('PRAGMA foreign_keys=ON')
-        cursor.connection.commit()
-
-
-def add_mapping_id(mal_id, column, value):
-    with SQL(control.malSyncDB) as cursor:
-        cursor.execute('UPDATE shows SET %s=? WHERE mal_id=?' % column, (value, mal_id))
-        cursor.connection.commit()
-
-
-def update_kodi_meta(mal_id, kodi_meta):
-    kodi_meta = pickle.dumps(kodi_meta)
-    with SQL(control.malSyncDB) as cursor:
-        cursor.execute('UPDATE shows SET kodi_meta=? WHERE mal_id=?', (kodi_meta, mal_id))
-        cursor.connection.commit()
-
-
-def update_show_data(mal_id, data, last_updated=''):
-    data = pickle.dumps(data)
-    with SQL(control.malSyncDB) as cursor:
-        cursor.execute('PRAGMA foreign_keys=OFF')
-        cursor.execute("REPLACE INTO show_data (mal_id, data, last_updated) VALUES (?, ?, ?)", (mal_id, data, last_updated))
-        cursor.execute('PRAGMA foreign_keys=ON')
-        cursor.connection.commit()
-
-
-def update_episode(mal_id, season, number, update_time, kodi_meta, filler='', anidb_ep_id=''):
-    with SQL(control.malSyncDB) as cursor:
-        cursor.execute('REPLACE INTO episodes (mal_id, season, kodi_meta, last_updated, number, filler, anidb_ep_id) VALUES (?, ?, ?, ?, ?, ?, ?)', (mal_id, season, kodi_meta, update_time, number, filler, anidb_ep_id))
-        cursor.connection.commit()
-
-
-def update_episode_column(mal_id, episode, column, value):
-    with SQL(control.malSyncDB) as cursor:
-        cursor.execute('UPDATE episodes SET %s=? WHERE mal_id=? AND number=?' % column, (value, mal_id, episode))
-        cursor.connection.commit()
-
-
-def get_show_data(mal_id):
-    with SQL(control.malSyncDB) as cursor:
-        cursor.execute('SELECT * FROM show_data WHERE mal_id=?', (mal_id,))
-        show_data = cursor.fetchone()
-        return show_data
-
-
-def get_episode_list(mal_id):
-    with SQL(control.malSyncDB) as cursor:
-        cursor.execute('SELECT * FROM episodes WHERE mal_id=?', (mal_id,))
-        episodes = cursor.fetchall()
-        return episodes
-
-
-def get_episode(mal_id, episode=None):
-    with SQL(control.malSyncDB) as cursor:
-        if episode:
-            cursor.execute('SELECT * FROM episodes WHERE mal_id=? AND number=?', (mal_id, episode))
-        else:
-            cursor.execute('SELECT * FROM episodes WHERE mal_id=?', (mal_id,))
-        episode = cursor.fetchone()
-        return episode
-
-
-def get_show(mal_id):
-    with SQL(control.malSyncDB) as cursor:
-        cursor.execute('SELECT * FROM shows WHERE mal_id=?', (mal_id,))
-        shows = cursor.fetchone()
-        return shows
-
-
-def get_show_meta(mal_id):
-    with SQL(control.malSyncDB) as cursor:
-        cursor.execute('SELECT * FROM shows_meta WHERE mal_id=?', (mal_id,))
-        shows = cursor.fetchone()
-        return shows
-
-
-def remove_from_database(table, mal_id):
-    with SQL(control.malSyncDB) as cursor:
-        cursor.execute(f"DELETE FROM {table} WHERE mal_id=?", (mal_id,))
-        cursor.connection.commit()
-
-
-def get_info(api_name):
-    with SQL(control.infoDB) as cursor:
-        cursor.execute('SELECT * FROM info WHERE api_name=?', (api_name,))
-        api_info = cursor.fetchone()
-        return api_info
-
-
-def get_mal_ids(anime_id, send_id):
-    with SQL(control.mappingDB) as cursor:
-        cursor.execute(f'SELECT * FROM anime WHERE {send_id}=?', (anime_id,))
-        mappings = cursor.fetchall()
-        return mappings if mappings else []
-
-
-def get_mappings(anime_id, send_id):
-    with SQL(control.mappingDB) as cursor:
-        cursor.execute(f'SELECT * FROM anime WHERE {send_id}=?', (anime_id,))
-        mappings = cursor.fetchall()
-        return mappings[0] if mappings else {}
-
-
-def get_unique_ids(anime_id, send_id):
-    with SQL(control.mappingDB) as cursor:
-        cursor.execute(f'SELECT mal_id, mal_dub_id, anilist_id, kitsu_id, anidb_id, simkl_id, thetvdb_id, themoviedb_id, imdb_id, trakt_id FROM anime WHERE {send_id}=?', (anime_id,))
-        mappings = cursor.fetchone()
-        if mappings:
-            mappings_dict = {
-                'mal_id': mappings.get('mal_id'),
-                'mal_dub_id': mappings.get('mal_dub_id'),
-                'anilist_id': mappings.get('anilist_id'),
-                'kitsu_id': mappings.get('kitsu_id'),
-                'anidb': mappings.get('anidb_id'),
-                'simkl': mappings.get('simkl_id'),
-                'tvdb': mappings.get('thetvdb_id'),
-                'tmdb': mappings.get('themoviedb_id'),
-                'imdb': mappings.get('imdb_id'),
-                'trakt': mappings.get('trakt_id')
-            }
-            return mappings_dict
-        return {}
-
-
-def ensure_tables_and_indexes(cursor):
-    tables = ['anime', 'movie', 'tv_show', 'tv_short', 'special', 'ova', 'ona', 'music']
-    for table in tables:
-        cursor.execute(f'CREATE TABLE IF NOT EXISTS {table} (value TEXT)')
-        cursor.execute(f'CREATE UNIQUE INDEX IF NOT EXISTS ix_history ON {table} (value)')
+def _ensure_search_tables(cur):
+    for t in _SEARCH_TYPES:
+        cur.execute(f'CREATE TABLE IF NOT EXISTS {t} (value TEXT UNIQUE)')
 
 
 def getSearchHistory(media_type):
-    with SQL(control.searchHistoryDB) as cursor:
-        ensure_tables_and_indexes(cursor)
-        cursor.execute(f"SELECT * FROM {media_type}")
-        history = cursor.fetchall()
-        history.reverse()
-        history = history[:50]
-        filter_ = []
-        for i in history:
-            if i['value'] not in filter_:
-                filter_.append(i['value'])
-        return filter_
+    with SQL(control.searchHistoryDB) as cur:
+        _ensure_search_tables(cur)
+        cur.execute(f'SELECT * FROM {media_type}')
+        history = cur.fetchall()
+    history.reverse()
+    seen = set()
+    return [h['value'] for h in history[:50]
+            if h['value'] not in seen and not seen.add(h['value'])]
 
 
 def addSearchHistory(search_string, media_type):
-    with SQL(control.searchHistoryDB) as cursor:
-        ensure_tables_and_indexes(cursor)
-        cursor.execute(f"REPLACE INTO {media_type} VALUES (?)", (search_string,))
-        cursor.connection.commit()
+    with SQL(control.searchHistoryDB) as cur:
+        _ensure_search_tables(cur)
+        cur.execute(
+            f'REPLACE INTO {media_type} VALUES (?)', (search_string,))
+        cur.connection.commit()
 
 
 def clearSearchHistory():
-    confirmation = control.yesno_dialog(control.ADDON_NAME, "Clear all search history?")
-    if not confirmation:
+    if not control.yesno_dialog(
+            control.ADDON_NAME, "Clear all search history?"):
         return
-    with SQL(control.searchHistoryDB) as cursor:
-        tables = ['anime', 'movie', 'tv_show', 'tv_short', 'special', 'ova', 'ona', 'music']
-        for table in tables:
-            cursor.execute(f'DROP TABLE IF EXISTS {table}')
-        cursor.execute("VACUUM")
-        cursor.connection.commit()
-        control.refresh()
-        control.notify(control.ADDON_NAME, "Search History has been cleared", time=5000)
+    with SQL(control.searchHistoryDB) as cur:
+        for t in _SEARCH_TYPES:
+            cur.execute(f'DROP TABLE IF EXISTS {t}')
+        cur.execute("VACUUM")
+        cur.connection.commit()
+    control.refresh()
+    control.notify(
+        control.ADDON_NAME, "Search History has been cleared", time=5000)
 
 
 def clearSearchCatagory(media_type):
-    confirmation = control.yesno_dialog(control.ADDON_NAME, "Clear search history?")
-    if not confirmation:
+    if not control.yesno_dialog(
+            control.ADDON_NAME, "Clear search history?"):
         return
-    with SQL(control.searchHistoryDB) as cursor:
-        cursor.execute(f'DROP TABLE IF EXISTS {media_type}')
-        cursor.execute(f'CREATE TABLE IF NOT EXISTS {media_type} (value TEXT)')
-        cursor.execute(f"CREATE UNIQUE INDEX IF NOT EXISTS ix_history ON {media_type} (value)")
-        cursor.connection.commit()
-        control.refresh()
-        control.notify(control.ADDON_NAME, "Search History has been cleared", time=5000)
+    with SQL(control.searchHistoryDB) as cur:
+        cur.execute(f'DROP TABLE IF EXISTS {media_type}')
+        cur.execute(
+            f'CREATE TABLE IF NOT EXISTS {media_type} (value TEXT UNIQUE)')
+        cur.connection.commit()
+    control.refresh()
+    control.notify(
+        control.ADDON_NAME, "Search History has been cleared", time=5000)
 
 
 def remove_search(table, value):
-    norm_value = value.strip()
-    with SQL(control.searchHistoryDB) as cursor:
-        cursor.execute(f'DELETE FROM {table} WHERE value=?', (norm_value,))
-        deleted = cursor.rowcount
-        cursor.connection.commit()
-        control.refresh()
-        if deleted == 0:
-            control.notify(control.ADDON_NAME, f"Search item not found: '{norm_value}'", time=3000)
-
-
-def dict_factory(cursor, row):
-    d = {}
-    for idx, col in enumerate(cursor.description):
-        d[col[0]] = row[idx]
-    return d
-
-
-class SQL:
-    def __init__(self, path, timeout=60):
-        self.lock = threading.Lock()
-        self.path = path
-        self.timeout = timeout
-
-    def __enter__(self):
-        self.lock.acquire()
-        xbmcvfs.mkdir(control.dataPath)
-        conn = dbapi2.connect(self.path, timeout=self.timeout)
-        conn.row_factory = dict_factory
-        conn.execute("PRAGMA FOREIGN_KEYS=1")
-        conn.execute("PRAGMA synchronous = OFF")
-        conn.execute("PRAGMA journal_mode = OFF")
-        conn.execute("PRAGMA mmap_size = 268435456")  # 256MB memory-mapped I/O
-        self.cursor = conn.cursor()
-        return self.cursor
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.cursor.close()
-        if self.lock.locked():
-            self.lock.release()
-        if exc_type is OperationalError:
-            import traceback
-            control.log('database OperationalError', level='error')
-            control.log(f"{''.join(traceback.format_exception(exc_type, exc_val, exc_tb))}", level='error')
-            return True
-        elif exc_type:
-            import traceback
-            control.log('database error', level='error')
-            control.log(f"{''.join(traceback.format_exception(exc_type, exc_val, exc_tb))}", level='error')
+    norm = value.strip()
+    with SQL(control.searchHistoryDB) as cur:
+        cur.execute(f'DELETE FROM {table} WHERE value=?', (norm,))
+        deleted = cur.rowcount
+        cur.connection.commit()
+    control.refresh()
+    if deleted == 0:
+        control.notify(
+            control.ADDON_NAME,
+            f"Search item not found: '{norm}'", time=3000)

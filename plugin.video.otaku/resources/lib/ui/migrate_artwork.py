@@ -51,7 +51,9 @@ def migrate_artwork_database():
 
             for row in rows:
                 stats['entries_processed'] += 1
-                mal_id, art_blob, meta_ids_blob = row
+                mal_id = row['mal_id']
+                art_blob = row['art']
+                meta_ids_blob = row['meta_ids']
 
                 try:
                     # Unpickle existing art data
@@ -103,13 +105,13 @@ def migrate_artwork_database():
                             art['landscape'] = random.choice(art['landscape'])
                             updated = True
 
-                    # Remove banner if disabled
-                    if 'banner' in art and not artwork_banner_enabled:
-                        if isinstance(art['banner'], list) and art['banner']:
-                            art['banner'] = random.choice(art['banner'])
-                            updated = True
-                        elif not artwork_banner_enabled:
+                    # Convert banner to single string (or remove if disabled)
+                    if 'banner' in art:
+                        if not artwork_banner_enabled:
                             del art['banner']
+                            updated = True
+                        elif isinstance(art['banner'], list) and art['banner']:
+                            art['banner'] = random.choice(art['banner'])
                             updated = True
 
                     # Count final images

@@ -1,3 +1,18 @@
+Changelog v5.2.77 (2026-03-04):
+- Complete database & caching recode — cleaner architecture, thread-safe module-level lock, proper connection lifecycle
+- Added 3-tier cache with expiry (RAM → SQLite → API) replacing old no-expiry RAM cache
+- Fixed per-instance threading.Lock (no real thread safety) — now uses single module-level lock
+- Fixed SQLite connection leak — connections are now properly closed on context exit
+- Fixed lock leak on connect failure — try/except releases lock before re-raise
+- Fixed table DDL running on every insert — lazy one-time _ensure_table() with _tables_ready set
+- Fixed missing watchlist_activity and watchlist_cache table creation at startup
+- Fixed _build_watchlist_cache KeyError — PRAGMA table_info returns dicts not tuples (col['name'] vs col[1])
+- Fixed migrate_artwork.py crash — SQL row dict unpacking was using tuple syntax on dict rows
+- Fixed migrate_artwork.py banner logic inverted — disabled banners were converted instead of deleted
+- Removed legacy migration process — migration_process(), getMigration(), apply_migration_settings() and all references
+- Removed migration settings group, route handler, and string IDs (30435-30438)
+- Cleaned up textviewer.py migration_text references
+
 Changelog v5.2.76 (2026-02-26):
 - Fixed Next Up showing unaired episodes: added fallback aired-date filter + nextAiringEpisode guard (GitHub #450)
 - Fixed Simkl marking ALL previous episodes as watched with today's date on each episode update
