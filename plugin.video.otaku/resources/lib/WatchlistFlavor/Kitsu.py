@@ -93,13 +93,13 @@ class KitsuWLF(WatchlistFlavorBase):
     def __get_sort(self):
         # Mapping:
         # 0: Anime Title -> sort by anime.titles.{language} alphabetically
-        # 1: Score -> sort by anime.averageRating descending
+        # 1: User Score -> NOT sortable server-side (API 500s on ratingTwenty), applied client-side
         # 2: Progress -> sort by progress descending
         # 3: Last Updated -> sort by progressed_at descending
         # 4: Last Added -> sort by started_at descending
         sort_options = [
             f"anime.titles.{self.__get_title_lang()}",
-            "-anime.averageRating",
+            "-progressed_at",
             "progress",
             "-progressed_at",
             "-started_at",
@@ -160,7 +160,7 @@ class KitsuWLF(WatchlistFlavorBase):
                 "filter[kind]": "anime",
                 "filter[status]": status,
                 "include": "anime,anime.mappings",
-                "page[limit]": 20,
+                "page[limit]": 500,
                 "page[offset]": 0,
                 "sort": self.__get_sort(),
             }
@@ -226,10 +226,6 @@ class KitsuWLF(WatchlistFlavorBase):
                                 'mal_id': all_mappings.get(anime_id, '')
                             })
 
-            # Apply ordering before saving to cache
-            if all_data and int(self.order) == 1:
-                all_data.reverse()
-
             if all_data:
                 save_watchlist_cache(self._NAME, status, all_data)
 
@@ -237,19 +233,39 @@ class KitsuWLF(WatchlistFlavorBase):
         if cache_only:
             return []
 
-        # Get items from cache
-        total_count = get_watchlist_cache_count(self._NAME, status)
-
-        if paging_enabled and per_page > 0:
-            cached_items = get_watchlist_cache(self._NAME, status, limit=per_page, offset=offset)
-        else:
-            cached_items = get_watchlist_cache(self._NAME, status)
+        # Read ALL items from cache
+        cached_items = get_watchlist_cache(self._NAME, status)
 
         if not cached_items:
             return []
 
         # Deserialize cached items
         items = [pickle.loads(item['data']) for item in cached_items]
+
+        # Client-side sort ALL items based on current sort setting
+        # This ensures sort changes take effect without needing a cache rebuild
+        sort_key = int(self.sort)
+        title_lang = self.__get_title_lang()
+        if sort_key == 0:  # Anime Title
+            items.sort(key=lambda x: (x.get('anime') or {}).get('attributes', {}).get('titles', {}).get(title_lang, (x.get('anime') or {}).get('attributes', {}).get('canonicalTitle', '')).lower())
+        elif sort_key == 1:  # User Score
+            items.sort(key=lambda x: x['entry']['attributes'].get('ratingTwenty') or 0, reverse=True)
+        elif sort_key == 2:  # Progress
+            items.sort(key=lambda x: x['entry']['attributes'].get('progress') or 0, reverse=True)
+        elif sort_key == 3:  # Last Updated
+            items.sort(key=lambda x: x['entry']['attributes'].get('progressedAt') or '', reverse=True)
+        elif sort_key == 4:  # Last Added
+            items.sort(key=lambda x: x['entry']['attributes'].get('startedAt') or '', reverse=True)
+
+        # Apply order reversal (sort defaults are "natural" order; reverse for descending)
+        if int(self.order) == 1:
+            items.reverse()
+
+        total_count = len(items)
+
+        # Slice for paging
+        if paging_enabled and per_page > 0:
+            items = items[offset:offset + per_page]
 
         return self.process_watchlist_view(items, next_up, f'watchlist_status_type_pages/kitsu/{status}', page, offset, per_page, total_count, paging_enabled)
 
@@ -538,7 +554,8 @@ class KitsuWLF(WatchlistFlavorBase):
 
         # Playcount
         playcount = None
-        if eres['attributes']['episodeCount'] != 0 and res["attributes"]["progress"] == eres['attributes']['episodeCount']:
+        ep_count = eres['attributes'].get('episodeCount') or 0
+        if ep_count > 0 and res["attributes"]["progress"] == ep_count:
             playcount = 1
 
         # Premiered/year
@@ -582,8 +599,8 @@ class KitsuWLF(WatchlistFlavorBase):
         # Art/Images
         show_meta = database.get_show_meta(mal_id)
         kodi_meta = pickle.loads(show_meta.get('art')) if show_meta else {}
-        poster_image = eres["attributes"]['posterImage']
-        image = poster_image.get('large', poster_image['original'])
+        poster_image = eres["attributes"].get('posterImage') or {}
+        image = poster_image.get('large') or poster_image.get('original')
         poster = image
         fanart = kodi_meta.get('fanart', image)
         # AniList fallback for missing images
@@ -621,8 +638,13 @@ class KitsuWLF(WatchlistFlavorBase):
         if anilist_res and anilist_res.get('countryOfOrigin'):
             info['mpaa'] = anilist_res.get('countryOfOrigin')
 
+        # User's own score (ratingTwenty is 2-20 scale, convert to 1-10)
+        user_score = res['attributes'].get('ratingTwenty')
+        if user_score:
+            info['user_rating'] = user_score / 2.0
+
         base = {
-            "name": '%s - %d/%d' % (title, res["attributes"]["progress"], eres["attributes"].get('episodeCount', 0) if eres["attributes"]['episodeCount'] else 0),
+            "name": '%s - %d/%d' % (title, res["attributes"]["progress"], ep_count),
             "url": f'watchlist_to_ep/{mal_id}/{res["attributes"]["progress"]}',
             "image": image,
             "poster": poster,

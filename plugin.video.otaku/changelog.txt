@@ -1,3 +1,15 @@
+Changelog v5.2.78 (2026-03-05):
+- Fixed Simkl paging+sorting bug — was sorting only the current page slice instead of the full list, then slicing
+- Fixed AniList paging+sorting bug — same fetch-all → sort → slice pattern applied
+- Fixed Kitsu paging+sorting bug — sort was baked into cache at build time, now applies client-side sort on every read
+- All 5 sort options (Title, User Score, Progress, Last Updated, Last Added) now work correctly with paging across Simkl, AniList, and Kitsu
+- Ascending/Descending order changes take effect immediately without needing a cache rebuild
+- Fixed Kitsu sorting by average score instead of user score (ratingTwenty)
+- Fixed Kitsu API 500 error — ratingTwenty not sortable server-side, now handled client-side
+- Fixed Kitsu page[limit] from 20 to 500 (API max for library-entries)
+- Added user_rating to Kitsu watchlist info dict (ratingTwenty 2-20 scale displayed as 1-10)
+- Changed Kitsu sort label from "Score" to "User Score" in settings
+
 Changelog v5.2.77 (2026-03-04):
 - Complete database & caching recode — cleaner architecture, thread-safe module-level lock, proper connection lifecycle
 - Added 3-tier cache with expiry (RAM → SQLite → API) replacing old no-expiry RAM cache

@@ -241,10 +241,8 @@ class AniListWLF(WatchlistFlavorBase):
         # Get items from cache
         total_count = get_watchlist_cache_count(self._NAME, status)
 
-        if paging_enabled and per_page > 0:
-            cached_items = get_watchlist_cache(self._NAME, status, limit=per_page, offset=offset)
-        else:
-            cached_items = get_watchlist_cache(self._NAME, status)
+        # Always fetch ALL items so sorting works across the full list
+        cached_items = get_watchlist_cache(self._NAME, status)
 
         if not cached_items:
             return []
@@ -269,8 +267,10 @@ class AniListWLF(WatchlistFlavorBase):
         all_results = list(map(self.base_watchlist_status_view, entries))
         all_results = [r for r in all_results if r is not None]
 
-        # Add paging if enabled
+        # Slice to page AFTER sorting
         if paging_enabled and per_page > 0:
+            total_count = len(all_results)
+            all_results = all_results[offset:offset + per_page]
             has_next = (offset + per_page) < total_count
             all_results += self.handle_paging(has_next, f'watchlist_status_type_pages/anilist/{status}/{offset + per_page}', page)
 

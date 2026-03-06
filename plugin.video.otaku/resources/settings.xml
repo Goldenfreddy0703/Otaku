@@ -2323,7 +2323,7 @@
 					<constraints>
 						<options>
 							<option label="Anime Title">0</option>
-							<option label="Score">1</option>
+							<option label="User Score">1</option>
 							<option label="Progress">2</option>
 							<option label="Last Updated">3</option>
 							<option label="Last Added">4</option>

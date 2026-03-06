@@ -128,10 +128,8 @@ class SimklWLF(WatchlistFlavorBase):
         # Get items from cache
         total_count = get_watchlist_cache_count(self._NAME, status)
         
-        if paging_enabled and per_page > 0:
-            cached_items = get_watchlist_cache(self._NAME, status, limit=per_page, offset=offset)
-        else:
-            cached_items = get_watchlist_cache(self._NAME, status)
+        # Always fetch ALL items so sorting works across the full list
+        cached_items = get_watchlist_cache(self._NAME, status)
         
         if not cached_items:
             return []
@@ -139,19 +137,6 @@ class SimklWLF(WatchlistFlavorBase):
         # Deserialize cached items
         import pickle
         items = [pickle.loads(item['data']) for item in cached_items]
-
-        # Get the progress of the item
-        def get_progress(item):
-            try:
-                text = item['name']
-                progress_parts = text.rsplit(" - ", 1)
-                if len(progress_parts) == 2:
-                    current = int(progress_parts[1].split("/")[0])
-                else:
-                    current = 0
-            except Exception:
-                current = 0
-            return current
 
         # Fetch AniList data for current page items only (fast for small batches)
         mal_ids = [anime['show']['ids']['mal'] for anime in items if anime['show']['ids'].get('mal')]
@@ -178,20 +163,22 @@ class SimklWLF(WatchlistFlavorBase):
         # Apply sorting
         if int(self.sort) == 0:  # anime_title
             all_results = sorted(all_results, key=lambda x: x['info']['title'].lower() if x['info'].get('title') else '')
-        elif int(self.sort) == 1:    # user_rating
+        elif int(self.sort) == 1:    # user_rating (integer 1-10, or None)
             all_results = sorted(all_results, key=lambda x: x['info'].get('user_rating') or 0, reverse=True)
-        elif int(self.sort) == 2:    # progress
-            all_results = sorted(all_results, key=get_progress)
-        elif int(self.sort) == 3:    # list_updated_at
-            all_results = sorted(all_results, key=lambda x: x['info'].get('last_watched') or "0", reverse=True)
-        elif int(self.sort) == 4:    # last_added
-            all_results.reverse()
+        elif int(self.sort) == 2:    # progress (watched / total)
+            all_results = sorted(all_results, key=lambda x: (x['info'].get('watched_episodes_count') or 0) / (x['info'].get('total_episodes_count') or 1), reverse=True)
+        elif int(self.sort) == 3:    # last_watched (ISO 8601 timestamp)
+            all_results = sorted(all_results, key=lambda x: x['info'].get('last_watched') or "", reverse=True)
+        elif int(self.sort) == 4:    # last_added (ISO 8601 timestamp)
+            all_results = sorted(all_results, key=lambda x: x['info'].get('last_added') or "", reverse=True)
 
         if int(self.order) == 1:
             all_results.reverse()
 
-        # Add paging if enabled
+        # Slice to page AFTER sorting
         if paging_enabled and per_page > 0:
+            total_count = len(all_results)
+            all_results = all_results[offset:offset + per_page]
             has_next = (offset + per_page) < total_count
             all_results += self.handle_paging(has_next, f'watchlist_status_type_pages/simkl/{status}/{offset + per_page}', page)
 
@@ -503,8 +490,14 @@ class SimklWLF(WatchlistFlavorBase):
             'country': country,
             'mediatype': 'tvshow',
             'year': year if year else res['show']['year'],
+            'user_rating': res['user_rating'],
+            'last_added': res['added_to_watchlist_at'],
             'last_watched': res['last_watched_at'],
-            'user_rating': res['user_rating']
+            'last_rated': res['user_rated_at'],
+            'user_rating': res['user_rating'],
+            'watched_episodes_count': res.get('watched_episodes_count'),
+            'total_episodes_count': res.get('total_episodes_count'),
+            
         }
         if info_rating:
             info['rating'] = info_rating
