@@ -34,7 +34,7 @@ class TorBox:
 
         device_code = resp.get('device_code', '')
         user_code = resp.get('code', '')
-        verification_url = resp.get('friendly_verification_url') or resp.get('verification_url', 'https://tor.box/link')
+        verification_url = resp.get('friendly_verification_url') or resp.get('verification_url', 'https://torbox.app/oauth/device')
         interval = int(resp.get('interval', 5))
 
         # Calculate expires_in from expires_at timestamp

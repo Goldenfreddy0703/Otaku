@@ -2173,7 +2173,14 @@ class AniListBrowser(BrowserBase):
 
         name = res['title']['romaji']
         ename = res['title']['english']
-        titles = f"({name})|({ename})"
+        if name and ename:
+            titles = f"({name})|({ename})"
+        elif name:
+            titles = f"({name})"
+        elif ename:
+            titles = f"({ename})"
+        else:
+            titles = ''
 
         if desc := res.get('description'):
             desc = desc.replace('<i>', '[I]').replace('</i>', '[/I]')

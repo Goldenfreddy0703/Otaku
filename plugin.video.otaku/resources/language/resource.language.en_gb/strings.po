@@ -1840,3 +1840,7 @@ msgstr ""
 msgctxt "#30455"
 msgid "Enable Next Up"
 msgstr ""
+
+msgctxt "#30456"
+msgid "Animetosho Alt"
+msgstr ""

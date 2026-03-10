@@ -1912,7 +1912,14 @@ class OtakuBrowser(BrowserBase):
             title_userPreferred = anilist_res['title'].get(self.title_lang) or anilist_res['title'].get('romaji')
             name = anilist_res['title'].get('romaji')
             ename = anilist_res['title'].get('english')
-        titles = f"({name})|({ename})"
+        if name and ename:
+            titles = f"({name})|({ename})"
+        elif name:
+            titles = f"({name})"
+        elif ename:
+            titles = f"({ename})"
+        else:
+            titles = ''
 
         # Start date
         start_date = None

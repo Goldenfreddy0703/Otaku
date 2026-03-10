@@ -786,6 +786,14 @@
 					<default>true</default>
 					<control type="toggle"/>
 				</setting>
+				<setting id="provider.animetoshoalt" type="boolean" label="30456" help="" parent="provider.animetosho">
+					<level>0</level>
+					<default>false</default>
+					<control type="toggle"/>
+					<dependencies>
+						<dependency type="visible" setting="provider.animetosho">true</dependency>
+					</dependencies>
+				</setting>
 				<setting id="animetosho.paging" type="integer" label="30385" help="30386" parent="provider.animetosho">
 					<level>0</level>
 					<default>1</default>

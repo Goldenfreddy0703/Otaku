@@ -1,3 +1,14 @@
+Changelog v5.2.79 (2026-03-09):
+- Fixed None title bug — when English or Romaji title is missing, search query no longer includes literal "None"
+- Centralized season and part lookups in actionArgs — scrapers no longer do redundant DB calls
+- Removed duplicate database.get_episode() calls in nyaa and animetosho (was called 2-3x per scraper)
+- Removed fragile part/cour extraction from query text in torrent scrapers — now passed from metadata
+- Removed duplicate anidb_id fetch in animetosho get_show_sources (already set by get_episode_sources)
+- Removed redundant database.get_mappings() calls for thetvdb_part in both torrent scrapers
+- Cloud and local inspection workers now receive season directly instead of re-fetching from DB
+- Added AnimeTosho alt setting — uses a proxy URL for users who have trouble accessing the site
+- Fixed TorBox auth
+
 Changelog v5.2.78 (2026-03-05):
 - Fixed Simkl paging+sorting bug — was sorting only the current page slice instead of the full list, then slicing
 - Fixed AniList paging+sorting bug — same fetch-all → sort → slice pattern applied

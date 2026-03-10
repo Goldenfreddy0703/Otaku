@@ -94,6 +94,16 @@ def get_sources(mal_id, episode, media_type, rescrape=False, source_select=False
     if not (show := database.get_show(mal_id)):
         show = BROWSER.get_anime(mal_id)
     kodi_meta = pickle.loads(show['kodi_meta'])
+
+    # Pre-fetch season and part once so scrapers don't each do redundant DB lookups
+    episode_data = database.get_episode(mal_id)
+    season = episode_data.get('season') if episode_data else None
+
+    part = None
+    mal_mapping = database.get_mappings(mal_id, 'mal_id')
+    if mal_mapping and 'thetvdb_part' in mal_mapping:
+        part = mal_mapping['thetvdb_part']
+
     actionArgs = {
         'query': kodi_meta['query'],
         'mal_id': mal_id,
@@ -104,7 +114,9 @@ def get_sources(mal_id, episode, media_type, rescrape=False, source_select=False
         'media_type': media_type,
         'rescrape': rescrape,
         'source_select': source_select,
-        'silent': silent
+        'silent': silent,
+        'season': season,
+        'part': part,
     }
 
     sources = pages.getSourcesHelper(actionArgs)

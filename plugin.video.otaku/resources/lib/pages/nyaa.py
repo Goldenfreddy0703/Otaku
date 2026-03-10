@@ -17,29 +17,14 @@ class Sources(BrowserBase):
         self.uncached = []
         self.sources = []
 
-    def get_sources(self, query, mal_id, episode, status, media_type):
+    def get_sources(self, query, mal_id, episode, status, media_type, season=None, part=None):
         query = self._clean_title(query).replace('-', ' ')
         self.media_type = media_type
         if media_type == 'movie':
             return self.get_movie_sources(query, mal_id)
 
-        if 'part' in query.lower() or 'cour' in query.lower():
-            part_match = re.search(r'(?:part|cour) ?(\d+)', query.lower())
-            if part_match:
-                part = int(part_match.group(1).strip())
-            else:
-                part = None
-        else:
-            part = None
-
-        # If the part could not be determined from the query, try to get it from the MAL mappings.
-        if part is None:
-            mal_mapping = database.get_mappings(mal_id, 'mal_id')
-            if mal_mapping and 'thetvdb_part' in mal_mapping:
-                part = mal_mapping['thetvdb_part']
-
-        episode_sources = self.get_episode_sources(query, mal_id, episode, part, status)
-        show_sources = self.get_show_sources(query, mal_id, episode, part)
+        episode_sources = self.get_episode_sources(query, mal_id, episode, season, part, status)
+        show_sources = self.get_show_sources(query, mal_id, episode, season, part)
         self.sources = episode_sources + show_sources
 
         if not self.sources and ':' in query:
@@ -47,15 +32,14 @@ class Sources(BrowserBase):
             q1 = q1[1:-1].split(':')[0]
             q2 = q2[1:-1].split(':')[0]
             query2 = '({0})|({1})'.format(q1, q2)
-            self.sources = self.get_episode_sources(query2, mal_id, episode, part, status)
+            self.sources = self.get_episode_sources(query2, mal_id, episode, season, part, status)
 
         # remove any duplicate sources
         self.append_cache_uncached_noduplicates()
         return {'cached': self.cached, 'uncached': self.uncached}
 
-    def get_episode_sources(self, show, mal_id, episode, part, status):
-        season = database.get_episode(mal_id)['season']
-        season_zfill = str(season).zfill(2)
+    def get_episode_sources(self, show, mal_id, episode, season, part, status):
+        season_zfill = str(season).zfill(2) if season else '01'
         episode_zfill = episode.zfill(2)
 
         # Build all search queries
@@ -137,10 +121,9 @@ class Sources(BrowserBase):
         control.log(f"Nyaa: Episode search complete - returning {len(nyaa_sources)} total sources")
         return nyaa_sources
 
-    def get_show_sources(self, show, mal_id, episode, part):
+    def get_show_sources(self, show, mal_id, episode, season, part):
         control.log(f"Nyaa: Searching show/batch sources for '{show}'")
-        season = database.get_episode(mal_id)['season']
-        season_zfill = str(season).zfill(2)
+        season_zfill = str(season).zfill(2) if season else '01'
         episode_zfill = episode.zfill(2)
         query = show
 

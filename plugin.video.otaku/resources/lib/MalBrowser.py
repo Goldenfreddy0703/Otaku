@@ -1634,7 +1634,14 @@ class MalBrowser(BrowserBase):
 
         name = res['title']
         ename = res['title_english']
-        titles = f"({name})|({ename})"
+        if name and ename:
+            titles = f"({name})|({ename})"
+        elif name:
+            titles = f"({name})"
+        elif ename:
+            titles = f"({ename})"
+        else:
+            titles = ''
 
         kodi_meta = {
             'name': name,

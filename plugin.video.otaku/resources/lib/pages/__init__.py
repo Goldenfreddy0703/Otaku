@@ -68,6 +68,8 @@ class Sources(GetSources):
         media_type = args['media_type']
         duration = args['duration']
         rescrape = args['rescrape']
+        season = args.get('season')
+        part = args.get('part')
         # source_select = args['source_select']
 
         self.setProperty('process_started', 'true')
@@ -95,14 +97,14 @@ class Sources(GetSources):
 
         if any(enabled_debrids.values()):
             if control.getBool('provider.nyaa'):
-                t = threading.Thread(target=self.nyaa_worker, args=(query, mal_id, episode, status, media_type, rescrape))
+                t = threading.Thread(target=self.nyaa_worker, args=(query, mal_id, episode, status, media_type, rescrape, season, part))
                 t.start()
                 self.threads.append(t)
             else:
                 self.remainingProviders.remove('nyaa')
 
             if control.getBool('provider.animetosho'):
-                t = threading.Thread(target=self.animetosho_worker, args=(query, mal_id, episode, status, media_type, rescrape))
+                t = threading.Thread(target=self.animetosho_worker, args=(query, mal_id, episode, status, media_type, rescrape, season, part))
                 t.start()
                 self.threads.append(t)
             else:
@@ -114,7 +116,7 @@ class Sources(GetSources):
 
         # cloud #
         if common_debrids:
-            t = threading.Thread(target=self.user_cloud_inspection, args=(query, mal_id, episode))
+            t = threading.Thread(target=self.user_cloud_inspection, args=(query, mal_id, episode, season))
             t.start()
             self.threads.append(t)
         else:
@@ -122,7 +124,7 @@ class Sources(GetSources):
 
         # local #
         if control.getBool('provider.localfiles'):
-            t = threading.Thread(target=self.user_local_inspection, args=(query, mal_id, episode))
+            t = threading.Thread(target=self.user_local_inspection, args=(query, mal_id, episode, season))
             t.start()
             self.threads.append(t)
         else:
@@ -206,11 +208,11 @@ class Sources(GetSources):
         return self.return_data
 
     # Torrents #
-    def nyaa_worker(self, query, mal_id, episode, status, media_type, rescrape):
+    def nyaa_worker(self, query, mal_id, episode, status, media_type, rescrape, season, part):
         if rescrape:
-            all_sources = nyaa.Sources().get_sources(query, mal_id, episode, status, media_type)
+            all_sources = nyaa.Sources().get_sources(query, mal_id, episode, status, media_type, season, part)
         else:
-            all_sources = database.get(nyaa.Sources().get_sources, 8, query, mal_id, episode, status, media_type, key='nyaa')
+            all_sources = database.get(nyaa.Sources().get_sources, 8, query, mal_id, episode, status, media_type, season, part, key='nyaa')
 
         # Defensive check to ensure all_sources is not None
         if all_sources is None:
@@ -221,11 +223,11 @@ class Sources(GetSources):
         self.torrentSources += all_sources['cached'] + all_sources['uncached']
         self.remainingProviders.remove('nyaa')
 
-    def animetosho_worker(self, query, mal_id, episode, status, media_type, rescrape):
+    def animetosho_worker(self, query, mal_id, episode, status, media_type, rescrape, season, part):
         if rescrape:
-            all_sources = animetosho.Sources().get_sources(query, mal_id, episode, status, media_type)
+            all_sources = animetosho.Sources().get_sources(query, mal_id, episode, status, media_type, season, part)
         else:
-            all_sources = database.get(animetosho.Sources().get_sources, 8, query, mal_id, episode, status, media_type, key='animetosho')
+            all_sources = database.get(animetosho.Sources().get_sources, 8, query, mal_id, episode, status, media_type, season, part, key='animetosho')
 
         # Defensive check to ensure all_sources is not None
         if all_sources is None:
@@ -298,15 +300,11 @@ class Sources(GetSources):
         self.remainingProviders.remove('watchnixtoons2')
 
     # Local & Cloud #
-    def user_local_inspection(self, query, mal_id, episode):
-        episode_data = database.get_episode(mal_id)
-        season = episode_data.get('season') if episode_data else None
+    def user_local_inspection(self, query, mal_id, episode, season):
         self.local_files += localfiles.Sources().get_sources(query, mal_id, episode, season)
         self.remainingProviders.remove('Local Inspection')
 
-    def user_cloud_inspection(self, query, mal_id, episode):
-        episode_data = database.get_episode(mal_id)
-        season = episode_data.get('season') if episode_data else None
+    def user_cloud_inspection(self, query, mal_id, episode, season):
         self.cloud_files += debrid_cloudfiles.Sources().get_sources(query, mal_id, episode, season)
         self.remainingProviders.remove('Cloud Inspection')
 

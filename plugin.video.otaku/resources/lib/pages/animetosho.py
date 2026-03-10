@@ -12,7 +12,7 @@ from resources.lib.endpoints import anidb
 
 
 class Sources(BrowserBase):
-    _BASE_URL = 'https://animetosho.org'
+    _BASE_URL = 'https://animetosho-org.translate.goog/?_x_tr_sl=es&_x_tr_tl=en&_x_tr_hl=en/' if control.getBool('provider.animetoshoalt') else 'https://animetosho.org/'
 
     def __init__(self):
         self.sources = []
@@ -22,29 +22,14 @@ class Sources(BrowserBase):
         self.anidb_ep_id = None
         self.paging = control.getInt('animetosho.paging')
 
-    def get_sources(self, show, mal_id, episode, status, media_type):
+    def get_sources(self, show, mal_id, episode, status, media_type, season=None, part=None):
         control.log(f"Animetosho: Starting search for '{show}' episode {episode}")
         if media_type == "movie":
             return self.get_movie_sources(show, mal_id)
 
-        if 'part' in show.lower() or 'cour' in show.lower():
-            part_match = re.search(r'(?:part|cour) ?(\d+)', show.lower())
-            if part_match:
-                part = int(part_match.group(1).strip())
-            else:
-                part = None
-        else:
-            part = None
-
-        # If the part could not be determined from the query, try to get it from the MAL mappings.
-        if part is None:
-            mal_mapping = database.get_mappings(mal_id, 'mal_id')
-            if mal_mapping and 'thetvdb_part' in mal_mapping:
-                part = mal_mapping['thetvdb_part']
-
-        episode_sources = self.get_episode_sources(show, mal_id, episode, part, status)
+        episode_sources = self.get_episode_sources(show, mal_id, episode, season, part, status)
         control.log(f"Animetosho: Found {len(episode_sources)} episode-specific sources")
-        show_sources = self.get_show_sources(show, mal_id, episode, part)
+        show_sources = self.get_show_sources(show, mal_id, episode, season, part)
         control.log(f"Animetosho: Found {len(show_sources)} show/batch sources")
         self.sources = episode_sources + show_sources
 
@@ -52,7 +37,7 @@ class Sources(BrowserBase):
         control.log(f"Animetosho: Returning {len(self.cached)} cached + {len(self.uncached)} uncached = {len(self.cached) + len(self.uncached)} total sources")
         return {'cached': self.cached, 'uncached': self.uncached}
 
-    def get_episode_sources(self, show, mal_id, episode, part, status):
+    def get_episode_sources(self, show, mal_id, episode, season, part, status):
         # Retrieve anidb info for the show and episode
         show_meta = database.get_show_meta(mal_id)
         if show_meta:
@@ -73,8 +58,7 @@ class Sources(BrowserBase):
                 for anidb_ep in anidb_meta:
                     database.update_episode_column(mal_id, anidb_ep, 'anidb_ep_id', anidb_meta[anidb_ep]['anidb_id'])
 
-        season = database.get_episode(mal_id)['season']
-        season_zfill = str(season).zfill(2)
+        season_zfill = str(season).zfill(2) if season else '01'
         episode_zfill = episode.zfill(2)
 
         # Build all search queries upfront
@@ -160,22 +144,11 @@ class Sources(BrowserBase):
         control.log(f"AnimeTosho: Episode search complete - returning {len(animetosho_sources)} total sources")
         return animetosho_sources
 
-    def get_show_sources(self, show, mal_id, episode, part):
-        season = database.get_episode(mal_id)['season']
-        season_zfill = str(season).zfill(2)
+    def get_show_sources(self, show, mal_id, episode, season, part):
+        season_zfill = str(season).zfill(2) if season else '01'
         episode_zfill = episode.zfill(2)
 
-        # For shows, we can use process_animetosho_episodes
-        show_meta = database.get_show_meta(mal_id)
-        if show_meta:
-            meta_ids = pickle.loads(show_meta['meta_ids'])
-            self.anidb_id = meta_ids.get('anidb_id')
-            if not self.anidb_id:
-                ids = SIMKLAPI().get_mapping_ids_from_simkl(mal_id, 'mal_id')
-                if ids:
-                    self.anidb_id = meta_ids['anidb_id'] = ids['anidb']
-                    database.update_show_meta(mal_id, meta_ids, pickle.loads(show_meta['art']))
-
+        # anidb_id is already set by get_episode_sources
         query = self._clean_title(show)
         params = {
             'q': self._sphinx_clean(query),
