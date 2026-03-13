@@ -1,3 +1,10 @@
+Changelog v5.2.81 (2026-03-13):
+- Added nekoBT torrent scraper with full API integration (media_id resolution, episode_ids filtering, multi-query parallel search)
+- nekoBT uses TVDB matching via mapping database for precise media identification
+- nekoBT enables group_secondary, group_parents, and uploader_contributions for full torrent coverage
+- nekoBT performs a single debrid cache check across all search results instead of per-query for faster scraping
+- Added nekoBT provider toggle in settings (default off)
+
 Changelog v5.2.80 (2026-03-12):
 - Fixed Next Up blank lists for currently airing anime — removed per-show AnimeSchedule API call that was incorrectly filtering out aired episodes
 - Fixed get_simkl_id crash in otaku_next_up when show is not in local DB (AttributeError on None)

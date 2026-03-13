@@ -396,6 +396,9 @@ def filter_sources(provider, torrent_list, mal_id, season=None, episode=None, pa
         if provider == 'animetosho':
             if 'hash' not in torrent:
                 continue
+        elif provider == 'nekobt':
+            if 'hash' not in torrent:
+                continue
         elif provider == 'nyaa':
             torrent['hash'] = re.findall(r'btih:(.*?)(?:&|$)', torrent['magnet'])[0]
         elif provider == 'realdebrid':

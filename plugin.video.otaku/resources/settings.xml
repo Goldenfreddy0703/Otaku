@@ -809,6 +809,11 @@
 						<dependency type="visible" setting="provider.animetosho">true</dependency>
 					</dependencies>
 				</setting>
+				<setting id="provider.nekobt" type="boolean" label="30457" help="">
+					<level>0</level>
+					<default>false</default>
+					<control type="toggle"/>
+				</setting>
 			</group>
 
 			<!-- Embeds -->
