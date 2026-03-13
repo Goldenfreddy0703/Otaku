@@ -1,3 +1,11 @@
+Changelog v5.2.80 (2026-03-12):
+- Fixed Next Up blank lists for currently airing anime — removed per-show AnimeSchedule API call that was incorrectly filtering out aired episodes
+- Fixed get_simkl_id crash in otaku_next_up when show is not in local DB (AttributeError on None)
+- Added guard in get_simkl_episode_meta to return early when simkl_id is None
+- Added nextAiringEpisode to AniList enrichment query — MAL/Simkl/Kitsu flavors now get unaired episode filtering
+- Added episode gap detection in get_next_up_meta — episodes beyond provider max are flagged as not yet aired
+- Next Up unaired filtering now uses 3 layers: AniList nextAiringEpisode, aired date check, and provider episode gap detection (zero extra API calls)
+
 Changelog v5.2.79 (2026-03-09):
 - Fixed None title bug — when English or Romaji title is missing, search query no longer includes literal "None"
 - Centralized season and part lookups in actionArgs — scrapers no longer do redundant DB calls

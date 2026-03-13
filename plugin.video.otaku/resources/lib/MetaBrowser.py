@@ -183,21 +183,30 @@ def get_next_up_meta(mal_id, episode_num):
             control.log(f"Episode cache lookup failed for {mal_id} ep {episode_num}: {str(e)}")
 
     # Fetch from APIs if cache miss or incomplete
+    # Track whether any provider had episodes for this show (to detect unaired episodes)
+    provider_max_episode = 0
+    episode_found = False
+
     try:
         # Try Simkl first (best quality metadata)
         simkl_eps = next_up_api.get_simkl_episode_meta(mal_id)
         if simkl_eps:
             for ep in simkl_eps:
-                if ep.get('type') == 'episode' and str(ep.get('episode')) == str(episode_num):
-                    if not episode_meta['title']:
-                        episode_meta['title'] = ep.get('title')
-                    if not episode_meta['plot']:
-                        episode_meta['plot'] = ep.get('description')
-                    if not episode_meta['aired']:
-                        episode_meta['aired'] = ep.get('date', '')[:10] if ep.get('date') else None
-                    if ep.get('img') and not episode_meta['image']:
-                        episode_meta['image'] = next_up_api.simklImagePath % ep['img']
-                    break
+                if ep.get('type') == 'episode':
+                    ep_num = ep.get('episode', 0)
+                    if isinstance(ep_num, int) and ep_num > provider_max_episode:
+                        provider_max_episode = ep_num
+                    if str(ep_num) == str(episode_num):
+                        episode_found = True
+                        if not episode_meta['title']:
+                            episode_meta['title'] = ep.get('title')
+                        if not episode_meta['plot']:
+                            episode_meta['plot'] = ep.get('description')
+                        if not episode_meta['aired']:
+                            episode_meta['aired'] = ep.get('date', '')[:10] if ep.get('date') else None
+                        if ep.get('img') and not episode_meta['image']:
+                            episode_meta['image'] = next_up_api.simklImagePath % ep['img']
+                        break
     except Exception as e:
         control.log(f"Simkl episode meta fetch failed: {str(e)}")
 
@@ -207,7 +216,15 @@ def get_next_up_meta(mal_id, episode_num):
             anizip_eps = next_up_api.get_anizip_episode_meta(mal_id)
             if anizip_eps:
                 for ep in anizip_eps:
-                    if str(ep.get('episode')) == str(episode_num):
+                    ep_num = ep.get('episode', 0)
+                    try:
+                        ep_num_int = int(ep_num)
+                        if ep_num_int > provider_max_episode:
+                            provider_max_episode = ep_num_int
+                    except (ValueError, TypeError):
+                        pass
+                    if str(ep_num) == str(episode_num):
+                        episode_found = True
                         if not episode_meta['title'] and ep.get('title'):
                             episode_meta['title'] = ep['title'].get('en') or ep['title'].get('x-jat')
                         if not episode_meta['plot']:
@@ -219,6 +236,12 @@ def get_next_up_meta(mal_id, episode_num):
                         break
         except Exception as e:
             control.log(f"AniZip episode meta fetch failed: {str(e)}")
+
+    # If the requested episode wasn't found in any provider but the provider
+    # had other episodes for this show, the episode likely hasn't aired yet.
+    # Mark it so the caller's unaired check can filter it out.
+    if not episode_found and provider_max_episode > 0 and episode_num > provider_max_episode:
+        episode_meta['not_yet_aired'] = True
 
     # Final fallback
     if not episode_meta['title']:

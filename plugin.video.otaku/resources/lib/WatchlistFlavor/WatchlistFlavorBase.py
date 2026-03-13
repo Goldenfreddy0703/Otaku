@@ -137,14 +137,8 @@ class WatchlistFlavorBase:
         next_ep_num = progress + 1
 
         # Check if we should limit to aired episodes only
+        # Use AniList's nextAiringEpisode when available (no extra API call needed)
         if not control.getBool('playlist.unaired'):
-            from resources.lib.AnimeSchedule import get_anime_schedule
-            airing_anime = get_anime_schedule(mal_id)
-            if airing_anime and airing_anime.get('current_episode'):
-                max_aired = airing_anime['current_episode']
-                if next_ep_num > max_aired:
-                    return None
-            # Also use AniList's nextAiringEpisode as a fallback filter
             if next_airing_episode and next_ep_num >= next_airing_episode:
                 return None
 
@@ -160,6 +154,11 @@ class WatchlistFlavorBase:
             from resources.lib.indexers import should_hide_unaired_episode
             if should_hide_unaired_episode(episode_meta['aired']):
                 return None
+
+        # If the episode wasn't found in any provider but the show has other
+        # episodes, it almost certainly hasn't aired yet — skip it.
+        if not control.getBool('playlist.unaired') and episode_meta.get('not_yet_aired'):
+            return None
 
         # Get season number
         season = utils.get_season([show_title], mal_id) if show_title and mal_id else 1
@@ -373,6 +372,10 @@ class WatchlistFlavorBase:
         # MPAA
         if anilist_res.get('countryOfOrigin'):
             data['mpaa'] = anilist_res['countryOfOrigin']
+
+        # Next airing episode (for unaired episode filtering)
+        if anilist_res.get('nextAiringEpisode') and anilist_res['nextAiringEpisode'].get('episode'):
+            data['next_airing_episode'] = anilist_res['nextAiringEpisode']['episode']
 
         # AniList ID
         if anilist_res.get('id'):

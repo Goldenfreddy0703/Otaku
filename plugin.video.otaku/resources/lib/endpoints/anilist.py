@@ -66,6 +66,9 @@ class Anilist:
                   }
                 }
               }
+              nextAiringEpisode {
+                episode
+              }
               trailer {
                 id
                 site
