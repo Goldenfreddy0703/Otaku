@@ -78,6 +78,7 @@ class WatchlistPlayer(player):
             try:
                 self.process_embed('aniwave')
                 self.process_embed('hianime')
+                self.process_embed('animekai')
                 self.process_aniskip()
                 self.process_animeskip()
                 self._skip_processed = True

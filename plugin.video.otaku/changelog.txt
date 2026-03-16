@@ -1,3 +1,8 @@
+Changelog v5.2.82 (2026-03-16):
+- Added new embed scraper with full search, episode mapping, and server resolution
+- New scraper supports skip intro/outro times
+- Added provider toggle in settings (default off)
+
 Changelog v5.2.81 (2026-03-13):
 - Added nekoBT torrent scraper with full API integration (media_id resolution, episode_ids filtering, multi-query parallel search)
 - nekoBT uses TVDB matching via mapping database for precise media identification

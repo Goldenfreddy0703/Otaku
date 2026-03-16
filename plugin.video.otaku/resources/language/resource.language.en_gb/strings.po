@@ -1848,3 +1848,7 @@ msgstr ""
 msgctxt "#30457"
 msgid "nekoBT"
 msgstr ""
+
+msgctxt "#30458"
+msgid "AnimeKAI"
+msgstr ""

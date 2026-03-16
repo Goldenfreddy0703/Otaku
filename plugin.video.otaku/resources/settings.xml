@@ -857,6 +857,11 @@
 						<hidevalue>true</hidevalue>
 					</control>
 				</setting>
+				<setting id="provider.animekai" type="boolean" label="30458" help="">
+					<level>0</level>
+					<default>true</default>
+					<control type="toggle"/>
+				</setting>
 				<setting id="provider.animepahe" type="boolean" label="30237" help="">
 					<level>0</level>
 					<default>true</default>
@@ -3876,6 +3881,26 @@
 					<control type="edit" format="integer"/>
 				</setting>
 				<setting id="hianime.skipoutro.start" type="integer" label="" help="">
+					<level>4</level>
+					<default>0</default>
+					<control type="edit" format="integer"/>
+				</setting>
+				<setting id="animekai.skipintro.end" type="integer" label="" help="">
+					<level>4</level>
+					<default>0</default>
+					<control type="edit" format="integer"/>
+				</setting>
+				<setting id="animekai.skipintro.start" type="integer" label="" help="">
+					<level>4</level>
+					<default>0</default>
+					<control type="edit" format="integer"/>
+				</setting>
+				<setting id="animekai.skipoutro.end" type="integer" label="" help="">
+					<level>4</level>
+					<default>0</default>
+					<control type="edit" format="integer"/>
+				</setting>
+				<setting id="animekai.skipoutro.start" type="integer" label="" help="">
 					<level>4</level>
 					<default>0</default>
 					<control type="edit" format="integer"/>

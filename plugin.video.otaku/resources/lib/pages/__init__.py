@@ -1,7 +1,7 @@
 import threading
 import time
 
-from resources.lib.pages import nyaa, animetosho, nekobt, debrid_cloudfiles, animixplay, aniwave, animepahe, hianime, watchnixtoons2, localfiles
+from resources.lib.pages import nyaa, animetosho, nekobt, debrid_cloudfiles, animixplay, aniwave, animepahe, hianime, animekai, watchnixtoons2, localfiles
 from resources.lib.ui import control, database
 from resources.lib.windows.get_sources_window import GetSources
 from resources.lib.windows import sort_select
@@ -42,7 +42,7 @@ class Sources(GetSources):
     def __init__(self, xml_file, location, actionArgs=None):
         super(Sources, self).__init__(xml_file, location, actionArgs)
         self.torrentProviders = ['nyaa', 'animetosho', 'nekobt']
-        self.embedProviders = ['animepahe', 'animix', 'aniwave', 'hianime', 'watchnixtoons2']
+        self.embedProviders = ['animepahe', 'animix', 'aniwave', 'hianime', 'animekai', 'watchnixtoons2']
         self.CloudProviders = ['Cloud Inspection']
         self.localProviders = ['Local Inspection']
         self.remainingProviders = self.embedProviders + self.torrentProviders + self.localProviders + self.CloudProviders
@@ -79,12 +79,16 @@ class Sources(GetSources):
         control.setInt('hianime.skipintro.end', -1)
         control.setInt('aniwave.skipintro.start', -1)
         control.setInt('aniwave.skipintro.end', -1)
+        control.setInt('animekai.skipintro.start', -1)
+        control.setInt('animekai.skipintro.end', -1)
 
         # set skipoutro times to -1 before scraping
         control.setInt('hianime.skipoutro.start', -1)
         control.setInt('hianime.skipoutro.end', -1)
         control.setInt('aniwave.skipoutro.start', -1)
         control.setInt('aniwave.skipoutro.end', -1)
+        control.setInt('animekai.skipoutro.start', -1)
+        control.setInt('animekai.skipoutro.end', -1)
 
         enabled_debrids = control.enabled_debrid()
         enabled_clouds = control.enabled_cloud()
@@ -172,6 +176,13 @@ class Sources(GetSources):
             self.threads.append(t)
         else:
             self.remainingProviders.remove('hianime')
+
+        if control.getBool('provider.animekai'):
+            t = threading.Thread(target=self.animekai_worker, args=(mal_id, episode, rescrape))
+            t.start()
+            self.threads.append(t)
+        else:
+            self.remainingProviders.remove('animekai')
 
         if control.getBool('provider.watchnixtoons2'):
             t = threading.Thread(target=self.watchnixtoons2_worker, args=(mal_id, episode, media_type, rescrape))
@@ -313,6 +324,22 @@ class Sources(GetSources):
                     control.setInt('hianime.skipoutro.start', int(x['skip']['outro']['start']))
                     control.setInt('hianime.skipoutro.end', int(x['skip']['outro']['end']))
         self.remainingProviders.remove('hianime')
+
+    def animekai_worker(self, mal_id, episode, rescrape):
+        if rescrape:
+            animekai_sources = animekai.Sources().get_sources(mal_id, episode)
+        else:
+            animekai_sources = database.get(animekai.Sources().get_sources, 8, mal_id, episode, key='animekai')
+        self.embedSources += animekai_sources
+        for x in animekai_sources:
+            if x.get('skip'):
+                if x['skip'].get('intro') and x['skip']['intro']['start'] != 0:
+                    control.setInt('animekai.skipintro.start', int(x['skip']['intro']['start']))
+                    control.setInt('animekai.skipintro.end', int(x['skip']['intro']['end']))
+                if x['skip'].get('outro') and x['skip']['outro']['start'] != 0:
+                    control.setInt('animekai.skipoutro.start', int(x['skip']['outro']['start']))
+                    control.setInt('animekai.skipoutro.end', int(x['skip']['outro']['end']))
+        self.remainingProviders.remove('animekai')
 
     def watchnixtoons2_worker(self, mal_id, episode, media_type, rescrape):
         if rescrape:
