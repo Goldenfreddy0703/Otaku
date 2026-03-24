@@ -11,7 +11,8 @@ from resources.lib.ui.megacloud_extractor import extract_megacloud_sources
 
 
 class Sources(BrowserBase):
-    _BASE_URL = 'https://hianime.sx/' if control.getBool('provider.hianimealt') else 'https://hianime.to/'
+    # _BASE_URL = 'https://hianime.sx/' if control.getBool('provider.hianimealt') else 'https://hianime.to/'
+    _BASE_URL = 'https://aniwatchtv.to/'
 
     def get_sources(self, mal_id, episode):
         control.log(f"HiAnime: Getting sources for MAL ID {mal_id}, Episode {episode}")
@@ -82,57 +83,58 @@ class Sources(BrowserBase):
             self._BASE_URL + 'ajax/v2/episode/list/' + slug.split('-')[-1],
             headers=headers
         )
-        res = json.loads(r).get('html')
-        elink = SoupStrainer('div', {'class': re.compile('^ss-list')})
-        ediv = BeautifulSoup(res, "html.parser", parse_only=elink)
-        items = ediv.find_all('a')
-        e_id = [x.get('data-id') for x in items if int(x.get('data-number')) == int(episode)]
-        if e_id:
-            params = {'episodeId': e_id[0]}
-            r = database.get(
-                self._get_request,
-                8,
-                self._BASE_URL + 'ajax/v2/episode/servers',
-                data=params,
-                headers=headers
-            )
-            eres = json.loads(r).get('html')
+        if r:
+            res = json.loads(r).get('html')
+            elink = SoupStrainer('div', {'class': re.compile('^ss-list')})
+            ediv = BeautifulSoup(res, "html.parser", parse_only=elink)
+            items = ediv.find_all('a')
+            e_id = [x.get('data-id') for x in items if int(x.get('data-number')) == int(episode)]
+            if e_id:
+                params = {'episodeId': e_id[0]}
+                r = database.get(
+                    self._get_request,
+                    8,
+                    self._BASE_URL + 'ajax/v2/episode/servers',
+                    data=params,
+                    headers=headers
+                )
+                eres = json.loads(r).get('html')
 
-            # Process each language sequentially (to respect user preferences)
-            for lang in langs:
-                elink = SoupStrainer('div', {'data-type': lang})
-                sdiv = BeautifulSoup(eres, "html.parser", parse_only=elink)
-                srcs = sdiv.find_all('div', {'class': 'item'})
+                # Process each language sequentially (to respect user preferences)
+                for lang in langs:
+                    elink = SoupStrainer('div', {'class': re.compile(r'servers-{}'.format(lang))})
+                    sdiv = BeautifulSoup(eres, "html.parser", parse_only=elink)
+                    srcs = sdiv.find_all('div', {'class': 'item'})
 
-                # Filter servers to only those in embeds
-                valid_servers = []
-                for src in srcs:
-                    edata_id = src.get('data-id')
-                    edata_name = src.text.strip().lower()
-                    if edata_name in self.embeds():
-                        valid_servers.append({'id': edata_id, 'name': edata_name, 'lang': lang})
+                    # Filter servers to only those in embeds
+                    valid_servers = []
+                    for src in srcs:
+                        edata_id = src.get('data-id')
+                        edata_name = src.text.strip().lower()
+                        if edata_name in self.embeds():
+                            valid_servers.append({'id': edata_id, 'name': edata_name, 'lang': lang})
 
-                if not valid_servers:
-                    control.log(f"HiAnime: No valid servers found for '{lang}'")
-                    continue
+                    if not valid_servers:
+                        control.log(f"HiAnime: No valid servers found for '{lang}'")
+                        continue
 
-                control.log(f"HiAnime: Processing {len(valid_servers)} servers for '{lang}' in parallel")
+                    control.log(f"HiAnime: Processing {len(valid_servers)} servers for '{lang}' in parallel")
 
-                # Process servers in parallel for this language
-                def process_server(server_info):
-                    return self._extract_hianime_source(server_info, title, episode, headers)
+                    # Process servers in parallel for this language
+                    def process_server(server_info):
+                        return self._extract_hianime_source(server_info, title, episode, headers)
 
-                # Process servers in parallel and get first successful result
-                server_sources = utils.parallel_process(valid_servers, process_server, max_workers=3)
+                    # Process servers in parallel and get first successful result
+                    server_sources = utils.parallel_process(valid_servers, process_server, max_workers=3)
 
-                # Add all sources from this language
-                for server_source in server_sources:
-                    if server_source:
-                        sources.extend(server_source)
+                    # Add all sources from this language
+                    for server_source in server_sources:
+                        if server_source:
+                            sources.extend(server_source)
 
-                # If we found sources for this language, we can continue to next language
-                if sources:
-                    control.log(f"HiAnime: Found {len(sources)} sources for '{lang}'")
+                    # If we found sources for this language, we can continue to next language
+                    if sources:
+                        control.log(f"HiAnime: Found {len(sources)} sources for '{lang}'")
 
         return sources
 

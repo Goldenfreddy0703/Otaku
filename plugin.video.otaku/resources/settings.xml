@@ -820,7 +820,7 @@
 			<group id="2" label="30131" help="">
 				<setting id="embed.config" type="list[string]" label="30389" help="">
 					<level>0</level>
-					<default>doodstream,filelions,filemoon,hd-1,hd-2,hd-3,iga,kwik,megaf,moonf,mp4upload,mp4u,mycloud,noads,noadsalt,swish,streamtape,streamwish,vidcdn,vidhide,vidplay,vidstream,yourupload,zto</default>
+					<default>doodstream,filelions,filemoon,hd-1,hd-2,hd-3,iga,kwik,megacloud,megaf,moonf,mp4upload,mp4u,mycloud,noads,noadsalt,swish,streamtape,streamwish,t-cloud,vidcdn,vidhide,vidplay,vidsrc,vidstream,yourupload,zto</default>
 					<constraints>
 						<options sort="ascending">
 							<option>doodstream</option>
@@ -831,6 +831,7 @@
 							<option>hd-3</option>
 							<option>iga</option>
 							<option>kwik</option>
+							<option>megacloud</option>
 							<option>megaf</option>
 							<option>moonf</option>
 							<option>mp4upload</option>
@@ -841,9 +842,11 @@
 							<option>swish</option>
 							<option>streamtape</option>
 							<option>streamwish</option>
+							<option>t-cloud</option>
 							<option>vidcdn</option>
 							<option>vidhide</option>
 							<option>vidplay</option>
+							<option>vidsrc</option>
 							<option>vidstream</option>
 							<option>yourupload</option>
 							<option>zto</option>

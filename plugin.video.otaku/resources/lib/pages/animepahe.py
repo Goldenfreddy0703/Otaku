@@ -91,7 +91,6 @@ class Sources(BrowserBase):
             mdiv = BeautifulSoup(html, "html.parser", parse_only=mlink)
             items = mdiv.find_all('button')
 
-
             for item in items:
                 if any(x in item.get('data-src').lower() for x in self.embeds()):
 

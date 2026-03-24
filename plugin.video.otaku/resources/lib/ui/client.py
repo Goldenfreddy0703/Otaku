@@ -373,18 +373,22 @@ def request(
         # Parse domain for session management
         uri = urllib.parse.urlparse(url)
         domain = uri.scheme + '://' + uri.netloc
+        system_proxy = urllib.request.getproxies()
 
         # === FAST PATH: use keep-alive pool for session requests without special features ===
-        _can_fast = (
-            use_session
-            and proxy is None
-            and redirect is not False
-            and tls_version is None
-            and verify is True
-            and output in ('', 'extended')
-            and limit is None
-        )
+        _can_fast = all([
+            use_session,
+            proxy is None,
+            system_proxy == {},
+            redirect,
+            tls_version is None,
+            verify,
+            output in ['', 'extended'],
+            limit is None
+        ])
+
         if _can_fast:
+            control.log('Can Fast', level='info')
             # Build minimal headers
             if params is not None:
                 if isinstance(params, dict):
