@@ -143,8 +143,11 @@ class BrowserBase(object):
     def embeds():
         return control.getStringList('embed.config')
 
-    # control.setStringList('embed.config', ['bunny', 'doodstream', 'filelions', 'filemoon', 'hd-2',
-    #                       'iga', 'kwik', 'megaf', 'moonf', 'mp4upload', 'mp4u',
-    #                       'mycloud', 'noads', 'noadsalt', 'swish', 'streamtape',
-    #                       'streamwish', 'vidcdn', 'vidhide', 'vidplay', 'vidstream',
-    #                       'yourupload', 'zto'])
+    # Enable all embed servers options after update
+    embed_servers = [
+        'doodstream', 'filelions', 'filemoon', 'hd-1', 'hd-2', 'hd-3', 'iga', 'kwik',
+        'megacloud', 'megaf', 'moonf', 'mp4upload', 'mp4u', 'mycloud', 'noads',
+        'noadsalt', 'swish', 'streamtape', 'streamwish', 't-cloud', 'vidcdn',
+        'vidhide', 'vidplay', 'vidsrc', 'vidstream', 'yourupload', 'zto'
+    ]
+    control.setStringList('embed.config',(embed_servers))

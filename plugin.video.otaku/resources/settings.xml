@@ -906,14 +906,6 @@
 					<default>true</default>
 					<control type="toggle"/>
 				</setting>
-				<setting id="provider.hianimealt" type="boolean" label="30241" help="" parent="provider.hianime">
-					<level>0</level>
-					<default>false</default>
-					<control type="toggle"/>
-					<dependencies>
-						<dependency type="visible" setting="provider.hianime">true</dependency>
-					</dependencies>
-				</setting>
 				<setting id="provider.watchnixtoons2" type="boolean" label="30379" help="">
 					<level>0</level>
 					<default>true</default>

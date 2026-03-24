@@ -1,3 +1,6 @@
+Changelog v5.2.83 (2026-03-24):
+- Fixed and updated an embed scrapper
+
 Changelog v5.2.82 (2026-03-16):
 - Added new embed scraper with full search, episode mapping, and server resolution
 - New scraper supports skip intro/outro times

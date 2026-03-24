@@ -11,7 +11,6 @@ from resources.lib.ui.megacloud_extractor import extract_megacloud_sources
 
 
 class Sources(BrowserBase):
-    # _BASE_URL = 'https://hianime.sx/' if control.getBool('provider.hianimealt') else 'https://hianime.to/'
     _BASE_URL = 'https://aniwatchtv.to/'
 
     def get_sources(self, mal_id, episode):
