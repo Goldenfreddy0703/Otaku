@@ -681,3 +681,13 @@ def print(string, *args):
         string = f'{string} {i}'
     textviewer_dialog('print', f'{string}')
     del args, string
+
+def timeIt(func):
+    # Thanks to 123Venom
+    import time
+    def wrap(*args, **kwargs):
+        started_at = time.perf_counter()
+        result = func(*args, **kwargs)
+        log(f">> {__name__}.{func.__name__} <<: {time.perf_counter() - started_at}")
+        return result
+    return wrap

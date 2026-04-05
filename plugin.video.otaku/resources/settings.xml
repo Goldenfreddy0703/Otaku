@@ -4121,6 +4121,13 @@
 					<default>0</default>
 					<control type="edit" format="integer"/>
 				</setting>
+				<setting id="april_fools_day" type="string" label="" help="">
+					<level>4</level>
+					<default/>
+					<constraints>
+						<allowempty>true</allowempty>
+					</constraints>
+				</setting>
 				<setting id="version" type="string" label="" help="">
 					<level>4</level>
 					<default/>

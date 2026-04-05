@@ -5,6 +5,8 @@ Handles table creation and schema versioning.
 Called from ``service.py`` on every addon startup.
 """
 
+
+from datetime import datetime
 from resources.lib.ui import control
 
 try:
@@ -28,6 +30,15 @@ class SyncDatabase:
 
     def __init__(self):
         self.activites = None
+
+        # ─── April Fools' Day: Set browser.api to anilist on April 1st ───
+        today = datetime.now()
+        if today.month == 4 and today.day == 1:
+            april_fools_flag = control.getSetting('april_fools_day')
+            if april_fools_flag != str(today.year):
+                control.setSetting('browser.api', 'anilist')
+                control.setSetting('april_fools_day', str(today.year))
+                SyncDatabase().re_build_database(True)
 
         # --- create every table the addon needs ---
         self._create_all_tables()
