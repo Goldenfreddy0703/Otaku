@@ -11,7 +11,7 @@ class WatchlistFlavor:
         'on_hold':       {'anilist': 'PAUSED',    'mal': 'on_hold',       'kitsu': 'on_hold',   'simkl': 'hold'},
         'dropped':       {'anilist': 'DROPPED',   'mal': 'dropped',       'kitsu': 'dropped',   'simkl': 'dropped'},
         'plan_to_watch': {'anilist': 'PLANNING',  'mal': 'plan_to_watch', 'kitsu': 'planned',   'simkl': 'plantowatch'},
-        'rewatching':    {'anilist': 'REPEATING',  'mal': 'watching',      'kitsu': 'current',   'simkl': 'watching'},
+        'rewatching':    {'anilist': 'REPEATING', 'mal': 'watching',      'kitsu': 'current',   'simkl': 'watching'},
     }
 
     def __init__(self):

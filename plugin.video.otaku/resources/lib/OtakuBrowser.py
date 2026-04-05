@@ -1555,7 +1555,7 @@ class OtakuBrowser(BrowserBase):
         max_pages = min(5, len(mal_ids) // 50 + 2)  # +2 for safety margin
 
         page_numbers = list(range(2, max_pages + 1))
-        all_page_results = utils.parallel_process(page_numbers, fetch_page, max_workers=5)
+        all_page_results = utils.parallel_process(page_numbers, fetch_page)
 
         # Combine all results
         for page_media in all_page_results:

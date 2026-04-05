@@ -149,7 +149,7 @@ class Sources(BrowserBase):
                         return self._extract_aniwave_source(server_info, title, episode, headers.copy())
 
                     # Process servers in parallel
-                    server_sources = utils.parallel_process(valid_servers, process_server, max_workers=3)
+                    server_sources = utils.parallel_process(valid_servers, process_server)
 
                     # Add all sources from this language
                     for server_source in server_sources:

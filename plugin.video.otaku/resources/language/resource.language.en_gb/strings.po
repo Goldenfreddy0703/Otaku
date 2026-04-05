@@ -1852,3 +1852,7 @@ msgstr ""
 msgctxt "#30458"
 msgid "AnimeKAI"
 msgstr ""
+
+msgctxt "#30459"
+msgid "Enable Kodi Cache"
+msgstr ""

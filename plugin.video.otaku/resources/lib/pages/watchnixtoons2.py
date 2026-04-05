@@ -157,7 +157,7 @@ class Sources(BrowserBase):
             return self._search_and_get_episode(search_title, season, mapped_episode, search_type)
 
         # Process searches concurrently
-        with ThreadPoolExecutor(max_workers=3) as executor:
+        with ThreadPoolExecutor(max_workers=control.max_threads) as executor:
             future_to_search = {executor.submit(search_title_worker, search_data): search_data for search_data in search_titles}
 
             for future in as_completed(future_to_search):
@@ -213,7 +213,7 @@ class Sources(BrowserBase):
             return None
 
         # Process episodes concurrently for faster source extraction
-        with ThreadPoolExecutor(max_workers=2) as executor:
+        with ThreadPoolExecutor(max_workers=control.max_threads) as executor:
             future_to_episode = {executor.submit(extract_sources_worker, episode_data): episode_data for episode_data in found_episodes.values()}
 
             for future in as_completed(future_to_episode):
@@ -454,7 +454,7 @@ class Sources(BrowserBase):
 
                     # Process iframes concurrently
                     if promising_iframes:
-                        with ThreadPoolExecutor(max_workers=2) as executor:
+                        with ThreadPoolExecutor(max_workers=control.max_threads) as executor:
                             iframe_futures = {executor.submit(process_iframe_worker, iframe_url): iframe_url for iframe_url in promising_iframes}
 
                             for future in as_completed(iframe_futures):

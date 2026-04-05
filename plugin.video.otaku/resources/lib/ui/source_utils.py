@@ -1,3 +1,19 @@
+"""source_utils.py - Source Quality & Filtering Engine
+=====================================================
+Detects video quality, codec, audio format, and subtitle info from
+release titles.  Provides regex-based torrent filtering, fuzzy matching,
+and file-selection helpers used by the resolver pipeline.
+
+Sections
+--------
+Quality & Info Detection   - getQuality, getAudio_lang, getInfo, etc.
+Episode Regex              - get_cache_check_reg, convert_to_bytes, get_size
+Fuzzy Matching             - get_fuzzy_match, get_best_match
+Torrent Filtering          - filter_sources (season / episode / part regex)
+Text Cleaning              - remove_patterns, cleanup_text, clean_text, cleanTitle
+File Utilities             - is_file_ext_valid, video_ext, user_select, get_embedhost
+"""
+
 import re
 import string
 import xbmc
@@ -7,6 +23,10 @@ from resources.lib.ui import control
 
 res = ['EQ', '480p', '720p', '1080p', '4k']
 
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  Quality & Info Detection
+# ═══════════════════════════════════════════════════════════════════════════
 
 def getAudio_lang(release_title):
     release_title = cleanTitle(release_title)
@@ -56,141 +76,80 @@ def getQuality(release_title):
     return quality
 
 
+# Tag-detection table: (label, [keywords...])
+# Checked in order — first match per label wins.
+_INFO_TAGS = (
+    # ── Video Codec ──
+    ('AVC',         ['x264', 'x 264', 'h264', 'h 264', 'avc']),
+    ('HEVC',        ['x265', 'x 265', 'h265', 'h 265', 'hevc']),
+    ('XVID',        ['xvid']),
+    ('DIVX',        ['divx']),
+    ('MP4',         ['mp4']),
+    ('WMV',         ['wmv']),
+    ('MPEG',        ['mpeg']),
+    ('VP9',         ['vp9']),
+    ('AV1',         ['av1']),
+    ('REMUX',       ['remux', 'bdremux']),
+    ('HDR',         [' hdr ', 'hdr10', 'hdr 10', 'uhd bluray 2160p', 'uhd blu ray 2160p',
+                     '2160p uhd bluray', '2160p uhd blu ray', '2160p bluray hevc truehd',
+                     '2160p bluray hevc dts', '2160p bluray hevc lpcm',
+                     '2160p us bluray hevc truehd', '2160p us bluray hevc dts']),
+    ('SDR',         [' sdr ']),
+    ('DV',          [' dv ', 'dovi', 'dolby vision', 'dolbyvision']),
+    # ── Audio Codec ──
+    ('AAC',         ['aac']),
+    ('DTS',         ['dts']),
+    ('DTS-HDMA',    ['hd ma', 'hdma']),
+    ('DTS-HDHR',    ['hd hr', 'hdhr', 'dts hr', 'dtshr']),
+    ('DTS-X',       ['dtsx', ' dts x']),
+    ('ATMOS',       ['atmos']),
+    ('TRUEHD',      ['truehd', 'true hd']),
+    ('DD+',         ['ddp', 'dd+', 'eac3', ' e ac3', ' e ac 3']),
+    ('DD',          [' dd ', 'dd2', 'dd5', 'dd7', ' ac3', ' ac 3']),
+    ('MP3',         ['mp3']),
+    ('WMA',         [' wma']),
+    ('OPUS',        ['opus']),
+    ('DUB',         ['dub', 'dubbed']),
+    ('DUAL-AUDIO',  ['dual audio']),
+    ('MULTI-AUDIO', ['multi audio', 'multi lang', 'multiple audio', 'multiple lang']),
+    # ── Channels ──
+    ('2.0',         ['2 0 ', '2 0ch', '2ch']),
+    ('5.1',         ['5 1 ', '5 1ch', '6ch']),
+    ('7.1',         ['7 1 ', '7 1ch', '8ch']),
+    # ── Subtitles ──
+    ('MULTI-SUB',   ['multi sub', 'multiple sub']),
+    # ── Source ──
+    ('BLURAY',      ['bluray', 'blu ray', 'bdrip', 'bd rip', 'brrip', 'br rip']),
+    ('WEB',         [' web ', 'webrip', 'webdl', 'web rip', 'web dl']),
+    ('HDRIP',       [' hdrip', ' hd rip']),
+    ('DVDRIP',      ['dvdrip', 'dvd rip']),
+    ('HDTV',        ['hdtv']),
+    ('PDTV',        ['pdtv']),
+    ('CAM',         [' cam ', 'camrip', 'hdcam', 'hd cam', ' ts ', 'hd ts', 'hdts',
+                     'telesync', ' tc ', 'hd tc', 'hdtc', 'telecine', 'xbet']),
+    ('SCR',         ['dvdscr', ' scr ', 'screener']),
+    ('HC',          ['korsub', ' kor ', ' hc']),
+    ('BLUR',        ['blurred']),
+    ('3D',          [' 3d', ' half ou', ' half sbs']),
+    ('60-FPS',      [' 60 fps', ' 60fps']),
+    # ── Batch ──
+    ('BATCH',       ['batch', 'complete series']),
+)
+
+
 def getInfo(release_title):
-    info = []
     release_title = cleanTitle(release_title)
-    # info.video
-    if any(i in release_title for i in ['x264', 'x 264', 'h264', 'h 264', 'avc']):
-        info.append('AVC')
-    if any(i in release_title for i in ['x265', 'x 265', 'h265', 'h 265', 'hevc']):
-        info.append('HEVC')
-    if any(i in release_title for i in ['xvid']):
-        info.append('XVID')
-    if any(i in release_title for i in ['divx']):
-        info.append('DIVX')
-    if any(i in release_title for i in ['mp4']):
-        info.append('MP4')
-    if any(i in release_title for i in ['wmv']):
-        info.append('WMV')
-    if any(i in release_title for i in ['mpeg']):
-        info.append('MPEG')
-    if any(i in release_title for i in ['vp9']):
-        info.append('VP9')
-    if any(i in release_title for i in ['av1']):
-        info.append('AV1')
-    if any(i in release_title for i in ['remux', 'bdremux']):
-        info.append('REMUX')
-    if any(i in release_title for i in [' hdr ', 'hdr10', 'hdr 10', 'uhd bluray 2160p', 'uhd blu ray 2160p', '2160p uhd bluray', '2160p uhd blu ray', '2160p bluray hevc truehd', '2160p bluray hevc dts', '2160p bluray hevc lpcm', '2160p us bluray hevc truehd', '2160p us bluray hevc dts']):
-        info.append('HDR')
-    if any(i in release_title for i in [' sdr ']):
-        info.append('SDR')
-    if any(i in release_title for i in [' dv ', 'dovi', 'dolby vision', 'dolbyvision']):
-        info.append('DV')
+    return [label for label, keywords in _INFO_TAGS
+            if any(kw in release_title for kw in keywords)]
 
-    # info.audio
-    if any(i in release_title for i in ['aac']):
-        info.append('AAC')
-    if any(i in release_title for i in ['dts']):
-        info.append('DTS')
-    if any(i in release_title for i in ['hd ma', 'hdma']):
-        info.append('DTS-HDMA')
-    if any(i in release_title for i in ['hd hr', 'hdhr', 'dts hr', 'dtshr']):
-        info.append('DTS-HDHR')
-    if any(i in release_title for i in ['dtsx', ' dts x']):
-        info.append('DTS-X')
-    if any(i in release_title for i in ['atmos']):
-        info.append('ATMOS')
-    if any(i in release_title for i in ['truehd', 'true hd']):
-        info.append('TRUEHD')
-    if any(i in release_title for i in ['ddp', 'dd+', 'eac3', ' e ac3', ' e ac 3']):
-        info.append('DD+')
-    if any(i in release_title for i in [' dd ', 'dd2', 'dd5', 'dd7', ' ac3', ' ac 3']):
-        info.append('DD')
-    if any(i in release_title for i in ['mp3']):
-        info.append('MP3')
-    if any(i in release_title for i in [' wma']):
-        info.append('WMA')
-    if any(i in release_title for i in ['opus']):
-        info.append('OPUS')
-    if any(i in release_title for i in ['dub', 'dubbed']):
-        info.append('DUB')
-    if any(i in release_title for i in ['dual audio']):
-        info.append('DUAL-AUDIO')
-    if any(i in release_title for i in ['multi audio', 'multi lang', 'multiple audio', 'multiple lang']):
-        info.append('MULTI-AUDIO')
 
-    # info.channels
-    if any(i in release_title for i in ['2 0 ', '2 0ch', '2ch']):
-        info.append('2.0')
-    if any(i in release_title for i in ['5 1 ', '5 1ch', '6ch']):
-        info.append('5.1')
-    if any(i in release_title for i in ['7 1 ', '7 1ch', '8ch']):
-        info.append('7.1')
-
-    # info.subtitles
-    if any(i in release_title for i in ['multi sub', 'multiple sub']):
-        info.append('MULTI-SUB')
-
-    # info.source
-    # no point at all with WEBRip vs WEB-DL cuz it's always labeled wrong with TV Shows
-    # WEB = WEB-DL in terms of size and quality
-    if any(i in release_title for i in ['bluray', 'blu ray', 'bdrip', 'bd rip', 'brrip', 'br rip']):
-        info.append('BLURAY')
-    if any(i in release_title for i in [' web ', 'webrip', 'webdl', 'web rip', 'web dl']):
-        info.append('WEB')
-    if any(i in release_title for i in [' hdrip', ' hd rip']):
-        info.append('HDRIP')
-    if any(i in release_title for i in ['dvdrip', 'dvd rip']):
-        info.append('DVDRIP')
-    if any(i in release_title for i in ['hdtv']):
-        info.append('HDTV')
-    if any(i in release_title for i in ['pdtv']):
-        info.append('PDTV')
-    if any(i in release_title for i in [' cam ', 'camrip', 'hdcam', 'hd cam', ' ts ', 'hd ts', 'hdts', 'telesync', ' tc ', 'hd tc', 'hdtc', 'telecine', 'xbet']):
-        info.append('CAM')
-    if any(i in release_title for i in ['dvdscr', ' scr ', 'screener']):
-        info.append('SCR')
-    if any(i in release_title for i in ['korsub', ' kor ', ' hc']):
-        info.append('HC')
-    if any(i in release_title for i in ['blurred']):
-        info.append('BLUR')
-    if any(i in release_title for i in [" 3d", " half ou", " half sbs"]):
-        info.append('3D')
-    if any(i in release_title for i in [" 60 fps", " 60fps"]):
-        info.append('60-FPS')
-
-    # info.batch
-    if any(i in release_title for i in ['batch', 'complete series']):
-        info.append('BATCH')
-
-    return info
-
+# ═══════════════════════════════════════════════════════════════════════════
+#  Episode Regex & Size Helpers
+# ═══════════════════════════════════════════════════════════════════════════
 
 def get_cache_check_reg(episode):
-    # playList = control.playList
-    # playList_position = playList.getposition()
-    # if playList_position != -1:
-    #     info = playList[playList_position].getVideoInfoTag()
-    #     season = str(info.getSeason()).zfill(2)
-    # else:
-    #     season = ''
     episode = str(episode)
     season = ''
-    # if control.getBool('regex.question'):
-    #     reg_string = r'''(?ix)                              # Ignore case (i), and use verbose regex (x)
-    #                  (?:                                    # non-grouping pattern
-    #                    s|season                             # s or season
-    #                    )?
-    #                  ({})?                                  # season num format
-    #                  (?:                                    # non-grouping pattern
-    #                    e|x|episode|ep|ep\.|_|-|\(           # e or x or episode or start of a line
-    #                    )?                                   # end non-grouping pattern
-    #                  \s*                                    # 0-or-more whitespaces
-    #                  (?<![\d])
-    #                  ({}|{})                                # episode num format: xx or xxx
-    #                  (?![\d])
-    #                  '''.format(season, episode.zfill(2), episode.zfill(3))
-    # else:
     reg_string = r'''(?ix)                              # Ignore case (i), and use verbose regex (x)
                  (?:                                    # non-grouping pattern
                    s|season                             # s or season
@@ -231,6 +190,10 @@ def get_size(size=0):
         n += 1
     return '{0:.2f} {1}'.format(size, power_labels[n])
 
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  Fuzzy Matching
+# ═══════════════════════════════════════════════════════════════════════════
 
 def get_fuzzy_match(query, filenames):
     """
@@ -352,6 +315,10 @@ def get_best_match(dict_key, dictionary_list, episode, pack_select=False):
 
     return files[0]
 
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  Torrent Filtering
+# ═══════════════════════════════════════════════════════════════════════════
 
 def filter_sources(provider, torrent_list, mal_id, season=None, episode=None, part=None, anidb_id=True):
     from resources.lib.ui import database
@@ -576,6 +543,10 @@ def filter_sources(provider, torrent_list, mal_id, season=None, episode=None, pa
     return filtered
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+#  Text Cleaning
+# ═══════════════════════════════════════════════════════════════════════════
+
 def remove_patterns(text):
     patterns = [
         r"\b(?:360p|480p|720p|1080p|2160p|4k)(?!\d)",
@@ -622,6 +593,10 @@ def cleanTitle(title):
     title = re.sub(r'&', 'and', title)
     return title.strip()
 
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  File Utilities
+# ═══════════════════════════════════════════════════════════════════════════
 
 def is_file_ext_valid(file_name):
     return False if '.' + file_name.split('.')[-1] not in video_ext() else True

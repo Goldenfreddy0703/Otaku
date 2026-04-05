@@ -1,3 +1,5 @@
+import pyqrcode
+import os
 import xbmcgui
 
 from resources.lib.ui import control
@@ -9,9 +11,19 @@ class WatchlistFlavorAuth(BaseWindow):
         super().__init__(xml_file, location)
         self.flavor = flavor
         self.authorized = False
-        control.closeBusyDialog()
 
     def onInit(self):
+        qr_path = os.path.join(control.dataPath, 'qr_code.png')
+        url = f"https://armkai.vercel.app/api/{self.flavor}"
+        copy = control.copy2clip(url)
+        if copy:
+            self.setProperty('copy2clip', control.lang(30083))
+        else:
+            self.clearProperty('copy2clip')
+        qr = pyqrcode.create(url)
+        qr.png(qr_path, scale=20)
+        self.setProperty('qr_code', qr_path)
+        control.closeBusyDialog()
         self.setFocusId(1000)
 
     def doModal(self):

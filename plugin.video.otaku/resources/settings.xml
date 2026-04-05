@@ -86,6 +86,11 @@
 					</constraints>
 					<control type="spinner" format="string"/>
 				</setting>
+				<setting id="general.kodi.cache" type="boolean" label="30459" help="">
+					<level>0</level>
+					<default>true</default>
+					<control type="toggle"/>
+				</setting>
 				<setting id="interface.watchlist.data" type="boolean" label="30112" help="">
 					<level>0</level>
 					<default>true</default>
@@ -967,36 +972,6 @@
 					<level>0</level>
 					<default>true</default>
 					<control type="toggle"/>
-				</setting>
-				<setting id="uncached.autoruninforground" type="boolean" label="30362" help="" parent="show.uncached">
-					<level>0</level>
-					<default>true</default>
-					<control type="toggle"/>
-					<dependencies>
-						<dependency type="visible" setting="show.uncached">true</dependency>
-						<dependency type="enable" setting="uncached.autoruninbackground">false</dependency>
-						<dependency type="enable" setting="uncached.autoskipuncached">false</dependency>
-					</dependencies>
-				</setting>
-				<setting id="uncached.autoruninbackground" type="boolean" label="30380" help="" parent="show.uncached">
-					<level>0</level>
-					<default>false</default>
-					<control type="toggle"/>
-					<dependencies>
-						<dependency type="visible" setting="show.uncached">true</dependency>
-						<dependency type="enable" setting="uncached.autoruninforground">false</dependency>
-						<dependency type="enable" setting="uncached.autoskipuncached">false</dependency>
-					</dependencies>
-				</setting>
-				<setting id="uncached.autoskipuncached" type="boolean" label="30397" help="" parent="show.uncached">
-					<level>0</level>
-					<default>false</default>
-					<control type="toggle"/>
-					<dependencies>
-						<dependency type="visible" setting="show.uncached">true</dependency>
-						<dependency type="enable" setting="uncached.autoruninforground">false</dependency>
-						<dependency type="enable" setting="uncached.autoruninbackground">false</dependency>
-					</dependencies>
 				</setting>
 			</group>
 

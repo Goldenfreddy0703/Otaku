@@ -15,11 +15,16 @@ class Premiumize:
         self.OauthTimeStep = 0
         self.OauthTimeout = 0
         self.OauthTotalTimeout = 0
+        self.dialog = None
 
     def headers(self):
         return {'Authorization': f"Bearer {self.token}"}
 
     def auth(self):
+        import pyqrcode
+        import os
+        from resources.lib.windows.progress_dialog import Progress_dialog
+
         data = {'client_id': self.client_id, 'response_type': 'device_code'}
         r = client.post('https://www.premiumize.me/token', json_data=data)
         resp = r.json() if r else {}
@@ -30,15 +35,26 @@ class Premiumize:
                           f"{control.lang(30082).format(control.colorstr(resp['user_code']))}")
         if copied:
             display_dialog = f"{display_dialog}[CR]{control.lang(30083)}"
-        control.progressDialog.create(f'{control.ADDON_NAME}: Premiumize Auth', display_dialog)
-        control.progressDialog.update(100)
+
+        qr_path = os.path.join(control.dataPath, 'qr_code.png')
+        qr = pyqrcode.create(resp['verification_uri'])
+        qr.png(qr_path, scale=20)
+        config = {
+            'heading': f'{control.ADDON_NAME}: Premiumize Auth',
+            'text': display_dialog,
+            'qr_code': qr_path,
+            'percent': 100
+        }
+        self.dialog = Progress_dialog('progress_dialog.xml', control.ADDON_PATH, config=config)
+        self.dialog.show()
 
         auth_done = False
         while not auth_done and self.OauthTimeout > 0:
             self.OauthTimeout -= self.OauthTimeStep
             control.sleep(self.OauthTimeStep * 1000)
             auth_done = self.auth_loop(resp['device_code'])
-        control.progressDialog.close()
+            self.dialog.update(int(self.OauthTimeout / self.OauthTotalTimeout * 100))
+        self.dialog.close()
 
         if auth_done:
             self.status()
@@ -56,10 +72,9 @@ class Premiumize:
             control.setSetting('premiumize.auth.status', 'Premium')
 
     def auth_loop(self, device_code):
-        if control.progressDialog.iscanceled():
+        if self.dialog.iscanceled():
             self.OauthTimeout = 0
             return False
-        control.progressDialog.update(int(self.OauthTimeout / self.OauthTotalTimeout * 100))
         data = {'client_id': self.client_id, 'code': device_code, 'grant_type': 'device_code'}
         r = client.post('https://www.premiumize.me/token', json_data=data)
         token = r.json() if r else {}

@@ -1,3 +1,23 @@
+"""
+control.py - Otaku Addon Control & Settings Layer
+==================================================
+Central hub for addon-wide constants, settings access, GUI helpers,
+directory listing, and Kodi integration utilities.
+
+Architecture
+------------
+Constants    - Addon ID, paths, database files, Kodi objects
+Settings     - Cached getters/setters (window property → in-memory → Kodi API)
+Logging      - Unified log() helper with level mapping
+Debrid/WL    - Helper functions for enabled services
+GUI/Dialogs  - Dialog wrappers, notifications, keyboard input
+VideoTags    - ListItem metadata builder (set_videotags)
+Directory    - draw_items / bulk_dir_list / xbmc_add_dir
+View Types   - Container view mode helpers
+Context Menu - process_context() for dynamic context menu caching
+Utilities    - Misc helpers (clipboard, color, refresh, abort)
+"""
+
 import random
 import xbmc
 import xbmcgui
@@ -9,10 +29,16 @@ import sys
 import json
 import shutil
 
+from concurrent.futures import ThreadPoolExecutor
 from urllib import parse
 
-# Session-based cache for artwork selections to avoid repeated random.choice() calls
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  Constants - Addon Identity & Paths
+# ═══════════════════════════════════════════════════════════════════════════
+
 _artwork_cache = {}
+max_threads = os.cpu_count()
 
 try:
     HANDLE = int(sys.argv[1])
@@ -36,7 +62,6 @@ pathExists = xbmcvfs.exists
 dataPath = xbmcvfs.translatePath(addonInfo('profile'))
 kodi_version = float(xbmcaddon.Addon('xbmc.addon').getAddonInfo('version')[:4])
 
-# In-memory settings cache — avoids repeated Kodi API calls
 _settings_cache = {}
 
 CONTEXT_ADDON_ID = 'context.otaku'
@@ -44,11 +69,13 @@ CONTEXT_ADDON = xbmcaddon.Addon(CONTEXT_ADDON_ID)
 CONTEXT_ADDON_PATH = CONTEXT_ADDON.getAddonInfo('path')
 infoDB = os.path.join(CONTEXT_ADDON_PATH, 'info.db')
 
+# — Database files —
 cacheFile = os.path.join(dataPath, 'cache.db')
 searchHistoryDB = os.path.join(dataPath, 'search.db')
 malSyncDB = os.path.join(dataPath, 'malSync.db')
 mappingDB = os.path.join(dataPath, 'mappings.db')
 
+# — JSON data files —
 maldubFile = os.path.join(dataPath, 'mal_dub.json')
 downloads_json = os.path.join(dataPath, 'downloads.json')
 completed_json = os.path.join(dataPath, 'completed.json')
@@ -58,10 +85,11 @@ watch_history_json = os.path.join(dataPath, 'watch_history.json')
 embeds_json = os.path.join(dataPath, 'embeds.json')
 animeschedule_calendar_json = os.path.join(dataPath, 'animeschedule_calendar.json')
 
-# Kodi system paths
+# — Kodi system paths —
 kodi_userdata_path = xbmcvfs.translatePath('special://userdata/')
 kodi_advancedsettings_path = os.path.join(kodi_userdata_path, 'advancedsettings.xml')
 
+# — Image / artwork paths —
 IMAGES_PATH = os.path.join(ADDON_PATH, 'resources', 'images')
 OTAKU_LOGO_PATH = os.path.join(ADDON_PATH, 'resources', 'images', 'trans-goku.png')
 OTAKU_LOGO2_PATH = os.path.join(ADDON_PATH, 'resources', 'images', 'trans-goku-small.png')
@@ -69,6 +97,7 @@ OTAKU_LOGO3_PATH = os.path.join(ADDON_PATH, 'resources', 'images', 'trans-goku-l
 OTAKU_ICONS_PATH = os.path.join(CONTEXT_ADDON_PATH, 'resources', 'images', 'icons', ADDON.getSetting("interface.icons"))
 OTAKU_GENRE_PATH = os.path.join(CONTEXT_ADDON_PATH, 'resources', 'images', 'genres')
 
+# — Kodi GUI objects —
 dialogWindow = xbmcgui.WindowDialog
 homeWindow = xbmcgui.Window(10000)
 menuItem = xbmcgui.ListItem
@@ -79,6 +108,10 @@ progressDialog = xbmcgui.DialogProgress()
 playList = xbmc.PlayList(xbmc.PLAYLIST_VIDEO)
 sleep = xbmc.sleep
 
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  Logging
+# ═══════════════════════════════════════════════════════════════════════════
 
 def closeBusyDialog():
     if xbmc.getCondVisibility('Window.IsActive(busydialog)'):
@@ -104,6 +137,10 @@ def log(msg, level="debug"):
 def bin(s):
     return s.encode('latin-1')
 
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  Debrid & Watchlist Helpers
+# ═══════════════════════════════════════════════════════════════════════════
 
 def enabled_debrid():
     debrids = ['realdebrid', 'debridlink', 'alldebrid', 'premiumize', 'torbox', 'easydebrid']
@@ -147,8 +184,15 @@ def refresh():
     execute('Container.Refresh')
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+#  Settings - Cached Getters & Setters
+# ═══════════════════════════════════════════════════════════════════════════
+
 def getSetting(key):
-    """Get setting as string - kept for backward compatibility"""
+    """Get setting as string - first checks window property cache, then Kodi API"""
+    cache = homeWindow.getProperty(f'{ADDON_ID}_{key}')
+    if cache:
+        return cache
     ck = f's_{key}'
     if ck in _settings_cache:
         return _settings_cache[ck]
@@ -158,7 +202,10 @@ def getSetting(key):
 
 
 def getBool(key):
-    """Get setting as boolean"""
+    """Get setting as boolean - first checks window property cache, then Kodi API"""
+    cache = homeWindow.getProperty(f'{ADDON_ID}_{key}')
+    if cache:
+        return cache == 'true'
     ck = f'b_{key}'
     if ck in _settings_cache:
         return _settings_cache[ck]
@@ -168,7 +215,13 @@ def getBool(key):
 
 
 def getInt(key):
-    """Get setting as integer"""
+    """Get setting as integer - first checks window property cache, then Kodi API"""
+    cache = homeWindow.getProperty(f'{ADDON_ID}_{key}')
+    if cache:
+        try:
+            return int(cache)
+        except ValueError:
+            pass
     ck = f'i_{key}'
     if ck in _settings_cache:
         return _settings_cache[ck]
@@ -178,7 +231,10 @@ def getInt(key):
 
 
 def getStr(key):
-    """Get setting as string"""
+    """Get setting as string - first checks window property cache, then Kodi API"""
+    cache = homeWindow.getProperty(f'{ADDON_ID}_{key}')
+    if cache:
+        return cache
     ck = f'gs_{key}'
     if ck in _settings_cache:
         return _settings_cache[ck]
@@ -188,7 +244,13 @@ def getStr(key):
 
 
 def getNumber(key):
-    """Get setting as float/number"""
+    """Get setting as float/number - first checks window property cache, then Kodi API"""
+    cache = homeWindow.getProperty(f'{ADDON_ID}_{key}')
+    if cache:
+        try:
+            return float(cache)
+        except ValueError:
+            pass
     ck = f'n_{key}'
     if ck in _settings_cache:
         return _settings_cache[ck]
@@ -198,59 +260,83 @@ def getNumber(key):
 
 
 def getStringList(settingid):
-    """Get setting as list of strings"""
+    """Get setting as list of strings - first checks window property cache, then Kodi API"""
+    cache = homeWindow.getProperty(f'{ADDON_ID}_{settingid}')
+    if cache:
+        try:
+            return json.loads(cache)
+        except (ValueError, TypeError):
+            pass
     return settings.getStringList(settingid)
 
 
 def getBoolList(settingid):
-    """Get setting as list of booleans"""
+    """Get setting as list of booleans - first checks window property cache, then Kodi API"""
+    cache = homeWindow.getProperty(f'{ADDON_ID}_{settingid}')
+    if cache:
+        try:
+            return json.loads(cache)
+        except (ValueError, TypeError):
+            pass
     return settings.getBoolList(settingid)
 
 
 def getIntList(settingid):
-    """Get setting as list of integers"""
+    """Get setting as list of integers - first checks window property cache, then Kodi API"""
+    cache = homeWindow.getProperty(f'{ADDON_ID}_{settingid}')
+    if cache:
+        try:
+            return json.loads(cache)
+        except (ValueError, TypeError):
+            pass
     return settings.getIntList(settingid)
 
 
 def getNumberList(settingid):
-    """Get setting as list of numbers"""
+    """Get setting as list of numbers - first checks window property cache, then Kodi API"""
+    cache = homeWindow.getProperty(f'{ADDON_ID}_{settingid}')
+    if cache:
+        try:
+            return json.loads(cache)
+        except (ValueError, TypeError):
+            pass
     return settings.getNumberList(settingid)
+
+
+def _evict_setting(settingid):
+    """Evict all cached variants of a setting key."""
+    for prefix in ('s_', 'gs_', 'b_', 'i_', 'n_'):
+        _settings_cache.pop(f'{prefix}{settingid}', None)
 
 
 def setSetting(settingid, value):
     """Set setting as string - kept for backward compatibility"""
     settings.setString(settingid, str(value))
-    # Evict all cached variants of this key
-    for prefix in ('s_', 'gs_', 'b_', 'i_', 'n_'):
-        _settings_cache.pop(f'{prefix}{settingid}', None)
+    _evict_setting(settingid)
 
 
 def setBool(settingid, value):
     """Set setting as boolean"""
     settings.setBool(settingid, value)
-    for prefix in ('s_', 'gs_', 'b_', 'i_', 'n_'):
-        _settings_cache.pop(f'{prefix}{settingid}', None)
+    _evict_setting(settingid)
 
 
 def setInt(settingid, value):
     """Set setting as integer"""
     settings.setInt(settingid, value)
-    for prefix in ('s_', 'gs_', 'b_', 'i_', 'n_'):
-        _settings_cache.pop(f'{prefix}{settingid}', None)
+    _evict_setting(settingid)
 
 
 def setStr(settingid, value):
     """Set setting as string"""
     settings.setString(settingid, value)
-    for prefix in ('s_', 'gs_', 'b_', 'i_', 'n_'):
-        _settings_cache.pop(f'{prefix}{settingid}', None)
+    _evict_setting(settingid)
 
 
 def setNumber(settingid, value):
     """Set setting as float/number"""
     settings.setNumber(settingid, value)
-    for prefix in ('s_', 'gs_', 'b_', 'i_', 'n_'):
-        _settings_cache.pop(f'{prefix}{settingid}', None)
+    _evict_setting(settingid)
 
 
 def setStringList(settingid, value):
@@ -278,6 +364,38 @@ def clearSettingsCache():
     _settings_cache.clear()
     _artwork_cache.clear()
 
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  Context Menu - Dynamic Property Caching
+# ═══════════════════════════════════════════════════════════════════════════
+
+def process_context():
+    """Cache context menu settings into window properties."""
+    context_settings = [
+        "context.otaku.findrecommendations",
+        "context.otaku.findrelations",
+        "context.otaku.getwatchorder",
+        "context.otaku.rescrape",
+        "context.otaku.sourceselect",
+        "context.otaku.logout",
+        "context.otaku.deletefromdatabase",
+        "context.otaku.watchlist",
+        "context.otaku.markedaswatched",
+        "context.otaku.fanartselect"
+    ]
+    for s_id in context_settings:
+        try:
+            cache_val = homeWindow.getProperty(s_id)
+            val = settings.getBool(s_id)
+            if cache_val != str(val).lower():
+                homeWindow.setProperty(s_id, str(val).lower())
+        except:
+            log(f'Failed to cache context setting: {s_id}', 'error')
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  Window Properties & URL Helpers
+# ═══════════════════════════════════════════════════════════════════════════
 
 def setGlobalProp(property, value):
     homeWindow.setProperty(property, str(value))
@@ -329,6 +447,10 @@ def keyboard(title, text=''):
     return keyboard_.getText() if keyboard_.isConfirmed() else ""
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+#  GUI - Dialogs & Notifications
+# ═══════════════════════════════════════════════════════════════════════════
+
 def closeAllDialogs():
     execute('Dialog.Close(all,true)')
 
@@ -372,6 +494,10 @@ def context_menu(context_list):
 def browse(type_, heading, shares, mask=''):
     return xbmcgui.Dialog().browse(type_, heading, shares, mask)
 
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  VideoTags - ListItem Metadata Builder
+# ═══════════════════════════════════════════════════════════════════════════
 
 def set_videotags(li, info):
     vinfo: xbmc.InfoTagVideo = li.getVideoInfoTag()
@@ -437,6 +563,10 @@ def set_videotags(li, info):
 def jsonrpc(json_data):
     return json.loads(xbmc.executeJSONRPC(json.dumps(json_data)))
 
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  Directory Listing - draw_items / bulk_dir_list / xbmc_add_dir
+# ═══════════════════════════════════════════════════════════════════════════
 
 def xbmc_add_dir(name, url, art, info, draw_cm, bulk_add, isfolder, isplayable):
     u = addon_url(url)
@@ -549,7 +679,11 @@ def draw_items(video_data, content_type=''):
 
     # move to episode position currently watching
     if content_type == "episodes" and getBool('general.smart.scroll.enable'):
-        xbmc.sleep(500)  # Delay to ensure episode list is fully rendered before trying to scroll
+        # Wait until the container has files (max ~750ms) instead of a fixed delay
+        for _ in range(15):
+            if xbmc.getCondVisibility("Container.HasFiles"):
+                break
+            xbmc.sleep(50)
         try:
             num_watched = int(xbmc.getInfoLabel("Container.TotalWatched"))
             total_ep = int(xbmc.getInfoLabel('Container(id).NumItems'))
@@ -569,8 +703,17 @@ def draw_items(video_data, content_type=''):
 
 
 def bulk_dir_list(video_data, bulk_add=True):
-    return [xbmc_add_dir(vid['name'], vid['url'], vid['image'], vid['info'], vid['cm'], bulk_add, vid['isfolder'], vid['isplayable']) for vid in video_data if vid]
+    with ThreadPoolExecutor(max_workers=max_threads) as executor:
+        list_items = list(executor.map(
+            lambda x: xbmc_add_dir(x['name'], x['url'], x['image'], x['info'], x['cm'], bulk_add, x['isfolder'], x['isplayable']),
+            [v for v in video_data if v]
+        ))
+    return list_items
 
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  View Types
+# ═══════════════════════════════════════════════════════════════════════════
 
 def get_view_type(viewtype):
     viewTypes = {
@@ -587,6 +730,10 @@ def get_view_type(viewtype):
     }
     return viewTypes[viewtype]
 
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  Utilities
+# ═══════════════════════════════════════════════════════════════════════════
 
 def clear_settings(silent=False):
     from resources.lib.ui.database_sync import SyncDatabase
@@ -682,9 +829,11 @@ def print(string, *args):
     textviewer_dialog('print', f'{string}')
     del args, string
 
+
 def timeIt(func):
     # Thanks to 123Venom
     import time
+
     def wrap(*args, **kwargs):
         started_at = time.perf_counter()
         result = func(*args, **kwargs)

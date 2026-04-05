@@ -1,5 +1,5 @@
 """
-database_sync.py – Otaku Database Schema Manager
+database_sync.py - Otaku Database Schema Manager
 =================================================
 Handles table creation and schema versioning.
 Called from ``service.py`` on every addon startup.

@@ -4,6 +4,7 @@ import json
 import urllib.request
 import urllib.error
 import threading
+import xbmc
 
 from resources.lib.ui import control, client, database_sync
 
@@ -236,8 +237,66 @@ def version_check():
         control.log(f"### {reuselang} Re-uselanguageinvoker")
 
 
+def load_settings():
+    """Load settings into Kodi window properties by parsing settings.xml."""
+    import xml.etree.ElementTree as ET
+
+    settings_path = os.path.join(control.ADDON_PATH, 'resources', 'settings.xml')
+    try:
+        tree = ET.parse(settings_path)
+        root = tree.getroot()
+    except Exception as e:
+        control.log(f'Failed to parse settings.xml: {e}', 'error')
+        return
+
+    for setting in root.iter('setting'):
+        s_id = setting.get('id')
+        s_type = setting.get('type')
+        if not s_id or s_type == 'action':
+            continue
+
+        prop_name = f"{control.ADDON_ID}_{s_id}"
+        try:
+            if s_type == 'boolean':
+                val_str = str(control.settings.getBool(s_id)).lower()
+            elif s_type == 'integer':
+                val_str = str(control.settings.getInt(s_id))
+            elif s_type == 'number':
+                val_str = str(control.settings.getNumber(s_id))
+            elif s_type in ('string', 'path', 'folder', 'file', 'addon'):
+                val_str = control.settings.getString(s_id)
+            elif s_type == 'list[boolean]':
+                val_str = json.dumps(control.settings.getBoolList(s_id))
+            elif s_type == 'list[integer]':
+                val_str = json.dumps(control.settings.getIntList(s_id))
+            elif s_type == 'list[string]':
+                val_str = json.dumps(control.settings.getStringList(s_id))
+            elif s_type == 'list[number]':
+                val_str = json.dumps(control.settings.getNumberList(s_id))
+            else:
+                continue
+
+            if control.homeWindow.getProperty(prop_name) != val_str:
+                control.homeWindow.setProperty(prop_name, val_str)
+        except:
+            pass
+
+
+class Monitor(xbmc.Monitor):
+    def __init__(self):
+        super().__init__()
+
+    def onSettingsChanged(self):
+        control.log('Setting Changed - Updating Settings Cache')
+        load_settings()
+        control.process_context()
+
+
 if __name__ == "__main__":
     control.log('##################  RUNNING MAINTENANCE  ######################')
+    if control.getBool('general.kodi.cache'):
+        load_settings()
+    control.process_context()
     version_check()
     database_sync.SyncDatabase()
     refresh_apis()
@@ -263,3 +322,5 @@ if __name__ == "__main__":
     # Prefetch watchlist in background thread (non-blocking)
     threading.Thread(target=prefetch_watchlist, daemon=True).start()
     control.log('##################  MAINTENANCE COMPLETE ######################')
+    if control.getBool('general.kodi.cache'):
+        Monitor().waitForAbort()

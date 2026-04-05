@@ -82,7 +82,7 @@ class ANIZIPAPI:
         season = result_ep[0].get('seasonNumber', 1)
         mapfunc = partial(self.parse_episode_view, mal_id=mal_id, season=season, poster=poster, fanart=fanart, clearart=clearart, clearlogo=clearlogo, eps_watched=eps_watched, update_time=update_time, tvshowtitle=tvshowtitle, dub_data=dub_data, filler_data=filler_data)
         # Parallelize episode parsing for faster processing
-        all_results = utils.parallel_process(result_ep, mapfunc, max_workers=8)
+        all_results = utils.parallel_process(result_ep, mapfunc)
         all_results = [r for r in all_results if r is not None]
 
         if control.getBool('override.meta.api') and control.getBool('override.meta.notify'):
@@ -97,14 +97,14 @@ class ANIZIPAPI:
             season = episodes[0]['season']
             mapfunc2 = partial(self.parse_episode_view, mal_id=mal_id, season=season, poster=poster, fanart=fanart, clearart=clearart, clearlogo=clearlogo, eps_watched=eps_watched, update_time=update_time, tvshowtitle=tvshowtitle, dub_data=dub_data, filler_data=None, episodes=episodes)
             # Parallelize episode parsing
-            all_results = utils.parallel_process(result_ep, mapfunc2, max_workers=8)
+            all_results = utils.parallel_process(result_ep, mapfunc2)
             all_results = [r for r in all_results if r is not None]
             if control.getBool('override.meta.api') and control.getBool('override.meta.notify'):
                 control.notify("ANIZIP Appended", f'{tvshowtitle} Appended to Database', icon=poster)
         else:
             mapfunc1 = partial(indexers.parse_episodes, eps_watched=eps_watched, dub_data=dub_data)
             # Parallelize episode parsing
-            all_results = utils.parallel_process(episodes, mapfunc1, max_workers=8)
+            all_results = utils.parallel_process(episodes, mapfunc1)
         return all_results
 
     def get_episodes(self, mal_id, show_meta):

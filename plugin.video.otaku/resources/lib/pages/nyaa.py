@@ -111,7 +111,7 @@ class Sources(BrowserBase):
                 control.log(f"Nyaa: {task['name']} search failed: {str(e)}")
                 return []
 
-        all_search_results = utils.parallel_process(search_tasks, run_search, max_workers=4)
+        all_search_results = utils.parallel_process(search_tasks, run_search)
 
         # Combine all results
         nyaa_sources = []
@@ -176,7 +176,7 @@ class Sources(BrowserBase):
 
             filtered_list = source_utils.filter_sources('nyaa', list_, mal_id, int(season_zfill), int(episode_zfill), part)
 
-            cache_list, uncashed_list_ = Debrid().torrentCacheCheck(filtered_list)
+            cache_list, uncashed_list_ = Debrid().torrentCacheCheck(filtered_list, mal_id=mal_id, episode=episode_zfill, media_type=self.media_type)
             cache_list = sorted(cache_list, key=lambda k: k['downloads'], reverse=True)
 
             uncashed_list = [i for i in uncashed_list_ if i['seeders'] > 0]
@@ -184,10 +184,10 @@ class Sources(BrowserBase):
 
             # Parse sources in parallel for faster processing
             mapfunc = partial(self.parse_nyaa_view, episode=episode_zfill)
-            all_results = utils.parallel_process(cache_list, mapfunc, max_workers=5) if cache_list else []
+            all_results = utils.parallel_process(cache_list, mapfunc) if cache_list else []
             if control.getBool('show.uncached') and uncashed_list:
                 mapfunc2 = partial(self.parse_nyaa_view, episode=episode_zfill, cached=False)
-                all_results += utils.parallel_process(uncashed_list, mapfunc2, max_workers=5)
+                all_results += utils.parallel_process(uncashed_list, mapfunc2)
             return all_results
 
     def process_nyaa_movie(self, url, params, mal_id):
@@ -219,7 +219,7 @@ class Sources(BrowserBase):
 
             filtered_list = source_utils.filter_sources('nyaa', list_, mal_id)
 
-            cache_list, uncashed_list_ = Debrid().torrentCacheCheck(filtered_list)
+            cache_list, uncashed_list_ = Debrid().torrentCacheCheck(filtered_list, mal_id=mal_id, episode='1', media_type='movie')
             cache_list = sorted(cache_list, key=lambda k: k['downloads'], reverse=True)
 
             uncashed_list = [i for i in uncashed_list_ if i['seeders'] > 0]
@@ -227,10 +227,10 @@ class Sources(BrowserBase):
 
             # Parse sources in parallel for faster processing
             mapfunc = partial(self.parse_nyaa_view, episode=1)
-            all_results = utils.parallel_process(cache_list, mapfunc, max_workers=5) if cache_list else []
+            all_results = utils.parallel_process(cache_list, mapfunc) if cache_list else []
             if control.getBool('show.uncached') and uncashed_list:
                 mapfunc2 = partial(self.parse_nyaa_view, episode=1, cached=False)
-                all_results += utils.parallel_process(uncashed_list, mapfunc2, max_workers=5)
+                all_results += utils.parallel_process(uncashed_list, mapfunc2)
             return all_results
 
     @staticmethod

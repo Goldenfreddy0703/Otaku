@@ -16,16 +16,17 @@ class DebridLink:
         self.OauthTimeStep = 0
         self.OauthTimeout = 0
         self.OauthTotalTimeout = 0
+        self.dialog = None
 
     def headers(self):
         return {'User-Agent': self.USER_AGENT, 'Authorization': f"Bearer {self.token}"}
 
     def auth_loop(self):
-        if control.progressDialog.iscanceled():
-            control.progressDialog.close()
+        if self.dialog.iscanceled():
+            self.dialog.close()
             self.OauthTimeout = 0
             return False
-        control.progressDialog.update(int(self.OauthTimeout / self.OauthTotalTimeout * 100))
+        self.dialog.update(int(self.OauthTimeout / self.OauthTotalTimeout * 100))
         url = f"{self.api_url[:-3]}/oauth/token"
         data = {
             'client_id': self.ClientID,
@@ -35,7 +36,7 @@ class DebridLink:
         r = client.post(url, data=data, headers={'User-Agent': self.USER_AGENT})
         if r:
             response = r.json()
-            control.progressDialog.close()
+            self.dialog.close()
             self.token = response.get('access_token')
             self.refresh = response.get('refresh_token')
             control.setSetting('debridlink.token', self.token)
@@ -44,6 +45,10 @@ class DebridLink:
             return True
 
     def auth(self):
+        import os
+        import pyqrcode
+        from resources.lib.windows.progress_dialog import Progress_dialog
+
         url = '{0}/oauth/device/code'.format(self.api_url[:-3])
         data = {'client_id': self.ClientID, 'scope': 'get.post.delete.seedbox get.account'}
         r = client.post(url, data=data, headers={'User-Agent': self.USER_AGENT})
@@ -53,15 +58,23 @@ class DebridLink:
             self.OauthTimeStep = resp['interval']
             self.DeviceCode = resp['device_code']
 
-            copied = control.copy2clip(resp.get('user_code'))
-            display_dialog = (
-                f"{control.lang(30081).format(control.colorstr(resp['verification_url']))}[CR]"
-                f"{control.lang(30082).format(control.colorstr(resp['user_code']))}"
-            )
-            if copied:
-                display_dialog = f"{display_dialog}[CR]{control.lang(30083)}"
-            control.progressDialog.create(f'{control.ADDON_NAME}: Debrid-Link Auth', display_dialog)
-            control.progressDialog.update(100)
+            verification_url = resp['verification_url']
+            user_code = resp.get('user_code')
+            control.copy2clip(user_code)
+
+            qr_path = os.path.join(control.dataPath, 'qr_code.png')
+            qr_code = pyqrcode.create(verification_url)
+            qr_code.png(qr_path, scale=20)
+
+            config = {
+                'heading': f'{control.ADDON_NAME}: Debrid-Link Auth',
+                'text': f"{control.lang(30081).format(control.colorstr(verification_url))}[CR]{control.lang(30082).format(control.colorstr(user_code))}[CR]{control.lang(30083)}",
+                'qr_code': qr_path
+            }
+
+            self.dialog = Progress_dialog('progress_dialog.xml', control.ADDON_PATH, config=config)
+            self.dialog.show()
+            self.dialog.update(100)
             auth_done = False
             while not auth_done and self.OauthTimeout > 0:
                 self.OauthTimeout -= self.OauthTimeStep
@@ -84,10 +97,6 @@ class DebridLink:
         premium = response['value']['premiumLeft'] > 0
         control.setSetting('debridlink.username', username)
         control.ok_dialog(control.ADDON_NAME, f'Debrid-Link {control.lang(30084)}')
-        control.setBool('show.uncached', True)
-        control.setBool('uncached.autoruninforground', False)
-        control.setBool('uncached.autoruninbackground', False)
-        control.setBool('uncached.autoskipuncached', True)
         if not premium:
             control.setSetting('debridlink.auth.status', 'Expired')
             control.ok_dialog(f'{control.ADDON_NAME}: Debrid-Link', control.lang(30085))

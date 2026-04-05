@@ -11,6 +11,7 @@ from resources.lib.ui.megacloud_extractor import extract_megacloud_sources
 
 
 class Sources(BrowserBase):
+    # _BASE_URL = 'https://hianime.sx/' if control.getBool('provider.hianimealt') else 'https://hianime.to/'
     _BASE_URL = 'https://aniwatchtv.to/'
 
     def get_sources(self, mal_id, episode):
@@ -124,7 +125,7 @@ class Sources(BrowserBase):
                         return self._extract_hianime_source(server_info, title, episode, headers)
 
                     # Process servers in parallel and get first successful result
-                    server_sources = utils.parallel_process(valid_servers, process_server, max_workers=3)
+                    server_sources = utils.parallel_process(valid_servers, process_server)
 
                     # Add all sources from this language
                     for server_source in server_sources:

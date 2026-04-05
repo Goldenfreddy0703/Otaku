@@ -1,3 +1,17 @@
+"""embed_extractor.py - Video Embed Extraction Engine
+===================================================
+Resolves playable video URLs from embed/hosting sites.
+Each extractor is registered via __register_extractor and looked up
+by URL prefix in load_video_from_url().
+
+Sections
+--------
+Extractor Dispatch   - load_video_from_url, registry lookup
+Helper Functions     - packed-data unpacking, header appending, URL checking
+Individual Extractors- one __extract_* per embed host
+Extractor Registry   - __register_extractor calls at module level
+"""
+
 import base64
 import json
 import random
@@ -17,6 +31,10 @@ _EMBED_EXTRACTORS = {}
 _EDGE_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36 Edg/116.0.1938.62'
 _FF_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/117.0'
 
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  Extractor Dispatch
+# ═══════════════════════════════════════════════════════════════════════════
 
 def load_video_from_url(in_url):
     found_extractor = None
@@ -69,6 +87,10 @@ def load_video_from_url(in_url):
 
     return None
 
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  Helper Functions
+# ═══════════════════════════════════════════════════════════════════════════
 
 def __get_packed_data(html):
     packed_data = ''
@@ -126,6 +148,10 @@ def __check_video(url):
 
     return url
 
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  Individual Extractors
+# ═══════════════════════════════════════════════════════════════════════════
 
 def __extract_yourupload(url, page_content, referer=None):
     r = re.search(r"jwplayerOptions\s*=\s*{\s*file:\s*'([^']+)", page_content)
@@ -357,6 +383,10 @@ def __extract_goload(url, page_content, referer=None):
                 return str_url + __append_headers(headers)
     return
 
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  Extractor Registry
+# ═══════════════════════════════════════════════════════════════════════════
 
 def __register_extractor(urls, function, url_preloader=None, datas=[]):
     if type(urls) is not list:

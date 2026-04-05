@@ -260,7 +260,7 @@ class Sources(BrowserBase):
                 control.log(f"nekoBT: {task['name']} search failed: {e}")
                 return []
 
-        all_results = utils.parallel_process(search_tasks, run_search, max_workers=6)
+        all_results = utils.parallel_process(search_tasks, run_search)
 
         # Deduplicate by hash across all searches
         seen_hashes = set()
@@ -276,17 +276,17 @@ class Sources(BrowserBase):
             return []
 
         # Single debrid cache check for all results
-        cache_list, uncached_list_ = Debrid().torrentCacheCheck(combined)
+        cache_list, uncached_list_ = Debrid().torrentCacheCheck(combined, mal_id=mal_id, episode=episode_zfill, media_type='episode')
         cache_list = sorted(cache_list, key=lambda k: k['downloads'], reverse=True)
         uncached_list = [i for i in uncached_list_ if i['seeders'] > 0]
         uncached_list = sorted(uncached_list, key=lambda k: k['seeders'], reverse=True)
         control.log(f"nekoBT: {len(combined)} unique torrents — {len(cache_list)} cached, {len(uncached_list)} uncached")
 
         mapfunc = partial(self.parse_nekobt_view, episode=episode_zfill)
-        nekobt_sources = utils.parallel_process(cache_list, mapfunc, max_workers=5) if cache_list else []
+        nekobt_sources = utils.parallel_process(cache_list, mapfunc) if cache_list else []
         if control.getBool('show.uncached') and uncached_list:
             mapfunc2 = partial(self.parse_nekobt_view, episode=episode_zfill, cached=False)
-            nekobt_sources += utils.parallel_process(uncached_list, mapfunc2, max_workers=5)
+            nekobt_sources += utils.parallel_process(uncached_list, mapfunc2)
 
         control.log(f"nekoBT: Episode search complete - returning {len(nekobt_sources)} sources")
         return nekobt_sources
@@ -318,7 +318,7 @@ class Sources(BrowserBase):
                 control.log(f"nekoBT: Movie {task['name']} search failed: {e}")
                 return []
 
-        all_api_results = utils.parallel_process(search_tasks, run_search, max_workers=3)
+        all_api_results = utils.parallel_process(search_tasks, run_search)
 
         combined = []
         for results in all_api_results:
@@ -354,8 +354,6 @@ class Sources(BrowserBase):
                 continue
         return list_
 
-
-
     def _process_movie_results(self, results, mal_id):
         if not results:
             return []
@@ -363,17 +361,17 @@ class Sources(BrowserBase):
         list_ = self._results_to_list(results)
         filtered_list = source_utils.filter_sources('nekobt', list_, mal_id)
 
-        cache_list, uncached_list_ = Debrid().torrentCacheCheck(filtered_list)
+        cache_list, uncached_list_ = Debrid().torrentCacheCheck(filtered_list, mal_id=mal_id, episode='1', media_type='movie')
         cache_list = sorted(cache_list, key=lambda k: k['downloads'], reverse=True)
 
         uncached_list = [i for i in uncached_list_ if i['seeders'] > 0]
         uncached_list = sorted(uncached_list, key=lambda k: k['seeders'], reverse=True)
 
         mapfunc = partial(self.parse_nekobt_view, episode="1")
-        all_results = utils.parallel_process(cache_list, mapfunc, max_workers=5) if cache_list else []
+        all_results = utils.parallel_process(cache_list, mapfunc) if cache_list else []
         if control.getBool('show.uncached') and uncached_list:
             mapfunc2 = partial(self.parse_nekobt_view, episode="1", cached=False)
-            all_results += utils.parallel_process(uncached_list, mapfunc2, max_workers=5)
+            all_results += utils.parallel_process(uncached_list, mapfunc2)
         return all_results
 
     @staticmethod

@@ -7,33 +7,33 @@ We’re excited to introduce you to the latest version of Otaku! This update bri
 
 What’s New?
 
-Expanded Content Selection – Now includes menus for Movies, TV Shows, TV Shorts, Specials, OVAs, ONAs, and Music Videos.
+Expanded Content Selection - Now includes menus for Movies, TV Shows, TV Shorts, Specials, OVAs, ONAs, and Music Videos.
 
-Debrid and Cloud Services Fixed – Thanks to @joezito129 and @adamosborne83, all services now work seamlessly.
+Debrid and Cloud Services Fixed - Thanks to @joezito129 and @adamosborne83, all services now work seamlessly.
 
-Easy Debrid Support Added – Integration for a Easy Debrid.
+Easy Debrid Support Added - Integration for a Easy Debrid.
 
-Enhanced Filtering System – More refined scraping and improved search results.
+Enhanced Filtering System - More refined scraping and improved search results.
 
-MyAnimeList (MAL) Menus – Additional support alongside AniList menus.
+MyAnimeList (MAL) Menus - Additional support alongside AniList menus.
 
-New Sorting System – More precise control over how you organize your provider sources.
+New Sorting System - More precise control over how you organize your provider sources.
 
-Performance Boost – Now supports Reuse Language Invoker for faster operation.
+Performance Boost - Now supports Reuse Language Invoker for faster operation.
 
-Greater Customization – Expanded settings for a more tailored experience.
+Greater Customization - Expanded settings for a more tailored experience.
 
-Improved Playback – Faster loading for subtitles, audio, intro skip, and outro skip.
+Improved Playback - Faster loading for subtitles, audio, intro skip, and outro skip.
 
-Watchlist Completion – Animes you finish will automatically be added to your completed watchlist.
+Watchlist Completion - Animes you finish will automatically be added to your completed watchlist.
 
-Seamless Watchlist Migration – Existing watchlist settings will carry over without reconfiguration.
+Seamless Watchlist Migration - Existing watchlist settings will carry over without reconfiguration.
 
-Fewer Metadata Issues – Database improvements have significantly reduced metadata errors by switching from AniList to MAL.
+Fewer Metadata Issues - Database improvements have significantly reduced metadata errors by switching from AniList to MAL.
 
-Uncached Sources Now Supported – Your Debrid Service can now download uncached sources.
+Uncached Sources Now Supported - Your Debrid Service can now download uncached sources.
 
-Kodi 20+ Compatibility – The new Otaku is designed for the latest versions of Kodi. Note: Kodi 19 is not supported due to significant backend changes.
+Kodi 20+ Compatibility - The new Otaku is designed for the latest versions of Kodi. Note: Kodi 19 is not supported due to significant backend changes.
 
 
 Why the Upgrade?

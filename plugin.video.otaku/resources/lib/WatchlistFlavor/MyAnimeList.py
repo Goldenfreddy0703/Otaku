@@ -1,4 +1,3 @@
-import re
 import time
 import random
 import pickle
@@ -179,17 +178,17 @@ class MyAnimeListWLF(WatchlistFlavorBase):
             }
             url = f'{self._URL}/users/@me/animelist'
             all_data = []
-            
+
             r = client.get(url, headers=self.__headers(), params=params)
             results = r.json() if r else {}
             all_data.extend(results.get('data', []))
-            
+
             # Fetch remaining pages
             while results.get('paging', {}).get('next'):
                 r = client.get(results['paging']['next'], headers=self.__headers())
                 results = r.json() if r else {}
                 all_data.extend(results.get('data', []))
-            
+
             # Apply sorting before saving to cache
             if all_data:
                 # If sorting by anime_title and language is english, sort manually by english title.
@@ -263,7 +262,7 @@ class MyAnimeListWLF(WatchlistFlavorBase):
     def _get_next_up_episodes(self, offset, page):
         """
         Get Next Up episodes - Episode-driven list of next unwatched episodes.
-        
+
         Next Up Rules:
         - All anime in Watching list are included
         - Shows with 0 progress show Episode 1 as next up
@@ -300,7 +299,7 @@ class MyAnimeListWLF(WatchlistFlavorBase):
 
         # Use a separate cache key for next_up to ensure proper sorting by updated_at
         cache_status = 'next_up'
-        
+
         if not is_watchlist_cache_valid(self._NAME, cache_status):
             # Fetch all "watching" items sorted by last updated (most recently watched first)
             params = {
@@ -313,11 +312,11 @@ class MyAnimeListWLF(WatchlistFlavorBase):
             }
             url = f'{self._URL}/users/@me/animelist'
             all_data = []
-            
+
             r = client.get(url, headers=self.__headers(), params=params)
             results = r.json() if r else {}
             all_data.extend(results.get('data', []))
-            
+
             # Fetch remaining pages
             while results.get('paging', {}).get('next'):
                 r = client.get(results['paging']['next'], headers=self.__headers())
@@ -330,12 +329,12 @@ class MyAnimeListWLF(WatchlistFlavorBase):
             for item in all_data:
                 eps_watched = item['list_status'].get('num_episodes_watched') or 0
                 total_eps = item['node'].get('num_episodes') or 0
-                
+
                 # Skip if show is completed (all episodes watched)
                 # total_eps == 0 means unknown/ongoing, so include it
                 if total_eps > 0 and eps_watched >= total_eps:
                     continue
-                
+
                 filtered_data.append(item)
 
             # Sort by updated_at (most recent first) - this is already done by API but ensure it
@@ -384,7 +383,7 @@ class MyAnimeListWLF(WatchlistFlavorBase):
                 return None
 
         # Process items in parallel using existing utility
-        all_results = utils.parallel_process(items, process_next_up_item, max_workers=5)
+        all_results = utils.parallel_process(items, process_next_up_item)
         all_results = [r for r in all_results if r is not None]
 
         # Handle paging

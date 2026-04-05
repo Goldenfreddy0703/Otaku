@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<window type="dialog">
+    <defaultcontrol>4001</defaultcontrol>
+    <controls>
+        <control type="image">
+            <texture>white.png</texture>
+            <colordiffuse>aa000000</colordiffuse>
+        </control>
+
+        <control type="group">
+            <left>420</left>
+            <top>140</top>
+
+            <control type="image">
+                <width>1080</width>
+                <height>800</height>
+                <texture border="10">white.png</texture>
+                <colordiffuse>ff1a1a1a</colordiffuse>
+            </control>
+
+            <control type="image">
+                <left>340</left>
+                <top>75</top>
+                <width>400</width>
+                <height>400</height>
+                <texture>$INFO[Window().Property(qr_code)]</texture>
+                <aspectratio>keep</aspectratio>
+            </control>
+
+            <control type="label" id="3002">
+                <left>40</left>
+                <top>10</top>
+                <width>1000</width>
+                <font>font15_title</font>
+                <align>center</align>
+                <textcolor>ffffffff</textcolor>
+            </control>
+
+            <control type="label" id="3005">
+                <left>40</left>
+                <top>490</top>
+                <width>1000</width>
+                <font>font14</font>
+                <align>center</align>
+                <height>100</height>
+                <textcolor>ffaaaaaa</textcolor>
+            </control>
+
+            <control type="progress" id="3003">
+                <left>190</left> <top>650</top>
+                <width>700</width>
+                <height>30</height>
+            </control>
+
+            <control type="button" id="4001">
+                <left>390</left> <top>710</top>
+                <width>300</width>
+                <height>60</height>
+                <label>Cancel</label>
+                <align>center</align>
+                <texturenofocus colordiffuse="88333333">white.png</texturenofocus>
+                <texturefocus colordiffuse="ffff0000">white.png</texturefocus>
+            </control>
+        </control>
+    </controls>
+</window>

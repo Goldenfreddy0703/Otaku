@@ -19,15 +19,15 @@ class RealDebrid:
         self.OauthTotalTimeout = 0
         self.OauthUrl = 'https://api.real-debrid.com/oauth/v2'
         self.BaseUrl = "https://api.real-debrid.com/rest/1.0"
+        self.dialog = None
 
     def headers(self):
         return {'Authorization': f"Bearer {self.token}"}
 
     def auth_loop(self):
-        if control.progressDialog.iscanceled():
+        if self.dialog.iscanceled():
             self.OauthTimeout = 0
             return False
-        control.progressDialog.update(int(self.OauthTimeout / self.OauthTotalTimeout * 100))
         params = {
             'client_id': self.ClientID,
             'code': self.DeviceCode
@@ -47,6 +47,10 @@ class RealDebrid:
         return False
 
     def auth(self):
+        import pyqrcode
+        import os
+        from resources.lib.windows.progress_dialog import Progress_dialog
+        
         api_info = database.get_info('Real-Debrid')
         self.ClientID = api_info['client_id']
         self.ClientSecret = ''
@@ -70,8 +74,19 @@ class RealDebrid:
                           f"{control.lang(30082).format(control.colorstr(resp['user_code']))}")
         if copied:
             display_dialog = f"{display_dialog}[CR]{control.lang(30083)}"
-        control.progressDialog.create(f'{control.ADDON_NAME}: Real-Debrid Auth', display_dialog)
-        control.progressDialog.update(100)
+
+        qr_path = os.path.join(control.dataPath, 'qr_code.png')
+        qr = pyqrcode.create('https://real-debrid.com/device')
+        qr.png(qr_path, scale=20)
+        config = {
+            'heading': f'{control.ADDON_NAME}: Real-Debrid Auth',
+            'text': display_dialog,
+            'qr_code': qr_path,
+            'percent': 100
+        }
+        self.dialog = Progress_dialog('progress_dialog.xml', control.ADDON_PATH, config=config)
+        self.dialog.show()
+
         self.OauthTotalTimeout = self.OauthTimeout = int(resp['expires_in'])
         self.OauthTimeStep = int(resp['interval'])
         self.DeviceCode = resp['device_code']
@@ -80,7 +95,8 @@ class RealDebrid:
             self.OauthTimeout -= self.OauthTimeStep
             control.sleep(self.OauthTimeStep * 1000)
             auth_done = self.auth_loop()
-        control.progressDialog.close()
+            self.dialog.update(int(self.OauthTimeout / self.OauthTotalTimeout * 100))
+        self.dialog.close()
         if auth_done:
             self.token_request()
             self.status()
@@ -122,10 +138,6 @@ class RealDebrid:
             control.setSetting('realdebrid.username', user_info['username'])
             control.setSetting('realdebrid.auth.status', user_info['type'].capitalize())
             control.ok_dialog(control.ADDON_NAME, f'Real-Debrid {control.lang(30084)}')
-            control.setBool('show.uncached', True)
-            control.setBool('uncached.autoruninforground', False)
-            control.setBool('uncached.autoruninbackground', False)
-            control.setBool('uncached.autoskipuncached', True)
             if user_info['type'] != 'premium':
                 control.ok_dialog(f'{control.ADDON_NAME}: Real-Debrid', control.lang(30085))
         except (ValueError, KeyError) as e:
@@ -206,50 +218,41 @@ class RealDebrid:
                     return source['torrent_info']['links'][f_index]
 
     def resolve_single_magnet(self, hash_, magnet, episode='', pack_select=False):
-        hashCheck = client.get(f'{self.BaseUrl}/torrents/instantAvailability/{hash_}', headers=self.headers())
-        if not hashCheck or not hashCheck.ok:
-            return None
-
-        try:
-            hashCheck = hashCheck.json()
-        except ValueError:
-            return None
-
+        # DMM handles cache checking - just add the magnet directly
         stream_link = None
-        for _ in hashCheck[hash_]['rd']:
-            torrent = self.addMagnet(magnet)
-            if not torrent:
-                continue
+        torrent = self.addMagnet(magnet)
+        if not torrent:
+            return None
 
-            self.torrentSelect(torrent['id'])
-            files = self.torrentInfo(torrent['id'])
-            if not files:
-                self.deleteTorrent(torrent['id'])
-                continue
-
-            selected_files = [(idx, i) for idx, i in enumerate([i for i in files['files'] if i['selected'] == 1])]
-            if pack_select:
-                best_match = source_utils.get_best_match('path', [i[1] for i in selected_files], episode, pack_select)
-                if best_match:
-                    try:
-                        file_index = [i[0] for i in selected_files if i[1]['path'] == best_match['path']][0]
-                        link = files['links'][file_index]
-                        stream_link = self.resolve_hoster(link)
-                    except IndexError:
-                        pass
-            elif len(selected_files) == 1:
-                stream_link = self.resolve_hoster(files['links'][0])
-            elif len(selected_files) > 1:
-                best_match = source_utils.get_best_match('path', [i[1] for i in selected_files], episode)
-                if best_match:
-                    try:
-                        file_index = [i[0] for i in selected_files if i[1]['path'] == best_match['path']][0]
-                        link = files['links'][file_index]
-                        stream_link = self.resolve_hoster(link)
-                    except IndexError:
-                        pass
+        self.torrentSelect(torrent['id'])
+        files = self.torrentInfo(torrent['id'])
+        if not files:
             self.deleteTorrent(torrent['id'])
-            return stream_link
+            return None
+
+        selected_files = [(idx, i) for idx, i in enumerate([i for i in files['files'] if i['selected'] == 1])]
+        if pack_select:
+            best_match = source_utils.get_best_match('path', [i[1] for i in selected_files], episode, pack_select)
+            if best_match:
+                try:
+                    file_index = [i[0] for i in selected_files if i[1]['path'] == best_match['path']][0]
+                    link = files['links'][file_index]
+                    stream_link = self.resolve_hoster(link)
+                except IndexError:
+                    pass
+        elif len(selected_files) == 1:
+            stream_link = self.resolve_hoster(files['links'][0])
+        elif len(selected_files) > 1:
+            best_match = source_utils.get_best_match('path', [i[1] for i in selected_files], episode)
+            if best_match:
+                try:
+                    file_index = [i[0] for i in selected_files if i[1]['path'] == best_match['path']][0]
+                    link = files['links'][file_index]
+                    stream_link = self.resolve_hoster(link)
+                except IndexError:
+                    pass
+        self.deleteTorrent(torrent['id'])
+        return stream_link
 
     def get_torrent_status(self, magnet):
         """

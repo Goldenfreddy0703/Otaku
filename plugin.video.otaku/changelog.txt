@@ -1,3 +1,35 @@
+Changelog v5.2.86 (2026-04-05):
+- Large refactor and cleanup across the UI and HTTP client layers plus a few small bugfixes
+- Removed explicit version constraint for script.module.pyqrcode
+- Sanitize mapping values that are full URLs by extracting the trailing id on Anilist
+- Updated base domain to animepahe.com and normalize audio tag comparisons (.lower()) to correctly mark DUB/SUB
+- Added module docstrings/section headings, reorganized/clarified helper functions, introduced setting cache eviction helper, and reorganized constants/paths
+- Overall changes intended to standardize the client API, improve session/cookie management and readability, and fix a couple of scraper/mapping edge cases
+- Added centralized max_threads = os.cpu_count() constant in control.py for dynamic CPU-aware thread scaling
+- All ThreadPoolExecutor usage across the addon now uses control.max_threads instead of hardcoded worker counts
+- Updated parallel_fetch() and parallel_process() in utils.py to default to control.max_threads
+- Removed 50+ hardcoded max_workers values (3, 5, 8, 15) across 20 files — thread pools now auto-scale to hardware
+
+Changelog v5.2.85 (2026-04-03):
+- Added external debrid cache checking for Real-Debrid and AllDebrid (Torrentio, AIOStreams, DMM)
+- RD/AD removed their cache-check APIs — now uses external services to determine cached status
+- External cache results stored in local SQLite DB with 24-hour TTL for instant repeat lookups
+- Torrent scrapers (nyaa, animetosho, nekobt) now pass mal_id, episode, and media_type to cache checker
+- Improved menu loading speed — bulk_dir_list now uses ThreadPoolExecutor(15 workers) instead of sequential processing
+- Improved smart scroll — dynamic Container.HasFiles wait loop (max 750ms) replaces fixed 500ms sleep
+- Increased process_episodes thread pool from 8 to 15 workers for faster episode metadata loading
+- Switched SQLite journal_mode from OFF to WAL for concurrent read performance
+- Switched SQLite synchronous from OFF to NORMAL for better data safety with minimal speed impact
+- Fixed "Playback Failed" appearing multiple times after stopping playlist playback
+- Resolver and Player monitors now ignore leftover OnStop events from previous episode transitions (2s grace period)
+- Monitors reset playbackerror flag when OnAVStart is received (playback actually started = not an error)
+- Added QR code authentication dialogs for all debrid services (Real-Debrid, AllDebrid, TorBox, Premiumize, Debrid-Link)
+- Added QR code to Simkl, AniList, and MAL watchlist authentication
+- Added pyqrcode module dependency for QR code generation
+- Removed deprecated uncached auto settings (handled by external cache checking)
+- Context menu items now update dynamically without Kodi restart via onSettingsChanged() → process_context()
+- Removed redundant context.otaku.testing service — main addon now manages all context menu property updates
+
 Changelog v5.2.84 (2026-03-31):
 - Improved browser API selection logic for enhanced user experience
 - Minor tweaks to AniList integration
@@ -254,15 +286,15 @@ Changelog v5.2.60 (2025-11-10):
 - Improved logging granularity for better debugging
 
 Changelog v5.2.59 (2025-10-28):
-- Major Performance Optimization — 4–6x faster across all components
+- Major Performance Optimization — 4-6x faster across all components
 - Added TVDB API v4 as new artwork provider alongside Fanart.tv and TMDB
 - Implemented multi-provider artwork scraping with concurrent fetching and merging
 - Enhanced artwork coverage and language-aware logo selection across all providers
 - Optimized episode metadata fetching with ThreadPoolExecutor
-- Episode metadata loading reduced from ~12–16s to ~3–5s
+- Episode metadata loading reduced from ~12-16s to ~3-5s
 - Optimized episode parsing across all indexers with 8-worker parallel processing
-- Improved total loading time from ~40s to ~8–10s for 100 anime
-- Source detection and server extraction reduced from ~8–12s to ~2–3s
+- Improved total loading time from ~40s to ~8-10s for 100 anime
+- Source detection and server extraction reduced from ~8-12s to ~2-3s
 - Added parallel processing utilities in utils.py for consistent multithreading
 - Replaced manual threading and list(map()) calls with ThreadPoolExecutor for better efficiency
 - Implemented rate limit compliance for Jikan API (3 req/sec)

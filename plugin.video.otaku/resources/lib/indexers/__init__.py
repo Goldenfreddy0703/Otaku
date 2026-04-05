@@ -21,7 +21,7 @@ def parse_episodes(res, eps_watched, dub_data=None):
 def process_episodes(episodes, eps_watched, dub_data=None):
     mapfunc = partial(parse_episodes, eps_watched=eps_watched, dub_data=dub_data)
     # Parallelize episode parsing for faster processing
-    all_results = utils.parallel_process(episodes, mapfunc, max_workers=8)
+    all_results = utils.parallel_process(episodes, mapfunc)
     return all_results
 
 
@@ -30,7 +30,7 @@ def process_dub(mal_id, ename):
     if not (show_data := database.get_show_data(mal_id)) or show_data['last_updated'] != update_time:
         if control.getInt('jz.dub.api') == 0:
             from resources.lib.endpoints import teamup
-            dub_data = teamup.get_dub_data(ename)
+            dub_data = teamup.get_dub_data(mal_id, ename)
             data = {"dub_data": dub_data}
             database.update_show_data(mal_id, data, update_time)
         else:
@@ -64,10 +64,10 @@ def should_hide_unaired_episode(aired_date_str):
     import datetime
     if not control.getBool('interface.aired_episodes'):
         return False
-    
+
     if not aired_date_str:
         return False
-    
+
     try:
         # Parse the aired date with fallback for compatibility
         try:
@@ -75,7 +75,7 @@ def should_hide_unaired_episode(aired_date_str):
         except:
             import time
             aired_date = datetime.datetime.fromtimestamp(time.mktime(time.strptime(aired_date_str[:10], '%Y-%m-%d')))
-        
+
         today = datetime.datetime.now()
         return aired_date > today
     except (ValueError, TypeError, AttributeError, Exception):

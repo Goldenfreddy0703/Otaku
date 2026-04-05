@@ -3,7 +3,7 @@ import pickle
 import re
 import urllib.parse
 
-from bs4 import BeautifulSoup, SoupStrainer
+from bs4 import BeautifulSoup
 from resources.lib.ui import client, control, database, utils
 from resources.lib.ui.BrowserBase import BrowserBase
 from resources.lib.ui.megacloud_extractor import extract_megacloud_sources
@@ -71,7 +71,7 @@ class Sources(BrowserBase):
             def process_server(server_info, _lang=lang):
                 return self._resolve_and_build_source(server_info, title, episode, _lang)
 
-            server_sources = utils.parallel_process(lang_servers, process_server, max_workers=3)
+            server_sources = utils.parallel_process(lang_servers, process_server)
 
             for server_source in server_sources:
                 if server_source:

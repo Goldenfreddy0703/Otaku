@@ -1,10 +1,11 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<addon id="plugin.video.otaku" name="Otaku" provider-name="TeamOtaku" version="5.2.84">
+<addon id="plugin.video.otaku" name="Otaku" provider-name="TeamOtaku" version="5.2.86">
   <requires>
     <import addon="xbmc.python" version="3.0.1"/>
     <import addon="script.module.beautifulsoup4"/>
     <import addon="script.module.inputstreamhelper"/>
-    <import addon="context.otaku" version="1.0.31"/>
+    <import addon="script.module.pyqrcode"/>
+    <import addon="context.otaku" version="1.0.32"/>
   </requires>
   <extension library="default.py" point="xbmc.python.pluginsource">
         <provides>video</provides>

@@ -1,8 +1,26 @@
+"""utils.py - List-Item Allocation & Search History
+==================================================
+Helpers for creating Kodi directory items, managing search history,
+detecting season numbers, and running parallel operations.
+
+Sections
+--------
+Item Allocation   - allocate_item, parse_view, artwork path cache
+Search History    - search_history, parse_history_view, URL mappings
+Season Detection  - get_season (regex-based from title list)
+Parallel Helpers  - parallel_fetch, parallel_process
+"""
+
 import os
 import concurrent.futures
 
 from functools import partial
 from resources.lib.ui import control, database
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  Item Allocation & Artwork Cache
+# ═══════════════════════════════════════════════════════════════════════════
 
 # Cache for artwork file paths to avoid repeated os.path.exists() calls
 _artwork_path_cache = {}
@@ -46,6 +64,10 @@ def allocate_item(name, url, isfolder, isplayable, cm, image='', info=None, fana
         }
     }
 
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  Search History & URL Mappings
+# ═══════════════════════════════════════════════════════════════════════════
 
 def get_format_to_url_mappings():
     format_to_url = {
@@ -106,6 +128,10 @@ def parse_view(base, isfolder, isplayable, dub=False):
     return parsed_view
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+#  Season Detection
+# ═══════════════════════════════════════════════════════════════════════════
+
 def get_season(titles_list, mal_id):
     import re
     meta_ids = database.get_mappings(mal_id, 'mal_id')
@@ -147,6 +173,10 @@ def get_season(titles_list, mal_id):
         return season
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+#  Parallel Helpers
+# ═══════════════════════════════════════════════════════════════════════════
+
 def format_time(seconds):
     minutes, seconds = divmod(seconds, 60)
     hours, minutes = divmod(minutes, 60)
@@ -154,13 +184,13 @@ def format_time(seconds):
     return f"{int(hours):02}:{int(minutes):02}:{int(seconds):02}"
 
 
-def parallel_fetch(requests_list, max_workers=5, timeout=30):
+def parallel_fetch(requests_list, max_workers=None, timeout=30):
     """
     Execute multiple HTTP requests in parallel using threading.
 
     Args:
         requests_list: List of dicts with keys: 'func', 'args' (tuple), 'kwargs' (dict)
-        max_workers: Max number of concurrent threads (default: 5)
+        max_workers: Max number of concurrent threads (default: control.max_threads)
         timeout: Timeout for all requests combined (default: 30s, set to None for no timeout)
 
     Returns:
@@ -173,6 +203,9 @@ def parallel_fetch(requests_list, max_workers=5, timeout=30):
         ]
         results = parallel_fetch(requests)
     """
+    if max_workers is None:
+        max_workers = control.max_threads
+
     def execute_request(request):
         try:
             func = request['func']
@@ -203,14 +236,14 @@ def parallel_fetch(requests_list, max_workers=5, timeout=30):
     return results
 
 
-def parallel_process(items, process_func, max_workers=5):
+def parallel_process(items, process_func, max_workers=None):
     """
     Process multiple items in parallel using threading.
 
     Args:
         items: List of items to process
         process_func: Function to apply to each item
-        max_workers: Max number of concurrent threads (default: 5)
+        max_workers: Max number of concurrent threads (default: control.max_threads)
 
     Returns:
         List of results in same order as items
@@ -219,6 +252,8 @@ def parallel_process(items, process_func, max_workers=5):
         slugs = ['slug1', 'slug2', 'slug3']
         results = parallel_process(slugs, lambda slug: scraper._process(slug))
     """
+    if max_workers is None:
+        max_workers = control.max_threads
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
         results = list(executor.map(process_func, items))
     return results

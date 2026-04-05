@@ -99,7 +99,7 @@ class AnimeScheduleCalendar:
                 })
 
             # Execute all timetable fetches in parallel
-            timetable_results = utils.parallel_fetch(timetable_requests, max_workers=3)
+            timetable_results = utils.parallel_fetch(timetable_requests)
 
             # Process results
             for release_type, anime_data in zip(types, timetable_results):
@@ -136,7 +136,7 @@ class AnimeScheduleCalendar:
             ]
 
             # Fetch all pages in parallel with 10 workers
-            page_results = utils.parallel_fetch(page_requests, max_workers=10)
+            page_results = utils.parallel_fetch(page_requests)
 
             # Process all results
             for page_data in page_results:
@@ -167,7 +167,7 @@ class AnimeScheduleCalendar:
                 ]
 
                 # Parallel search with 25 workers (increased from 20)
-                search_results = utils.parallel_fetch(search_requests, max_workers=25)
+                search_results = utils.parallel_fetch(search_requests)
 
                 # Process results
                 found_count = 0
@@ -201,7 +201,7 @@ class AnimeScheduleCalendar:
                     ]
 
                     # Use 12 workers for retry (increased from 10)
-                    retry_results = utils.parallel_fetch(retry_requests, max_workers=12)
+                    retry_results = utils.parallel_fetch(retry_requests)
 
                     retry_found = 0
                     for result in retry_results:

@@ -134,7 +134,7 @@ class Sources(BrowserBase):
                 control.log(f"AnimeTosho: {task['name']} search failed: {str(e)}")
                 return []
 
-        all_search_results = utils.parallel_process(search_tasks, run_search, max_workers=4)
+        all_search_results = utils.parallel_process(search_tasks, run_search)
 
         # Combine all results
         animetosho_sources = []
@@ -222,7 +222,7 @@ class Sources(BrowserBase):
 
             filtered_list = source_utils.filter_sources('animetosho', list_, mal_id, int(season), int(episode), part, anidb_id=self.anidb_id)
 
-            cache_list, uncashed_list_ = Debrid().torrentCacheCheck(filtered_list)
+            cache_list, uncashed_list_ = Debrid().torrentCacheCheck(filtered_list, mal_id=mal_id, episode=episode, media_type='episode')
             cache_list = sorted(cache_list, key=lambda k: k['downloads'], reverse=True)
 
             uncashed_list = [i for i in uncashed_list_ if i['seeders'] != 0]
@@ -230,10 +230,10 @@ class Sources(BrowserBase):
 
             # Parse sources in parallel for faster processing
             mapfunc = partial(self.parse_animetosho_view, episode=episode)
-            all_results = utils.parallel_process(cache_list, mapfunc, max_workers=5) if cache_list else []
+            all_results = utils.parallel_process(cache_list, mapfunc) if cache_list else []
             if control.getBool('show.uncached') and uncashed_list:
                 mapfunc2 = partial(self.parse_animetosho_view, episode=episode, cached=False)
-                all_results += utils.parallel_process(uncashed_list, mapfunc2, max_workers=5)
+                all_results += utils.parallel_process(uncashed_list, mapfunc2)
             return all_results
         return []
 
@@ -272,16 +272,16 @@ class Sources(BrowserBase):
 
             # For movies we don't filter by season/episode
             filtered_list = source_utils.filter_sources('animetosho', list_, mal_id)
-            cache_list, uncashed_list_ = Debrid().torrentCacheCheck(filtered_list)
+            cache_list, uncashed_list_ = Debrid().torrentCacheCheck(filtered_list, mal_id=mal_id, episode='1', media_type='movie')
             cache_list = sorted(cache_list, key=lambda k: k['downloads'], reverse=True)
             uncashed_list = sorted([i for i in uncashed_list_ if i['seeders'] != 0], key=lambda k: k['seeders'], reverse=True)
 
             # Parse sources in parallel for faster processing
             mapfunc = partial(self.parse_animetosho_view, episode="1")
-            all_results = utils.parallel_process(cache_list, mapfunc, max_workers=5) if cache_list else []
+            all_results = utils.parallel_process(cache_list, mapfunc) if cache_list else []
             if control.getBool('show.uncached') and uncashed_list:
                 mapfunc2 = partial(self.parse_animetosho_view, episode="1", cached=False)
-                all_results += utils.parallel_process(uncashed_list, mapfunc2, max_workers=5)
+                all_results += utils.parallel_process(uncashed_list, mapfunc2)
             return all_results
         return []
 

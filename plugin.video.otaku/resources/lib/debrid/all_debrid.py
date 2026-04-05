@@ -12,8 +12,13 @@ class AllDebrid:
         self.OauthTimeStep = 1
         self.OauthTimeout = 0
         self.OauthTotalTimeout = 0
+        self.dialog = None
 
     def auth(self):
+        import pyqrcode
+        import os
+        from resources.lib.windows.progress_dialog import Progress_dialog
+
         params = {'agent': self.agent_identifier}
         r = client.get(f'{self.base_url}/pin/get', params=params)
         resp = r.json()['data'] if r else {}
@@ -23,8 +28,18 @@ class AllDebrid:
                           f"{control.lang(30082).format(control.colorstr(resp['pin']))}")
         if copied:
             display_dialog = f"{display_dialog}[CR]{control.lang(30083)}"
-        control.progressDialog.create(f'{control.ADDON_NAME}: Alldebrid Auth', display_dialog)
-        control.progressDialog.update(100)
+
+        qr_path = os.path.join(control.dataPath, 'qr_code.png')
+        qr = pyqrcode.create(resp['base_url'])
+        qr.png(qr_path, scale=20)
+        config = {
+            'heading': f'{control.ADDON_NAME}: AllDebrid Auth',
+            'text': display_dialog,
+            'qr_code': qr_path,
+            'percent': 100
+        }
+        self.dialog = Progress_dialog('progress_dialog.xml', control.ADDON_PATH, config=config)
+        self.dialog.show()
 
         # Seems the All Debrid servers need some time do something with the pin before polling
         # Polling too early will cause an invalid pin error
@@ -36,7 +51,8 @@ class AllDebrid:
             self.OauthTimeout -= self.OauthTimeStep
             control.sleep(self.OauthTimeStep * 1000)
             auth_done = self.auth_loop(check=resp['check'], pin=resp['pin'])
-        control.progressDialog.close()
+            self.dialog.update(int(self.OauthTimeout / self.OauthTotalTimeout * 100))
+        self.dialog.close()
         if auth_done:
             self.status()
 
@@ -51,10 +67,6 @@ class AllDebrid:
         premium = user_information['isPremium']
         control.setSetting('alldebrid.username', user_information['username'])
         control.ok_dialog(control.ADDON_NAME, f'Alldebrid {control.lang(30084)}')
-        control.setBool('show.uncached', True)
-        control.setBool('uncached.autoruninforground', False)
-        control.setBool('uncached.autoruninbackground', False)
-        control.setBool('uncached.autoskipuncached', True)
         if not premium:
             control.setSetting('alldebrid.auth.status', 'Expired')
             control.ok_dialog(f'{control.ADDON_NAME}: AllDebrid', control.lang(30085))
@@ -62,10 +74,9 @@ class AllDebrid:
             control.setSetting('alldebrid.auth.status', 'Premium')
 
     def auth_loop(self, **params):
-        if control.progressDialog.iscanceled():
+        if self.dialog.iscanceled():
             self.OauthTimeout = 0
             return False
-        control.progressDialog.update(int(self.OauthTimeout / self.OauthTotalTimeout * 100))
         params['agent'] = self.agent_identifier
         r = client.get(f'{self.base_url}/pin/check', params=params)
         resp = r.json()['data'] if r else {}

@@ -28,6 +28,7 @@ class _BrowserProxy:
     def __getattribute__(self, name):
         return getattr(_get_browser(), name)
 
+
 BROWSER = _BrowserProxy()
 
 
@@ -140,16 +141,16 @@ def get_next_up_meta(mal_id, episode_num):
     """
     Fetch episode metadata for Next Up feature.
     Used by all watchlist flavors for consistent episode metadata.
-    
+
     Args:
         mal_id: MyAnimeList ID
         episode_num: Episode number to fetch metadata for
-        
+
     Returns:
         dict with: title, image, plot, aired, rating
     """
     next_up_api = _get_next_up_api()
-    
+
     episode_meta = {
         'title': None,
         'image': None,
@@ -175,7 +176,7 @@ def get_next_up_meta(mal_id, episode_num):
                     episode_meta['image'] = image.get('thumb') or image.get('icon')
                     if info.get('rating'):
                         episode_meta['rating'] = info['rating'].get('score')
-                    
+
                     # If we have good data, return early
                     if episode_meta['title'] and episode_meta['title'] != f'Episode {episode_num}':
                         return episode_meta

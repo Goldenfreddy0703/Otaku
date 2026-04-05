@@ -11,11 +11,16 @@ class TorBox:
         self.OauthTimeStep = 0
         self.OauthTimeout = 0
         self.OauthTotalTimeout = 0
+        self.dialog = None
 
     def headers(self):
         return {'Authorization': f"Bearer {self.token}"}
 
     def auth(self):
+        import pyqrcode
+        import os
+        from resources.lib.windows.progress_dialog import Progress_dialog
+
         params = {'app': 'Otaku'}
         r = client.get(f'{self.BaseUrl}/user/auth/device/start', params=params)
         if not r or not r.ok:
@@ -50,8 +55,18 @@ class TorBox:
                           f"{control.lang(30082).format(control.colorstr(user_code))}")
         if copied:
             display_dialog = f"{display_dialog}[CR]{control.lang(30083)}"
-        control.progressDialog.create(f'{control.ADDON_NAME}: TorBox Auth', display_dialog)
-        control.progressDialog.update(100)
+
+        qr_path = os.path.join(control.dataPath, 'qr_code.png')
+        qr = pyqrcode.create(verification_url)
+        qr.png(qr_path, scale=20)
+        config = {
+            'heading': f'{control.ADDON_NAME}: TorBox Auth',
+            'text': display_dialog,
+            'qr_code': qr_path,
+            'percent': 100
+        }
+        self.dialog = Progress_dialog('progress_dialog.xml', control.ADDON_PATH, config=config)
+        self.dialog.show()
 
         self.OauthTotalTimeout = self.OauthTimeout = expires_in
         self.OauthTimeStep = interval
@@ -61,16 +76,16 @@ class TorBox:
             self.OauthTimeout -= self.OauthTimeStep
             control.sleep(self.OauthTimeStep * 1000)
             auth_done = self.auth_loop(device_code)
-        control.progressDialog.close()
+            self.dialog.update(int(self.OauthTimeout / self.OauthTotalTimeout * 100))
+        self.dialog.close()
 
         if auth_done:
             self.status()
 
     def auth_loop(self, device_code):
-        if control.progressDialog.iscanceled():
+        if self.dialog.iscanceled():
             self.OauthTimeout = 0
             return False
-        control.progressDialog.update(int(self.OauthTimeout / self.OauthTotalTimeout * 100))
         data = {'device_code': device_code}
         r = client.post(f'{self.BaseUrl}/user/auth/device/token', json_data=data)
         if r and r.ok:

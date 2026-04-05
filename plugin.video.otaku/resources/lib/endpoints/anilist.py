@@ -135,7 +135,6 @@ class Anilist:
 
         return list(cached.values())
 
-
     def get_anilist_ratings_batch(self, mal_ids):
         """
         Get AniList ratings for multiple anime using MAL IDs in batch
@@ -238,7 +237,6 @@ class Anilist:
             control.log(f"Error fetching AniList ratings batch: {str(e)}", "error")
             return {}
 
-
     def get_banners_batch(self, mal_ids):
         """
         Get AniList banners for multiple anime using MAL IDs in batch
@@ -328,7 +326,6 @@ class Anilist:
         except Exception as e:
             control.log(f"Error fetching AniList banners batch: {str(e)}", "error")
             return {}
-
 
     def get_banner(self, mal_id):
         """

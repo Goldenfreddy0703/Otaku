@@ -1,21 +1,23 @@
+"""
+client.py - Otaku HTTP Client Layer
+====================================
+Full-featured HTTP client with keep-alive pooling, session management,
+Cloudflare/DDoS-Guard bypass, and a requests-compatible Response API.
+
+Architecture
+------------
+Connection Pool - Thread-safe TCP/TLS keep-alive pool (_KeepAlivePool)
+Fast Path        - _fast_request() for pool-based HTTP with redirect/gzip
+Session Mgmt     - Cookie/opener caching per domain with auto cleanup
+User Agents      - Cached random desktop/mobile UA strings
+Response         - Requests-like Response object (text, json, status_code)
+HTTP Verbs       - get / post / put / patch / delete / head / session_request
+Legacy Request   - Full-featured urllib request() with CF/DDG bypass
+Challenge Bypass - cfcookie / ddgcookie via FlareSolverr
+Helpers          - store / retrieve / byteify / strip_cookie_url
+"""
+
 # -*- coding: utf-8 -*-
-
-"""
-    Otaku Add-on
-
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.
-"""
 
 import gzip
 import http.client
@@ -35,18 +37,21 @@ import xbmcvfs
 
 from resources.lib.ui import control
 
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  Constants & Session State
+# ═══════════════════════════════════════════════════════════════════════════
+
 TRANSLATEPATH = xbmcvfs.translatePath
 CERT_FILE = TRANSLATEPATH('special://xbmc/system/certs/cacert.pem')
 _COOKIE_HEADER = "Cookie"
 _HEADER_RE = re.compile(r"^([\w\d-]+?)=(.*?)$")
 
-# Session-like storage for cookies and connection reuse with automatic cleanup
 _session_cookies = {}
 _session_openers = {}
 _session_timestamps = {}
 _SESSION_TIMEOUT = 600  # 10 minutes
 
-# In-memory User-Agent cache to avoid settings DB lookups
 _cached_useragent = None
 _cached_useragent_time = 0
 _cached_mobile_useragent = None
@@ -67,7 +72,10 @@ def _cleanup_old_sessions():
     _keepalive_pool.cleanup()
 
 
-# ==================== True HTTP Keep-Alive Connection Pool ====================
+# ═══════════════════════════════════════════════════════════════════════════
+#  Keep-Alive Connection Pool
+# ═══════════════════════════════════════════════════════════════════════════
+
 import threading as _threading
 
 
@@ -162,6 +170,10 @@ class _KeepAlivePool:
 
 _keepalive_pool = _KeepAlivePool()
 
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  Fast Path - Pool-Based HTTP with Redirect & Gzip
+# ═══════════════════════════════════════════════════════════════════════════
 
 def _fast_request(url, headers, post_data=None, method='GET', timeout=20, jpost=False):
     """
@@ -275,6 +287,10 @@ def _get_cached_useragent(mobile=False):
     return agent
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+#  Response - Requests-Compatible Response Object
+# ═══════════════════════════════════════════════════════════════════════════
+
 class Response:
     """
     Requests-like Response object to match requests module API
@@ -328,6 +344,10 @@ class Response:
     def __repr__(self):
         return f"<Response [{self.status_code}]>"
 
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  Legacy Request - Full-Featured urllib with CF/DDG Bypass
+# ═══════════════════════════════════════════════════════════════════════════
 
 def request(
         url,
@@ -868,7 +888,7 @@ def request(
         elif text_content and encoding is None:
             # Try UTF-8 first (for modern APIs: JSON/XML from MAL, AniList, etc.)
             # Fall back to latin-1 if UTF-8 fails (for legacy content)
-            # This fixes mojibake for Unicode chars like ×, –, …, accented letters, etc.
+            # This fixes mojibake for Unicode chars like ×, -, …, accented letters, etc.
             try:
                 result = result.decode('utf-8')
             except UnicodeDecodeError:
@@ -902,35 +922,22 @@ def request(
         return
 
 
-def get(url, headers=None, timeout=20, verify=True, cookies=None, params=None):
-    """
-    Requests-like GET method that returns a Response object
+# ═══════════════════════════════════════════════════════════════════════════
+#  HTTP Verbs - Requests-Compatible API
+# ═══════════════════════════════════════════════════════════════════════════
 
-    Usage:
-        response = client.get(url)
-        response = client.get(url, params={'key': 'value'})
-        print(response.text)  # As string
-        print(response.content)  # As bytes
-        print(response.status_code)  # HTTP status
-        data = response.json()  # Parse JSON
-    """
-    result = request(url, headers=headers or {}, timeout=timeout, verify=verify, cookie=cookies, params=params, output='extended', use_session=True)
-
+def _build_response(result, url):
+    """Convert a raw request() result tuple into a Response object."""
     if result and isinstance(result, tuple) and len(result) >= 5:
-        content, status_code, response_headers, request_headers, cookie, response_url = result
-
-        # Determine if content is binary
+        content, status_code, response_headers, _req_headers, cookie, response_url = result
         content_type = response_headers.get('Content-Type', '').lower()
         is_binary = not any(x in content_type for x in ['text', 'json', 'xml', 'html', 'javascript'])
-
-        # Parse cookies into dict
         cookie_dict = {}
         if cookie:
             for item in cookie.split('; '):
                 if '=' in item:
                     key, val = item.split('=', 1)
                     cookie_dict[key] = val
-
         return Response(
             content=content,
             status_code=int(status_code) if status_code else 200,
@@ -939,244 +946,80 @@ def get(url, headers=None, timeout=20, verify=True, cookies=None, params=None):
             cookies=cookie_dict,
             is_binary=is_binary
         )
-    elif result:
-        # Fallback for simple request
+    if result:
         return Response(content=result, status_code=200, url=url)
-
-    # Return failed response
     return Response(content=None, status_code=0, url=url)
+
+
+def get(url, headers=None, timeout=20, verify=True, cookies=None, params=None):
+    """Requests-like GET.  Returns a Response object."""
+    result = request(url, headers=headers or {}, timeout=timeout, verify=verify,
+                     cookie=cookies, params=params, output='extended', use_session=True)
+    return _build_response(result, url)
 
 
 def post(url, data=None, json_data=None, headers=None, timeout=20, verify=True, cookies=None):
-    """
-    Requests-like POST method that returns a Response object
-
-    Usage:
-        response = client.post(url, data={'key': 'value'})
-        response = client.post(url, json_data={'key': 'value'})
-        print(response.text)
-        print(response.status_code)
-    """
+    """Requests-like POST.  Returns a Response object."""
     if json_data:
-        result = request(url, post=json_data, jpost=True, headers=headers or {}, timeout=timeout, verify=verify, cookie=cookies, output='extended', use_session=True)
+        result = request(url, post=json_data, jpost=True, headers=headers or {},
+                         timeout=timeout, verify=verify, cookie=cookies,
+                         output='extended', use_session=True)
     else:
-        result = request(url, post=data, headers=headers or {}, timeout=timeout, verify=verify, cookie=cookies, output='extended', use_session=True)
-
-    if result and isinstance(result, tuple) and len(result) >= 5:
-        content, status_code, response_headers, request_headers, cookie, response_url = result
-
-        # Determine if content is binary
-        content_type = response_headers.get('Content-Type', '').lower()
-        is_binary = not any(x in content_type for x in ['text', 'json', 'xml', 'html', 'javascript'])
-
-        # Parse cookies into dict
-        cookie_dict = {}
-        if cookie:
-            for item in cookie.split('; '):
-                if '=' in item:
-                    key, val = item.split('=', 1)
-                    cookie_dict[key] = val
-
-        return Response(
-            content=content,
-            status_code=int(status_code) if status_code else 200,
-            headers=response_headers,
-            url=response_url or url,
-            cookies=cookie_dict,
-            is_binary=is_binary
-        )
-    elif result:
-        # Fallback for simple request
-        return Response(content=result, status_code=200, url=url)
-
-    # Return failed response
-    return Response(content=None, status_code=0, url=url)
+        result = request(url, post=data, headers=headers or {}, timeout=timeout,
+                         verify=verify, cookie=cookies, output='extended', use_session=True)
+    return _build_response(result, url)
 
 
 def put(url, data=None, json_data=None, headers=None, timeout=20, verify=True, cookies=None):
-    """
-    Requests-like PUT method that returns a Response object
-
-    Usage:
-        response = client.put(url, data={'key': 'value'})
-        response = client.put(url, json_data={'key': 'value'})
-        print(response.text)
-        print(response.status_code)
-    """
+    """Requests-like PUT.  Returns a Response object."""
     if json_data:
-        result = request(url, post=json_data, jpost=True, method='PUT', headers=headers or {}, timeout=timeout, verify=verify, cookie=cookies, output='extended', use_session=True)
+        result = request(url, post=json_data, jpost=True, method='PUT', headers=headers or {},
+                         timeout=timeout, verify=verify, cookie=cookies,
+                         output='extended', use_session=True)
     else:
-        result = request(url, post=data, method='PUT', headers=headers or {}, timeout=timeout, verify=verify, cookie=cookies, output='extended', use_session=True)
-
-    if result and isinstance(result, tuple) and len(result) >= 5:
-        content, status_code, response_headers, request_headers, cookie, response_url = result
-
-        # Determine if content is binary
-        content_type = response_headers.get('Content-Type', '').lower()
-        is_binary = not any(x in content_type for x in ['text', 'json', 'xml', 'html', 'javascript'])
-
-        # Parse cookies into dict
-        cookie_dict = {}
-        if cookie:
-            for item in cookie.split('; '):
-                if '=' in item:
-                    key, val = item.split('=', 1)
-                    cookie_dict[key] = val
-
-        return Response(
-            content=content,
-            status_code=int(status_code) if status_code else 200,
-            headers=response_headers,
-            url=response_url or url,
-            cookies=cookie_dict,
-            is_binary=is_binary
-        )
-    elif result:
-        # Fallback for simple request
-        return Response(content=result, status_code=200, url=url)
-
-    # Return failed response
-    return Response(content=None, status_code=0, url=url)
+        result = request(url, post=data, method='PUT', headers=headers or {},
+                         timeout=timeout, verify=verify, cookie=cookies,
+                         output='extended', use_session=True)
+    return _build_response(result, url)
 
 
 def patch(url, data=None, json_data=None, headers=None, timeout=20, verify=True, cookies=None):
-    """
-    Requests-like PATCH method that returns a Response object
-
-    PATCH is used for partial updates to resources (unlike PUT which replaces entire resource)
-
-    Usage:
-        response = client.patch(url, data={'key': 'value'})
-        response = client.patch(url, json_data={'key': 'value'})
-        print(response.text)
-        print(response.status_code)
-    """
+    """Requests-like PATCH.  Returns a Response object."""
     if json_data:
-        result = request(url, post=json_data, jpost=True, method='PATCH', headers=headers or {}, timeout=timeout, verify=verify, cookie=cookies, output='extended', use_session=True)
+        result = request(url, post=json_data, jpost=True, method='PATCH', headers=headers or {},
+                         timeout=timeout, verify=verify, cookie=cookies,
+                         output='extended', use_session=True)
     else:
-        result = request(url, post=data, method='PATCH', headers=headers or {}, timeout=timeout, verify=verify, cookie=cookies, output='extended', use_session=True)
-
-    if result and isinstance(result, tuple) and len(result) >= 5:
-        content, status_code, response_headers, request_headers, cookie, response_url = result
-
-        # Determine if content is binary
-        content_type = response_headers.get('Content-Type', '').lower()
-        is_binary = not any(x in content_type for x in ['text', 'json', 'xml', 'html', 'javascript'])
-
-        # Parse cookies into dict
-        cookie_dict = {}
-        if cookie:
-            for item in cookie.split('; '):
-                if '=' in item:
-                    key, val = item.split('=', 1)
-                    cookie_dict[key] = val
-
-        return Response(
-            content=content,
-            status_code=int(status_code) if status_code else 200,
-            headers=response_headers,
-            url=response_url or url,
-            cookies=cookie_dict,
-            is_binary=is_binary
-        )
-    elif result:
-        # Fallback for simple request
-        return Response(content=result, status_code=200, url=url)
-
-    # Return failed response
-    return Response(content=None, status_code=0, url=url)
+        result = request(url, post=data, method='PATCH', headers=headers or {},
+                         timeout=timeout, verify=verify, cookie=cookies,
+                         output='extended', use_session=True)
+    return _build_response(result, url)
 
 
 def delete(url, data=None, json_data=None, headers=None, timeout=20, verify=True, cookies=None):
-    """
-    Requests-like DELETE method that returns a Response object
-
-    Usage:
-        response = client.delete(url)
-        response = client.delete(url, headers={'Authorization': 'Bearer token'})
-        response = client.delete(url, data={'key': 'value'})
-        print(response.status_code)
-        if response.ok:
-            print("Deleted successfully")
-    """
+    """Requests-like DELETE.  Returns a Response object."""
     if json_data:
-        result = request(url, post=json_data, jpost=True, method='DELETE', headers=headers or {}, timeout=timeout, verify=verify, cookie=cookies, output='extended', use_session=True)
+        result = request(url, post=json_data, jpost=True, method='DELETE', headers=headers or {},
+                         timeout=timeout, verify=verify, cookie=cookies,
+                         output='extended', use_session=True)
     elif data:
-        result = request(url, post=data, method='DELETE', headers=headers or {}, timeout=timeout, verify=verify, cookie=cookies, output='extended', use_session=True)
+        result = request(url, post=data, method='DELETE', headers=headers or {},
+                         timeout=timeout, verify=verify, cookie=cookies,
+                         output='extended', use_session=True)
     else:
-        result = request(url, method='DELETE', headers=headers or {}, timeout=timeout, verify=verify, cookie=cookies, output='extended', use_session=True)
-
-    if result and isinstance(result, tuple) and len(result) >= 5:
-        content, status_code, response_headers, request_headers, cookie, response_url = result
-
-        # Determine if content is binary
-        content_type = response_headers.get('Content-Type', '').lower()
-        is_binary = not any(x in content_type for x in ['text', 'json', 'xml', 'html', 'javascript'])
-
-        # Parse cookies into dict
-        cookie_dict = {}
-        if cookie:
-            for item in cookie.split('; '):
-                if '=' in item:
-                    key, val = item.split('=', 1)
-                    cookie_dict[key] = val
-
-        return Response(
-            content=content,
-            status_code=int(status_code) if status_code else 200,
-            headers=response_headers,
-            url=response_url or url,
-            cookies=cookie_dict,
-            is_binary=is_binary
-        )
-    elif result:
-        # Fallback for simple request
-        return Response(content=result, status_code=200, url=url)
-
-    # Return failed response
-    return Response(content=None, status_code=0, url=url)
+        result = request(url, method='DELETE', headers=headers or {}, timeout=timeout,
+                         verify=verify, cookie=cookies, output='extended', use_session=True)
+    return _build_response(result, url)
 
 
 def head(url, headers=None, timeout=20, verify=True, cookies=None, params=None):
-    """
-    Requests-like HEAD method that returns a Response object
-    HEAD requests only fetch headers, not the body (faster for checking if URL exists)
-
-    Usage:
-        response = client.head(url)
-        response = client.head(url, timeout=5)
-        print(response.status_code)  # 200, 404, etc.
-        print(response.headers)
-        if response.ok:
-            print("URL is accessible")
-    """
-    result = request(url, headers=headers or {}, timeout=timeout, verify=verify, cookie=cookies, params=params, limit='0', output='extended', use_session=True)
-
-    if result and isinstance(result, tuple) and len(result) >= 5:
-        content, status_code, response_headers, request_headers, cookie, response_url = result
-
-        # Parse cookies into dict
-        cookie_dict = {}
-        if cookie:
-            for item in cookie.split('; '):
-                if '=' in item:
-                    key, val = item.split('=', 1)
-                    cookie_dict[key] = val
-
-        return Response(
-            content='',  # HEAD has no body
-            status_code=int(status_code) if status_code else 200,
-            headers=response_headers,
-            url=response_url or url,
-            cookies=cookie_dict,
-            is_binary=False
-        )
-    elif result:
-        # Fallback for simple request
-        return Response(content='', status_code=200, url=url)
-
-    # Return failed response
-    return Response(content=None, status_code=0, url=url)
+    """Requests-like HEAD (headers only, no body).  Returns a Response object."""
+    result = request(url, headers=headers or {}, timeout=timeout, verify=verify,
+                     cookie=cookies, params=params, limit='0',
+                     output='extended', use_session=True)
+    resp = _build_response(result, url)
+    resp._raw_content = ''  # HEAD has no body
+    return resp
 
 
 def session_request(url, method='GET', data=None, headers=None, timeout=20, verify=True):
@@ -1217,6 +1060,10 @@ def clear_session():
     control.log("Session cache cleared")
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+#  Session Class - Persistent Cookie Management
+# ═══════════════════════════════════════════════════════════════════════════
+
 class Session:
     """
     Requests-like Session class for persistent cookies and settings
@@ -1232,24 +1079,30 @@ class Session:
         self.headers = {}
         self._domain_cookies = {}
 
-    def get(self, url, headers=None, timeout=20, verify=True):
-        """GET request with session cookies"""
+    def _request(self, url, method='GET', data=None, json_data=None, headers=None, timeout=20, verify=True):
+        """Internal: execute a request, store cookies, return Response."""
         merged_headers = self.headers.copy()
         if headers:
             merged_headers.update(headers)
 
-        # Build cookie string from session cookies
         domain = urllib.parse.urlparse(url).netloc
         cookie_str = None
         if domain in self._domain_cookies:
             cookie_str = '; '.join([f'{k}={v}' for k, v in self._domain_cookies[domain].items()])
 
-        result = request(url, headers=merged_headers, timeout=timeout, verify=verify, cookie=cookie_str, use_session=True, output='extended')
+        kwargs = dict(headers=merged_headers, timeout=timeout, verify=verify,
+                      cookie=cookie_str, use_session=True, output='extended')
+        if method == 'POST':
+            if json_data:
+                kwargs.update(post=json_data, jpost=True)
+            else:
+                kwargs.update(post=data)
 
+        result = request(url, **kwargs)
+
+        # Store cookies from the response before building the Response object
         if result and isinstance(result, tuple) and len(result) >= 5:
-            content, status_code, response_headers, request_headers, cookie, response_url = result
-
-            # Store cookies from response
+            cookie = result[4]
             if cookie:
                 if domain not in self._domain_cookies:
                     self._domain_cookies[domain] = {}
@@ -1259,75 +1112,28 @@ class Session:
                         self._domain_cookies[domain][key] = val
                         self.cookies[key] = val
 
-            # Determine if content is binary
-            content_type = response_headers.get('Content-Type', '').lower()
-            is_binary = not any(x in content_type for x in ['text', 'json', 'xml', 'html', 'javascript'])
+        resp = _build_response(result, url)
+        resp.cookies = self._domain_cookies.get(domain, {})
+        return resp
 
-            return Response(
-                content=content,
-                status_code=int(status_code) if status_code else 200,
-                headers=response_headers,
-                url=response_url or url,
-                cookies=self._domain_cookies.get(domain, {}),
-                is_binary=is_binary
-            )
-        elif result:
-            return Response(content=result, status_code=200, url=url)
-
-        return Response(content=None, status_code=0, url=url)
+    def get(self, url, headers=None, timeout=20, verify=True):
+        """GET request with session cookies"""
+        return self._request(url, 'GET', headers=headers, timeout=timeout, verify=verify)
 
     def post(self, url, data=None, json_data=None, headers=None, timeout=20, verify=True):
         """POST request with session cookies"""
-        merged_headers = self.headers.copy()
-        if headers:
-            merged_headers.update(headers)
-
-        # Build cookie string from session cookies
-        domain = urllib.parse.urlparse(url).netloc
-        cookie_str = None
-        if domain in self._domain_cookies:
-            cookie_str = '; '.join([f'{k}={v}' for k, v in self._domain_cookies[domain].items()])
-
-        if json_data:
-            result = request(url, post=json_data, jpost=True, headers=merged_headers, timeout=timeout, verify=verify, cookie=cookie_str, use_session=True, output='extended')
-        else:
-            result = request(url, post=data, headers=merged_headers, timeout=timeout, verify=verify, cookie=cookie_str, use_session=True, output='extended')
-
-        if result and isinstance(result, tuple) and len(result) >= 5:
-            content, status_code, response_headers, request_headers, cookie, response_url = result
-
-            # Store cookies from response
-            if cookie:
-                if domain not in self._domain_cookies:
-                    self._domain_cookies[domain] = {}
-                for item in cookie.split('; '):
-                    if '=' in item:
-                        key, val = item.split('=', 1)
-                        self._domain_cookies[domain][key] = val
-                        self.cookies[key] = val
-
-            # Determine if content is binary
-            content_type = response_headers.get('Content-Type', '').lower()
-            is_binary = not any(x in content_type for x in ['text', 'json', 'xml', 'html', 'javascript'])
-
-            return Response(
-                content=content,
-                status_code=int(status_code) if status_code else 200,
-                headers=response_headers,
-                url=response_url or url,
-                cookies=self._domain_cookies.get(domain, {}),
-                is_binary=is_binary
-            )
-        elif result:
-            return Response(content=result, status_code=200, url=url)
-
-        return Response(content=None, status_code=0, url=url)
+        return self._request(url, 'POST', data=data, json_data=json_data,
+                             headers=headers, timeout=timeout, verify=verify)
 
     def close(self):
         """Close the session and clear cookies"""
         self.cookies.clear()
         self._domain_cookies.clear()
 
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  Low-Level Helpers
+# ═══════════════════════════════════════════════════════════════════════════
 
 def _basic_request(url, headers=None, post=None, timeout=60, jpost=False, limit=None):
     try:
@@ -1410,6 +1216,8 @@ def randomagent():
     return random.choice(_agents)
 
 
+# — User Agents —
+
 def randommobileagent():
     _mobagents = [
         'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
@@ -1426,6 +1234,8 @@ def agent():
     return 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36'
 
 
+# — File storage —
+
 def store(ftext, fname):
     fpath = control.dataPath + fname
     with open(fpath, 'w', encoding='utf-8') as f:
@@ -1441,6 +1251,10 @@ def retrieve(fname):
     else:
         return None
 
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  Challenge Bypass - Cloudflare & DDoS-Guard via FlareSolverr
+# ═══════════════════════════════════════════════════════════════════════════
 
 class cfcookie:
     def __init__(self):
@@ -1527,6 +1341,10 @@ class ddgcookie:
         else:
             control.log('%s returned %s.' % (netloc, repr(resp)))
 
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  URL & Cookie Helpers
+# ═══════════════════════════════════════════════════════════════════════════
 
 def byteify(data, ignore_dicts=False):
     if isinstance(data, list):
