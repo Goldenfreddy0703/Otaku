@@ -388,7 +388,7 @@ def request(
         ])
 
         if _can_fast:
-            control.log('Can Fast', level='info')
+            control.log('Can Fast', level='debug')
             # Build minimal headers
             if params is not None:
                 if isinstance(params, dict):

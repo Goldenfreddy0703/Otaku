@@ -670,6 +670,8 @@ class AniListWLF(WatchlistFlavorBase):
         anilist_id = self._get_mapping_id(mal_id, 'anilist_id')
         if not anilist_id:
             return False
+        if anilist_id.startswith('http'):
+            anilist_id = anilist_id.split('/')[-1]
         query = '''
         mutation ($mediaId: Int, $status: MediaListStatus) {
             SaveMediaListEntry (mediaId: $mediaId, status: $status) {
