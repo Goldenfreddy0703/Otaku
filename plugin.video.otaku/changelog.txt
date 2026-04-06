@@ -1,3 +1,8 @@
+Changelog v5.2.87 (2026-04-06):
+- Fixed Xbox compatibility: Replaced ctypes.c_long with pure Python 32-bit integer truncation in DMM secret generation
+- Fixed crash in source_select when episode has None broadcast date (no aired data) — now safely handles missing/null dates
+- Added safeguards for None values in aired/start_date properties to prevent setProperty() crashes
+
 Changelog v5.2.86 (2026-04-05):
 - Large refactor and cleanup across the UI and HTTP client layers plus a few small bugfixes
 - Removed explicit version constraint for script.module.pyqrcode

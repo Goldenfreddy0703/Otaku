@@ -32,7 +32,7 @@ class SourceSelect(BaseWindow):
                 self.setProperty('item.info.episode', str(anime_init[0][episode - 1]['info']['episode']))
                 self.setProperty('item.info.title', anime_init[0][episode - 1]['info']['title'])
                 self.setProperty('item.info.plot', anime_init[0][episode - 1]['info']['plot'])
-                self.setProperty('item.info.aired', anime_init[0][episode - 1]['info'].get('aired'))
+                self.setProperty('item.info.aired', anime_init[0][episode - 1]['info'].get('aired') or '')
                 self.setProperty('item.art.thumb', anime_init[0][episode - 1]['image']['thumb'])
                 self.setProperty('item.art.poster', anime_init[0][episode - 1]['image']['poster'])
             except IndexError:
@@ -40,9 +40,10 @@ class SourceSelect(BaseWindow):
                 self.setProperty('item.info.episode', '-1')
 
             try:
-                year, month, day = anime_init[0][episode - 1]['info'].get('aired', '0000-00-00').split('-')
+                aired = anime_init[0][episode - 1]['info'].get('aired') or '0000-00-00'
+                year, month, day = aired.split('-')
                 self.setProperty('item.info.year', year)
-            except ValueError:
+            except (ValueError, AttributeError):
                 pass
         else:
             show = database.get_show(actionArgs.get('mal_id'))
@@ -50,7 +51,7 @@ class SourceSelect(BaseWindow):
                 kodi_meta = pickle.loads(show.get('kodi_meta'))
                 self.setProperty('item.info.plot', kodi_meta.get('plot'))
                 self.setProperty('item.info.rating', str(kodi_meta.get('rating', {}).get('score')))
-                self.setProperty('item.info.aired', kodi_meta.get('start_date'))
+                self.setProperty('item.info.aired', kodi_meta.get('start_date') or '')
                 self.setProperty('item.art.thumb', kodi_meta.get('poster'))
                 try:
                     self.setProperty('item.info.year', kodi_meta.get('start_date').split('-')[0])

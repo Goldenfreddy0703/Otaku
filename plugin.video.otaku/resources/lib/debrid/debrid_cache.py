@@ -6,7 +6,6 @@ Uses external services (Torrentio, AIOStreams, DMM) to check RD/AD cache status
 since those services removed their native cache-check APIs.
 """
 
-import ctypes
 import random
 import re
 import time
@@ -208,31 +207,37 @@ def _dmm_check_cache(hash_list, imdb_id, collector):
 #  DMM Secret Generation (ported from POV)
 # ═══════════════════════════════════════════════════════════════════════════
 
+def _to_int32(v):
+    """Truncate to signed 32-bit integer (replaces ctypes.c_long for Xbox compat)."""
+    v = v & 0xFFFFFFFF
+    return v - 0x100000000 if v >= 0x80000000 else v
+
+
 def _get_dmm_secret():
     def _calc_value_alg(t, n, const):
         temp = t ^ n
-        t = ctypes.c_long((temp * const)).value
-        t4 = ctypes.c_long(t << 5).value
-        t5 = ctypes.c_long((t & 0xFFFFFFFF) >> 27).value
+        t = _to_int32(temp * const)
+        t4 = _to_int32(t << 5)
+        t5 = _to_int32((t & 0xFFFFFFFF) >> 27)
         return t4 | t5
 
     def _slice_hash(s, n):
         half = int(len(s) // 2)
         left_s, right_s = s[:half], s[half:]
         left_n, right_n = n[:half], n[half:]
-        i = ''.join(ls + ln for ls, ln in zip(left_s, left_n))
-        return i + right_n[::-1] + right_s[::-1]
+        l = ''.join(ls + ln for ls, ln in zip(left_s, left_n))
+        return l + right_n[::-1] + right_s[::-1]
 
     def _generate_hash(e):
-        t = ctypes.c_long(0xDEADBEEF ^ len(e)).value
+        t = _to_int32(0xDEADBEEF ^ len(e))
         a = 1103547991 ^ len(e)
         for ch in e:
             n = ord(ch)
             t = _calc_value_alg(t, n, 2654435761)
             a = _calc_value_alg(a, n, 1597334677)
-        t = ctypes.c_long(t + ctypes.c_long(a * 1566083941).value).value
-        a = ctypes.c_long(a + ctypes.c_long(t * 2024237689).value).value
-        return ctypes.c_long(t ^ a).value & 0xFFFFFFFF
+        t = _to_int32(t + _to_int32(a * 1566083941))
+        a = _to_int32(a + _to_int32(t * 2024237689))
+        return _to_int32(t ^ a) & 0xFFFFFFFF
 
     ran = random.randrange(10 ** 80)
     hex_str = f"{ran:064x}"[:8]
