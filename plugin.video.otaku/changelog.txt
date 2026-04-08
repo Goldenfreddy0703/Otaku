@@ -535,6 +535,16 @@ Changelog v5.2.8 (2025-04-23):
 - Moved Icons to Context Addon
 - Added extra settings in General Category
 
+Changelog v5.2.88 (2026-04-07):
+- Added anime reviews feature via Jikan API with full review browsing
+- Added "View Reviews" context menu item for anime (enabled by default)
+- Added reaction counts display (Nice, Love it, Funny, Informative, Well Written, Creative)
+- Fixed calendar date/time displays to convert from UTC to user's local timezone
+- Updated AnimePahe base URL from animepahe.com to animepahe.pw
+- Changed context menu navigation from ActivateWindow to Container.Update for smoother transitions
+- Added new language strings for reviews feature (#30460, #30461)
+- Updated context addon to v1.0.33 with View Reviews context menu support
+
 Changelog v5.2.7 (2025-04-19):
 - Animix will fail gracefully.
 - Cleaned up settings.xml

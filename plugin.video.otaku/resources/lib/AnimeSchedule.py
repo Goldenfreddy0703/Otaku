@@ -728,6 +728,8 @@ class AnimeScheduleCalendar:
 
         try:
             dt = datetime.datetime.fromisoformat(episode_date.replace('Z', '+00:00'))
+            # Convert from UTC to user's local timezone
+            dt = dt.astimezone()
             return dt.strftime('%A')
         except:
             return episode_date
@@ -747,6 +749,8 @@ class AnimeScheduleCalendar:
 
         try:
             dt = datetime.datetime.fromisoformat(episode_date.replace('Z', '+00:00'))
+            # Convert from UTC to user's local timezone
+            dt = dt.astimezone()
             return dt.strftime('%d %b')
         except:
             return episode_date
@@ -766,6 +770,8 @@ class AnimeScheduleCalendar:
 
         try:
             dt = datetime.datetime.fromisoformat(episode_date.replace('Z', '+00:00'))
+            # Convert from UTC to user's local timezone
+            dt = dt.astimezone()
             return dt.strftime('%I:%M %p')
         except:
             return episode_date

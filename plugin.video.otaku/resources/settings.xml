@@ -3340,6 +3340,11 @@
 					<default>true</default>
 					<control type="toggle"/>
 				</setting>
+				<setting id="context.otaku.viewreviews" type="boolean" label="30460" help="">
+					<level>0</level>
+					<default>true</default>
+					<control type="toggle"/>
+				</setting>
 				<setting id="context.otaku.rescrape" type="boolean" label="30248" help="">
 					<level>0</level>
 					<default>true</default>

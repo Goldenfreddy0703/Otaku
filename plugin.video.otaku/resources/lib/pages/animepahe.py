@@ -7,7 +7,7 @@ from resources.lib.endpoints import malsync
 
 
 class Sources(BrowserBase):
-    _BASE_URL = 'https://animepahe.com/'
+    _BASE_URL = 'https://animepahe.pw/'
     _headers = {
         'Referer': _BASE_URL,
         'Cookie': '__ddg1_=PZYJSmACHBBQGP6auJU9; __ddg2_=hxAe1bBqtlUhMFik'

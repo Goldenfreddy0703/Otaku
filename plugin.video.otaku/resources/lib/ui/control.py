@@ -1,21 +1,21 @@
 """
-control.py - Otaku Addon Control & Settings Layer
+control.py – Otaku Addon Control & Settings Layer
 ==================================================
 Central hub for addon-wide constants, settings access, GUI helpers,
 directory listing, and Kodi integration utilities.
 
 Architecture
 ------------
-Constants    - Addon ID, paths, database files, Kodi objects
-Settings     - Cached getters/setters (window property → in-memory → Kodi API)
-Logging      - Unified log() helper with level mapping
-Debrid/WL    - Helper functions for enabled services
-GUI/Dialogs  - Dialog wrappers, notifications, keyboard input
-VideoTags    - ListItem metadata builder (set_videotags)
-Directory    - draw_items / bulk_dir_list / xbmc_add_dir
-View Types   - Container view mode helpers
-Context Menu - process_context() for dynamic context menu caching
-Utilities    - Misc helpers (clipboard, color, refresh, abort)
+Constants    – Addon ID, paths, database files, Kodi objects
+Settings     – Cached getters/setters (window property → in-memory → Kodi API)
+Logging      – Unified log() helper with level mapping
+Debrid/WL    – Helper functions for enabled services
+GUI/Dialogs  – Dialog wrappers, notifications, keyboard input
+VideoTags    – ListItem metadata builder (set_videotags)
+Directory    – draw_items / bulk_dir_list / xbmc_add_dir
+View Types   – Container view mode helpers
+Context Menu – process_context() for dynamic context menu caching
+Utilities    – Misc helpers (clipboard, color, refresh, abort)
 """
 
 import random
@@ -34,7 +34,7 @@ from urllib import parse
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-#  Constants - Addon Identity & Paths
+#  Constants – Addon Identity & Paths
 # ═══════════════════════════════════════════════════════════════════════════
 
 _artwork_cache = {}
@@ -185,7 +185,7 @@ def refresh():
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-#  Settings - Cached Getters & Setters
+#  Settings – Cached Getters & Setters
 # ═══════════════════════════════════════════════════════════════════════════
 
 def getSetting(key):
@@ -366,7 +366,7 @@ def clearSettingsCache():
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-#  Context Menu - Dynamic Property Caching
+#  Context Menu – Dynamic Property Caching
 # ═══════════════════════════════════════════════════════════════════════════
 
 def process_context():
@@ -375,6 +375,7 @@ def process_context():
         "context.otaku.findrecommendations",
         "context.otaku.findrelations",
         "context.otaku.getwatchorder",
+        "context.otaku.viewreviews",
         "context.otaku.rescrape",
         "context.otaku.sourceselect",
         "context.otaku.logout",
@@ -448,7 +449,7 @@ def keyboard(title, text=''):
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-#  GUI - Dialogs & Notifications
+#  GUI – Dialogs & Notifications
 # ═══════════════════════════════════════════════════════════════════════════
 
 def closeAllDialogs():
@@ -496,7 +497,7 @@ def browse(type_, heading, shares, mask=''):
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-#  VideoTags - ListItem Metadata Builder
+#  VideoTags – ListItem Metadata Builder
 # ═══════════════════════════════════════════════════════════════════════════
 
 def set_videotags(li, info):
@@ -565,7 +566,7 @@ def jsonrpc(json_data):
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-#  Directory Listing - draw_items / bulk_dir_list / xbmc_add_dir
+#  Directory Listing – draw_items / bulk_dir_list / xbmc_add_dir
 # ═══════════════════════════════════════════════════════════════════════════
 
 def xbmc_add_dir(name, url, art, info, draw_cm, bulk_add, isfolder, isplayable):
@@ -829,11 +830,9 @@ def print(string, *args):
     textviewer_dialog('print', f'{string}')
     del args, string
 
-
 def timeIt(func):
     # Thanks to 123Venom
     import time
-
     def wrap(*args, **kwargs):
         started_at = time.perf_counter()
         result = func(*args, **kwargs)

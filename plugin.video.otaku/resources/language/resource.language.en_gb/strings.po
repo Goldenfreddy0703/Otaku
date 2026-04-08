@@ -1856,3 +1856,11 @@ msgstr ""
 msgctxt "#30459"
 msgid "Enable Kodi Cache"
 msgstr ""
+
+msgctxt "#30460"
+msgid "View Reviews"
+msgstr ""
+
+msgctxt "#30461"
+msgid "No reviews available for this anime"
+msgstr ""

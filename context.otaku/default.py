@@ -61,13 +61,16 @@ def main():
     plugin = 'plugin://plugin.video.otaku'
     if arg == 'findrecommendations':
         path = path.split(plugin, 1)[1]
-        xbmc.executebuiltin(f"ActivateWindow(Videos,{plugin}/find_recommendations{path})")
+        xbmc.executebuiltin(f"Container.Update({plugin}/find_recommendations{path})")
     elif arg == 'findrelations':
         path = path.split(plugin, 1)[1]
-        xbmc.executebuiltin(f"ActivateWindow(Videos,{plugin}/find_relations{path})")
+        xbmc.executebuiltin(f"Container.Update({plugin}/find_relations{path})")
     elif arg == 'getwatchorder':
         path = path.split(plugin, 1)[1]
-        xbmc.executebuiltin(f"ActivateWindow(Videos,{plugin}/watch_order{path})")
+        xbmc.executebuiltin(f"Container.Update({plugin}/watch_order{path})")
+    elif arg == 'viewreviews':
+        path = path.split(plugin, 1)[1]
+        xbmc.executebuiltin(f"Container.Update({plugin}/anime_reviews{path})")
     elif arg == 'rescrape':
         params = get_video_info(item)
         params['rescrape'] = 'true'
