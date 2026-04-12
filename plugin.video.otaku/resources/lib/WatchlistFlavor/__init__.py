@@ -166,7 +166,10 @@ class WatchlistFlavor:
 
         for flavor in flavors:
             try:
-                flavor.update_num_episodes(mal_id, episode)
+                updated = flavor.update_num_episodes(mal_id, episode)
+                if not updated:
+                    control.log(f'Failed to update episode {episode} on {flavor.flavor_name} (returned False)', 'warning')
+                    continue
                 control.log(f'Updated episode {episode} on {flavor.flavor_name}')
 
                 # Per-flavor completion detection using each service's own total episode count

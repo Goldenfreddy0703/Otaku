@@ -696,6 +696,8 @@ class AniListWLF(WatchlistFlavorBase):
         anilist_id = self._get_mapping_id(mal_id, 'anilist_id')
         if not anilist_id:
             return False
+        if str(anilist_id).startswith('http'):
+            anilist_id = str(anilist_id).split('/')[-1]
         query = '''
         mutation ($mediaId: Int, $progress : Int, $status: MediaListStatus) {
             SaveMediaListEntry (mediaId: $mediaId, progress: $progress, status: $status) {
@@ -721,6 +723,8 @@ class AniListWLF(WatchlistFlavorBase):
         anilist_id = self._get_mapping_id(mal_id, 'anilist_id')
         if not anilist_id:
             return False
+        if str(anilist_id).startswith('http'):
+            anilist_id = str(anilist_id).split('/')[-1]
         query = '''
         mutation ($mediaId: Int, $score: Float) {
             SaveMediaListEntry (mediaId: $mediaId, score: $score) {

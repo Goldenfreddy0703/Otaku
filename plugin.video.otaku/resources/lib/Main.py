@@ -240,7 +240,15 @@ def WATCH_ORDER(payload, params):
 def ANIME_REVIEWS(payload, params):
     from resources.lib.ui import client
     path, mal_id, eps_watched = payload.rsplit("/")
-    url = f'https://api.jikan.moe/v4/anime/{mal_id}/reviews'
+    page = int(params.get('page', 1))
+
+    # Build query parameters
+    query_params = [f'page={page}']
+    query_params.append('preliminary=true')
+    query_params.append('spoilers=true')
+    query_string = '&'.join(query_params)
+
+    url = f'https://api.jikan.moe/v4/anime/{mal_id}/reviews?{query_string}'
     response = client.get(url)
     if not response or not response.ok:
         control.notify(control.ADDON_NAME, control.lang(30461))
@@ -252,11 +260,18 @@ def ANIME_REVIEWS(payload, params):
         control.notify(control.ADDON_NAME, control.lang(30461))
         control.draw_items([], 'addons')
         return
+
+    # Pagination info
+    pagination = data.get('pagination', {})
+    has_next_page = pagination.get('has_next_page', False)
+
     # Store reviews in window property for detail view
     import json as json_mod
     control.setGlobalProp('otaku.reviews.cache', json_mod.dumps(reviews))
     control.setGlobalProp('otaku.reviews.mal_id', str(mal_id))
-    review_items = []
+    control.setGlobalProp('otaku.reviews.page', str(page))
+
+    import xbmcplugin
     for idx, review in enumerate(reviews):
         user = review.get('user', {})
         username = user.get('username', 'Anonymous')
@@ -265,8 +280,10 @@ def ANIME_REVIEWS(payload, params):
         tag_str = tags[0] if tags else ''
         date = review.get('date', '')[:10]
         is_spoiler = review.get('is_spoiler', False)
+        is_preliminary = review.get('is_preliminary', False)
         spoiler_tag = ' [COLOR red][Spoiler][/COLOR]' if is_spoiler else ''
-        title = f"[COLOR deepskyblue]{username}[/COLOR] - {score}/10 [COLOR orange][{tag_str}][/COLOR]{spoiler_tag}  ({date})"
+        preliminary_tag = ' [COLOR yellow][Preliminary][/COLOR]' if is_preliminary else ''
+        title = f"[COLOR deepskyblue]{username}[/COLOR] - {score}/10 [COLOR orange][{tag_str}][/COLOR]{spoiler_tag}{preliminary_tag}  ({date})"
         preview = review.get('review', '')[:200].replace('\n', ' ') + '...'
         info = {
             'title': title,
@@ -275,15 +292,21 @@ def ANIME_REVIEWS(payload, params):
         }
         art = {'poster': user.get('images', {}).get('jpg', {}).get('image_url', control.OTAKU_LOGO3_PATH),
                'icon': user.get('images', {}).get('jpg', {}).get('image_url', control.OTAKU_LOGO3_PATH)}
-        review_items.append((title, f'view_review/{mal_id}/{idx}/', art, info))
-    import xbmcplugin
-    for item in review_items:
-        name, url, art, info = item
-        u = control.addon_url(url)
-        liz = control.menuItem(name, offscreen=True)
+        u = control.addon_url(f'view_review/{mal_id}/{idx}/')
+        liz = control.menuItem(title, offscreen=True)
         control.set_videotags(liz, info)
         liz.setArt(art)
         xbmcplugin.addDirectoryItem(control.HANDLE, u, liz, False)
+
+    # Add Next Page item if more pages exist
+    if has_next_page:
+        next_title = f'[COLOR deepskyblue]>>> {control.lang(30464)} (Page {page + 1}) >>>[/COLOR]'
+        next_url = f'anime_reviews/{path}/{mal_id}/{eps_watched}?page={page + 1}'
+        u = control.addon_url(next_url)
+        liz = control.menuItem(next_title, offscreen=True)
+        liz.setArt({'icon': control.OTAKU_LOGO3_PATH, 'poster': control.OTAKU_LOGO3_PATH})
+        xbmcplugin.addDirectoryItem(control.HANDLE, u, liz, True)
+
     xbmcplugin.endOfDirectory(control.HANDLE, cacheToDisc=True)
 
 
@@ -295,9 +318,10 @@ def VIEW_REVIEW(payload, params):
     review_idx = int(parts[1])
     cached = control.getGlobalProp('otaku.reviews.cache')
     if not cached:
-        # Re-fetch if cache expired
+        # Re-fetch if cache expired - include preliminary and spoiler reviews
         from resources.lib.ui import client
-        url = f'https://api.jikan.moe/v4/anime/{mal_id}/reviews'
+        page = int(control.getGlobalProp('otaku.reviews.page') or 1)
+        url = f'https://api.jikan.moe/v4/anime/{mal_id}/reviews?page={page}&preliminary=true&spoilers=true'
         response = client.get(url)
         if not response or not response.ok:
             control.notify(control.ADDON_NAME, control.lang(30461))
@@ -316,13 +340,39 @@ def VIEW_REVIEW(payload, params):
     tags = review.get('tags', [])
     tag_str = tags[0] if tags else ''
     date = review.get('date', '')[:10]
+    is_preliminary = review.get('is_preliminary', False)
+    is_spoiler = review.get('is_spoiler', False)
     reactions = review.get('reactions', {})
-    header = f"By: {username}  |  Score: {score}/10  |  {tag_str}  |  {date}"
+    flags = []
+    if is_preliminary:
+        flags.append('Preliminary')
+    if is_spoiler:
+        flags.append('Spoiler')
+    flag_str = f"  |  [{', '.join(flags)}]" if flags else ''
+    header = f"By: {username}  |  Score: {score}/10  |  {tag_str}  |  {date}{flag_str}"
     reaction_line = f"Reactions - Nice: {reactions.get('nice', 0)} | Love it: {reactions.get('love_it', 0)} | Funny: {reactions.get('funny', 0)} | Informative: {reactions.get('informative', 0)} | Well Written: {reactions.get('well_written', 0)} | Creative: {reactions.get('creative', 0)}"
     separator = '-' * 60
     body = review.get('review', 'No review text available.')
     full_text = f"{header}\n{reaction_line}\n{separator}\n\n{body}"
     control.textviewer_dialog(f"Review by {username}", full_text)
+
+
+@Route('anime_statistics/*')
+def ANIME_STATISTICS(payload, params):
+    from resources.lib.ui import client
+    path, mal_id, eps_watched = payload.rsplit("/")
+    url = f'https://api.jikan.moe/v4/anime/{mal_id}/statistics'
+    response = client.get(url)
+    if not response or not response.ok:
+        control.notify(control.ADDON_NAME, control.lang(30463))
+        return
+    data = response.json().get('data', {})
+    if not data:
+        control.notify(control.ADDON_NAME, control.lang(30463))
+        return
+    from resources.lib.windows.stats_window import StatsWindow
+    window = StatsWindow('anime_statistics.xml', control.ADDON_PATH, stats=data, heading='[B]Anime Statistics[/B]')
+    window.run()
 
 
 @Route('watch_history/')

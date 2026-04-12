@@ -1,3 +1,16 @@
+Changelog v5.2.89 (2026-04-11):
+- Added Anime Statistics window showing score distribution, watching/completed/dropped counts via Jikan API
+- Added "View Statistics" context menu item for anime (with settings toggle)
+- Added pagination support and preliminary/spoiler filtering to anime reviews
+- Reviews now show preliminary and spoiler flags in both list and detail views
+- Refactored episode auto-scroll: replaced fixed sleep loop with wait_loop utility and Control.SetFocus for more robust scrolling
+- Removed smart.scroll.direction setting (no longer needed with new scroll logic)
+- Hardened watchlist flows: AniList IDs now stored on show updates, mapping URLs normalized to IDs
+- Watchlist episode updates now check return values and log/skip failures gracefully
+- Simplified watchlist auth flow to always use WatchlistFlavorAuth (removed AltWatchlistFlavorAuth)
+- Changed database upsert to INSERT ... ON CONFLICT (replaced REPLACE) and removed explicit PRAGMA foreign_keys toggles
+- Used Container.Update instead of ActivateWindow for fanart selection navigation
+
 Changelog v5.2.87 (2026-04-06):
 - Fixed Xbox compatibility: Replaced ctypes.c_long with pure Python 32-bit integer truncation in DMM secret generation
 - Fixed crash in source_select when episode has None broadcast date (no aired data) — now safely handles missing/null dates

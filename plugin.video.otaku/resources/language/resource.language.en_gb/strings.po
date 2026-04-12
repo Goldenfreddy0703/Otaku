@@ -1136,7 +1136,7 @@ msgid "Media Playback"
 msgstr ""
 
 msgctxt "#30276"
-msgid "Smart Scroll Direction"
+msgid ""
 msgstr ""
 
 msgctxt "#30277"
@@ -1863,4 +1863,16 @@ msgstr ""
 
 msgctxt "#30461"
 msgid "No reviews available for this anime"
+msgstr ""
+
+msgctxt "#30462"
+msgid "View Statistics"
+msgstr ""
+
+msgctxt "#30463"
+msgid "No statistics available for this anime"
+msgstr ""
+
+msgctxt "#30464"
+msgid "Next Page"
 msgstr ""

@@ -10,11 +10,7 @@ BROWSER = MetaBrowser.BROWSER
 
 def get_auth_dialog(flavor):
     from resources.lib.windows import wlf_auth
-    platform = control.sys.platform
-    if 'linux' in platform:
-        auth = wlf_auth.AltWatchlistFlavorAuth(flavor).set_settings()
-    else:
-        auth = wlf_auth.WatchlistFlavorAuth('wlf_auth_%s.xml' % flavor, control.ADDON_PATH, flavor=flavor).doModal()
+    auth = wlf_auth.WatchlistFlavorAuth('wlf_auth_%s.xml' % flavor, control.ADDON_PATH, flavor=flavor).doModal()
     return WatchlistFlavor.login_request(flavor) if auth else None
 
 

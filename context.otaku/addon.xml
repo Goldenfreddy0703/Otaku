@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<addon id="context.otaku" version="1.0.33" name="Otaku - Global Context Menu Items" provider-name="TeamOtaku">
+<addon id="context.otaku" version="1.0.34" name="Otaku - Global Context Menu Items" provider-name="TeamOtaku">
   <requires>
      <import addon="xbmc.python" version="3.0.1"/>
   </requires>
@@ -20,6 +20,10 @@
       <item library="default.py" args="viewreviews">
         <label>View Reviews</label>
         <visible>String.IsEqual(Window(home).Property(context.otaku.viewreviews),true) + String.StartsWith(ListItem.Path,plugin://plugin.video.otaku/) + [String.IsEqual(ListItem.DBTYPE,tvshow)|String.IsEqual(ListItem.DBTYPE,movie)]</visible>
+      </item>
+      <item library="default.py" args="viewstatistics">
+        <label>View Statistics</label>
+        <visible>String.IsEqual(Window(home).Property(context.otaku.viewstatistics),true) + String.StartsWith(ListItem.Path,plugin://plugin.video.otaku/) + [String.IsEqual(ListItem.DBTYPE,tvshow)|String.IsEqual(ListItem.DBTYPE,movie)]</visible>
       </item>
       <item library="default.py" args="markedaswatched">
         <label>Marked as Watched [COLOR blue]WatchList[/COLOR]</label>

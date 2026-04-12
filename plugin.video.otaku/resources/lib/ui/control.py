@@ -157,14 +157,6 @@ def enabled_watchlists():
     return [x for x in watchlists if getSetting(f'{x}.token') != '' and getBool(f'{x}.enabled')]
 
 
-def watchlist_to_update():
-    """Returns the first enabled watchlist name for backward compatibility."""
-    if getBool('watchlist.update.enabled'):
-        enabled = enabled_watchlists()
-        if enabled:
-            return enabled[0]
-
-
 def copy2clip(txt):
     platform = sys.platform
     if platform == 'win32':
@@ -376,6 +368,7 @@ def process_context():
         "context.otaku.findrelations",
         "context.otaku.getwatchorder",
         "context.otaku.viewreviews",
+        "context.otaku.viewstatistics",
         "context.otaku.rescrape",
         "context.otaku.sourceselect",
         "context.otaku.logout",
@@ -451,6 +444,26 @@ def keyboard(title, text=''):
 # ═══════════════════════════════════════════════════════════════════════════
 #  GUI – Dialogs & Notifications
 # ═══════════════════════════════════════════════════════════════════════════
+
+def wait_loop(step: int, timeout: int, path: str, path2: str=''):
+    """
+    :param step: Step wait time in ms
+    :param timeout: max timeout time in ms
+    :param path: path to match Container.FolderPath
+    :param path2: path2 to match Container.FolderPath
+
+    """
+    max_loop = int(timeout / step)
+    for i in range(max_loop):
+        xbmc.sleep(step)
+        if xbmcgui.getCurrentWindowId() == 10025:
+            kodi_path = xbmc.getInfoLabel('Container.FolderPath')
+            if path in kodi_path or path2 in kodi_path:
+                if not xbmc.getCondVisibility("Container.IsUpdating"):
+                    break
+    else:
+        log(f"Waited ({step * max_loop}ms) for path {xbmc.getInfoLabel('Container.FolderPath')}")
+
 
 def closeAllDialogs():
     execute('Dialog.Close(all,true)')
@@ -680,27 +693,21 @@ def draw_items(video_data, content_type=''):
 
     # move to episode position currently watching
     if content_type == "episodes" and getBool('general.smart.scroll.enable'):
-        # Wait until the container has files (max ~750ms) instead of a fixed delay
-        for _ in range(15):
-            if xbmc.getCondVisibility("Container.HasFiles"):
-                break
-            xbmc.sleep(50)
+        wait_loop(10, 250, f"plugin://{ADDON_ID}/animes", f'plugin://{ADDON_ID}/watchlist_to_ep')
+        window = xbmcgui.getCurrentWindowId()
+        current_window = xbmcgui.Window(window)
+        active_id = current_window.getFocusId()
         try:
             num_watched = int(xbmc.getInfoLabel("Container.TotalWatched"))
-            total_ep = int(xbmc.getInfoLabel('Container(id).NumItems'))
-            total_items = int(xbmc.getInfoLabel('Container(id).NumAllItems'))
-            if total_items == total_ep + 1:
-                num_watched += 1
-                total_ep += 1
+            total_ep = int(xbmc.getInfoLabel('Container.NumItems'))
+            all_items = int(xbmc.getInfoLabel('Container.NumAllItems'))
+            offset = 1 if all_items > total_ep else 0
+            target_index = num_watched + offset
         except ValueError:
             return
-        if total_ep > num_watched > 0:
+        if 0 < target_index < all_items:
             xbmc.executebuiltin('Action(firstpage)')
-            for _ in range(num_watched):
-                if getInt('smart.scroll.direction') == 0:
-                    xbmc.executebuiltin('Action(Down)')
-                else:
-                    xbmc.executebuiltin('Action(Right)')
+            xbmc.executebuiltin(f'Control.SetFocus({active_id}, {target_index})')
 
 
 def bulk_dir_list(video_data, bulk_add=True):

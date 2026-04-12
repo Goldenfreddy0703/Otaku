@@ -2241,6 +2241,8 @@ class AniListBrowser(BrowserBase):
             pass
 
         database.update_show(mal_id, pickle.dumps(kodi_meta))
+        if res.get('id'):
+            database.add_mapping_id(mal_id, 'anilist_id', res['id'])
 
     def get_genres(self, page, format):
         query = '''
