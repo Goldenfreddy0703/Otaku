@@ -139,8 +139,7 @@ class KitsuWLF(WatchlistFlavorBase):
         self._should_refresh_cache()
 
         from resources.lib.ui.database import (
-            get_watchlist_cache,
-            save_watchlist_cache,
+            get_watchlist_cache, save_watchlist_cache,
             is_watchlist_cache_valid
         )
 

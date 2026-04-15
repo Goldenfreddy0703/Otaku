@@ -133,7 +133,7 @@ class AllDebrid:
         r = client.get(url)
         return r.json()['data'] if r else None
 
-    def resolve_single_magnet(self, hash_, magnet, episode, pack_select):
+    def resolve_single_magnet(self, hash_, magnet, episode, pack_select, filename=None):
         magnet_data = self.addMagnet(magnet)
         if not magnet_data or 'magnets' not in magnet_data or not magnet_data['magnets']:
             return None
@@ -148,7 +148,7 @@ class AllDebrid:
             self.collect_files(x, folder_details)
 
         if episode:
-            selected_file = source_utils.get_best_match('path', folder_details, str(episode), pack_select)
+            selected_file = source_utils.get_best_match('path', folder_details, str(episode), pack_select, filename)
             if selected_file is not None:
                 resolved_link = self.resolve_hoster(selected_file['link'])
                 if self.autodelete:

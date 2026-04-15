@@ -2051,8 +2051,6 @@ class OtakuBrowser(BrowserBase):
             pass
 
         database.update_show(mal_id, pickle.dumps(kodi_meta))
-        if anilist_res and anilist_res.get('id'):
-            database.add_mapping_id(mal_id, 'anilist_id', anilist_res['id'])
 
     def update_genre_settings(self):
         mal_res = database.get(self.get_mal_base_res, 24, f'{self._BASE_URL}/genres/anime')

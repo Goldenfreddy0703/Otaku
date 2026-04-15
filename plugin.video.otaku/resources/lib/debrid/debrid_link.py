@@ -128,14 +128,14 @@ class DebridLink:
         r = client.post(url, data=postData, headers=self.headers())
         return r.json().get('value') if r else None
 
-    def resolve_single_magnet(self, hash_, magnet, episode, pack_select):
+    def resolve_single_magnet(self, hash_, magnet, episode, pack_select, filename=None):
         magnet_data = self.addMagnet(magnet)
         if not magnet_data or 'files' not in magnet_data:
             return None
         files = magnet_data['files']
         folder_details = [{'link': x['downloadUrl'], 'path': x['name']} for x in files]
         if episode:
-            selected_file = source_utils.get_best_match('path', folder_details, episode, pack_select)
+            selected_file = source_utils.get_best_match('path', folder_details, episode, pack_select, filename)
             if selected_file is not None:
                 return selected_file['link']
 

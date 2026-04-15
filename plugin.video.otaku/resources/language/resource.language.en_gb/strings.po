@@ -1876,3 +1876,11 @@ msgstr ""
 msgctxt "#30464"
 msgid "Next Page"
 msgstr ""
+
+msgctxt "#30465"
+msgid "Torrentio"
+msgstr ""
+
+msgctxt "#30466"
+msgid "Torrentio Providers"
+msgstr ""

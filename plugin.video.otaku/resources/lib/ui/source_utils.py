@@ -292,7 +292,7 @@ def get_fuzzy_match(query, filenames):
     return []
 
 
-def get_best_match(dict_key, dictionary_list, episode, pack_select=False):
+def get_best_match(dict_key, dictionary_list, episode, pack_select=False, filename=None):
     control.setBool('best_match', True)
     regex = get_cache_check_reg(episode)
     files = []
@@ -300,6 +300,8 @@ def get_best_match(dict_key, dictionary_list, episode, pack_select=False):
         path = re.sub(r'\[.*?]', '', i[dict_key].split('/')[-1])
         if not is_file_ext_valid(path):
             continue
+        if filename and filename in i.get(dict_key, ''):
+            return i
         i['regex_matches'] = regex.findall(path)
         files.append(i)
     if pack_select:
@@ -377,6 +379,9 @@ def filter_sources(provider, torrent_list, mal_id, season=None, episode=None, pa
             torrent['hash'] = torrent.get('id', '')
         elif provider == 'torbox':
             torrent['hash'] = torrent.get('hash', '')
+        elif provider == 'torrentio':
+            if 'hash' not in torrent:
+                continue
         elif provider == 'local':
             torrent['hash'] = torrent.get('path', '')
         else:

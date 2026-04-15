@@ -73,7 +73,7 @@ class EasyDebrid:
         resp = r.json() if r else {}
         return resp
 
-    def resolve_single_magnet(self, hash_, magnet, episode, pack_select):
+    def resolve_single_magnet(self, hash_, magnet, episode, pack_select, filename=None):
         """
         For compatibility with our add-on interface.
         Since EasyDebrid does not support adding a magnet,

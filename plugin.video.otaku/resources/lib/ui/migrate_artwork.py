@@ -53,12 +53,12 @@ def migrate_artwork_database():
                 stats['entries_processed'] += 1
                 mal_id = row['mal_id']
                 art_blob = row['art']
-                # meta_ids_blob = row['meta_ids']
+                meta_ids_blob = row['meta_ids']
 
                 try:
                     # Unpickle existing art data
                     art = pickle.loads(art_blob)
-                    # meta_ids = pickle.loads(meta_ids_blob)
+                    meta_ids = pickle.loads(meta_ids_blob)
 
                     original_size = len(art_blob)
                     updated = False

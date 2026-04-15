@@ -1,7 +1,7 @@
 import threading
 import time
 
-from resources.lib.pages import nyaa, animetosho, nekobt, debrid_cloudfiles, animixplay, aniwave, animepahe, hianime, animekai, watchnixtoons2, localfiles
+from resources.lib.pages import nyaa, animetosho, nekobt, torrentio, debrid_cloudfiles, animixplay, aniwave, animepahe, hianime, animekai, watchnixtoons2, localfiles
 from resources.lib.ui import control, database
 from resources.lib.windows.get_sources_window import GetSources
 from resources.lib.windows import sort_select
@@ -41,7 +41,7 @@ def getSourcesHelper(actionArgs):
 class Sources(GetSources):
     def __init__(self, xml_file, location, actionArgs=None):
         super(Sources, self).__init__(xml_file, location, actionArgs)
-        self.torrentProviders = ['nyaa', 'animetosho', 'nekobt']
+        self.torrentProviders = ['nyaa', 'animetosho', 'nekobt', 'torrentio']
         self.embedProviders = ['animepahe', 'animix', 'aniwave', 'hianime', 'animekai', 'watchnixtoons2']
         self.CloudProviders = ['Cloud Inspection']
         self.localProviders = ['Local Inspection']
@@ -120,6 +120,13 @@ class Sources(GetSources):
                 self.threads.append(t)
             else:
                 self.remainingProviders.remove('nekobt')
+
+            if control.getBool('provider.torrentio'):
+                t = threading.Thread(target=self.torrentio_worker, args=(query, mal_id, episode, status, media_type, rescrape, season, part))
+                t.start()
+                self.threads.append(t)
+            else:
+                self.remainingProviders.remove('torrentio')
 
         else:
             for provider in self.torrentProviders:
@@ -270,6 +277,21 @@ class Sources(GetSources):
         self.torrentCacheSources += all_sources['cached']
         self.torrentSources += all_sources['cached'] + all_sources['uncached']
         self.remainingProviders.remove('nekobt')
+
+    def torrentio_worker(self, query, mal_id, episode, status, media_type, rescrape, season, part):
+        if rescrape:
+            all_sources = torrentio.Sources().get_sources(query, mal_id, episode, status, media_type, season, part)
+        else:
+            all_sources = database.get(torrentio.Sources().get_sources, 8, query, mal_id, episode, status, media_type, season, part, key='torrentio')
+
+        # Defensive check to ensure all_sources is not None
+        if all_sources is None:
+            all_sources = {'cached': [], 'uncached': []}
+
+        self.torrentUnCacheSources += all_sources['uncached']
+        self.torrentCacheSources += all_sources['cached']
+        self.torrentSources += all_sources['cached'] + all_sources['uncached']
+        self.remainingProviders.remove('torrentio')
 
     # embeds #
     def animepahe_worker(self, mal_id, episode, rescrape):

@@ -103,9 +103,7 @@ class BaseWindow(xbmcgui.WindowXMLDialog):
         # If clearlogo is already a string (pre-selected), use it directly
 
         # Set properties in batch
-        if self.item_information.get('format') not in ['MOVIE', 'Movie']:
-            self.setProperty('item.art.fanart', fanart)
-
+        self.setProperty('item.art.fanart', fanart)
         self.setProperty('item.art.poster', self.item_information.get('poster'))
         self.setProperty('item.art.clearlogo', clearlogo)
         self.setProperty('item.info.title', self.item_information.get('name'))

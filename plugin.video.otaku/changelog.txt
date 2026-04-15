@@ -1,3 +1,13 @@
+- Changelog v5.2.90 (2026-04-14):
+- Added Torrentio provider with filename matching and provider config options
+- Added Torrentio to torrent source selection and settings (toggle and provider list)
+- Improved Debrid cache usage and Torrentio parsing for better source results
+- Removed AniList mapping storage (now always uses normalized IDs)
+- Fixed playback error when episode art is missing
+- Fixed error message on source select when no aired date is present
+- Added comma separator to votes in statistics screen for readability
+- Added 'View Statistics' context menu option for calendar
+
 Changelog v5.2.89 (2026-04-11):
 - Added Anime Statistics window showing score distribution, watching/completed/dropped counts via Jikan API
 - Added "View Statistics" context menu item for anime (with settings toggle)

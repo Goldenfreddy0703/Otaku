@@ -165,7 +165,7 @@ class Premiumize:
             self.add_to_cloud(directLink.get('location', ''))
         return directLink.get('location')
 
-    def resolve_single_magnet(self, hash_, magnet, episode, pack_select):
+    def resolve_single_magnet(self, hash_, magnet, episode, pack_select, filename=None):
         self.manage_storage_space()
         dd_result = self.direct_download(magnet)
         if not dd_result or 'content' not in dd_result:
@@ -176,12 +176,12 @@ class Premiumize:
         filter_list = [i for i in folder_details]
 
         if pack_select:
-            identified_file = source_utils.get_best_match('path', folder_details, episode, pack_select)
+            identified_file = source_utils.get_best_match('path', folder_details, episode, pack_select, filename)
             stream_link = identified_file.get('link')
         elif len(filter_list) == 1:
             stream_link = filter_list[0]['link']
         elif len(filter_list) >= 1:
-            identified_file = source_utils.get_best_match('path', folder_details, episode)
+            identified_file = source_utils.get_best_match('path', folder_details, episode, filename=filename)
             stream_link = identified_file.get('link')
         else:
             filter_list = [tfile for tfile in folder_details if 'sample' not in tfile['path'].lower()]

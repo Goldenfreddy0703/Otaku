@@ -32,7 +32,6 @@ class SourceSelect(BaseWindow):
                 self.setProperty('item.info.episode', str(anime_init[0][episode - 1]['info']['episode']))
                 self.setProperty('item.info.title', anime_init[0][episode - 1]['info']['title'])
                 self.setProperty('item.info.plot', anime_init[0][episode - 1]['info']['plot'])
-                self.setProperty('item.info.aired', anime_init[0][episode - 1]['info'].get('aired') or '')
                 self.setProperty('item.art.thumb', anime_init[0][episode - 1]['image']['thumb'])
                 self.setProperty('item.art.poster', anime_init[0][episode - 1]['image']['poster'])
             except IndexError:
@@ -42,8 +41,9 @@ class SourceSelect(BaseWindow):
             try:
                 aired = anime_init[0][episode - 1]['info'].get('aired') or '0000-00-00'
                 year, month, day = aired.split('-')
+                self.setProperty('item.info.aired', aired)
                 self.setProperty('item.info.year', year)
-            except (ValueError, AttributeError):
+            except (ValueError, AttributeError, IndexError):
                 pass
         else:
             show = database.get_show(actionArgs.get('mal_id'))

@@ -510,7 +510,7 @@ class SimklWLF(WatchlistFlavorBase):
             'last_watched': res['last_watched_at'],
             'last_rated': res['user_rated_at'],
             'watched_episodes_count': res.get('watched_episodes_count'),
-            'total_episodes_count': res.get('total_episodes_count'),
+            'total_episodes_count': res.get('total_episodes_count')
         }
         if info_rating:
             info['rating'] = info_rating

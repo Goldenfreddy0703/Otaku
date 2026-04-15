@@ -19,12 +19,11 @@ class StatsWindow(xbmcgui.WindowXMLDialog):
 
         # Summary stats
         total = data.get('total', 0)
+        self.setProperty('otaku.stats.total', f'{total:,}')
         summary_keys = ['watching', 'completed', 'on_hold', 'dropped', 'plan_to_watch']
         for key in summary_keys:
             value = data.get(key, 0)
             self.setProperty(f'otaku.stats.{key}', f'{value:,}')
-
-        self.setProperty('otaku.stats.total', f'{total:,}')
 
         # Score distribution bars
         scores = {s['score']: s for s in data.get('scores', [])}
@@ -36,7 +35,7 @@ class StatsWindow(xbmcgui.WindowXMLDialog):
             bar_pct = pct / max_pct * 100 if max_pct > 0 else 0
             self.getControl(4000 + i).setPercent(bar_pct)
             self.setProperty(f'otaku.stats.score{i}.pct', f'{pct}%')
-            self.setProperty(f'otaku.stats.score{i}.votes', f'({votes} votes)')
+            self.setProperty(f'otaku.stats.score{i}.votes', f'({votes:,} votes)')
 
     def onAction(self, action):
         action_id = action.getId()
