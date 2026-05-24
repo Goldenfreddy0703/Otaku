@@ -1,3 +1,4 @@
+import html
 import pickle
 import re
 import time
@@ -6,6 +7,7 @@ import json
 from bs4 import BeautifulSoup
 from resources.lib.ui import control, database, client
 from resources.lib.ui.BrowserBase import BrowserBase
+from resources.lib.ui.source_utils import get_fuzzy_match
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import threading
 
@@ -149,12 +151,12 @@ class Sources(BrowserBase):
             search_titles.append(("clean", clean_title))
 
         # Search for episodes using all titles concurrently for faster results
-        found_episodes = {}  # Use dict to avoid duplicates by URL
+        found_episodes = {}  # keyed by lang (2=SUB, 3=DUB)
 
         def search_title_worker(search_data):
             search_type, search_title = search_data
             control.log(f"Searching for {search_type} version with title: {search_title}")
-            return self._search_and_get_episode(search_title, season, mapped_episode, search_type)
+            return self._search_and_get_episodes(search_title, season, mapped_episode, search_type)
 
         # Process searches concurrently
         with ThreadPoolExecutor(max_workers=control.max_threads) as executor:
@@ -164,15 +166,19 @@ class Sources(BrowserBase):
                 search_data = future_to_search[future]
                 search_type = search_data[0]
                 try:
-                    episode_result = future.result()
-                    if episode_result:
-                        # Use URL as key to avoid duplicates
-                        episode_url = episode_result['url']
-                        if episode_url not in found_episodes:
-                            found_episodes[episode_url] = episode_result
-                            control.log(f"Added {search_type} episode: {episode_result['title']}")
+                    episode_results = future.result() or []
+                    for episode_result in episode_results:
+                        lang = self._episode_lang_key(episode_result)
+                        version_type = "DUB" if lang == 3 else "SUB"
+                        existing = found_episodes.get(lang)
+                        if self._is_better_episode(episode_result, existing):
+                            found_episodes[lang] = episode_result
+                            control.log(
+                                f"Added {search_type} {version_type} episode: {episode_result['title']} "
+                                f"(from {episode_result.get('series_title', 'Unknown')})"
+                            )
                         else:
-                            control.log(f"Duplicate episode found for {search_type}, skipping")
+                            control.log(f"Duplicate {version_type} episode found for {search_type}, skipping")
                 except Exception as e:
                     control.log(f"Search failed for {search_type}: {str(e)}")
 
@@ -183,11 +189,8 @@ class Sources(BrowserBase):
         control.log(f"WatchNixtoons2: Found {len(found_episodes)} episode variants to process")
 
         def extract_sources_worker(episode_data):
-            # Determine if it's SUB or DUB based on title/series
-            episode_title = episode_data.get('title', '').lower()
-            is_dub = ('english dubbed' in episode_title)
-            version_type = "DUB" if is_dub else "SUB"
-            lang = 3 if is_dub else 2
+            lang = self._episode_lang_key(episode_data)
+            version_type = "DUB" if lang == 3 else "SUB"
 
             # Early exit check - skip if we already have sources for this language
             if lang in sources_found_per_lang:
@@ -236,263 +239,296 @@ class Sources(BrowserBase):
         control.log(f"WatchNixtoons2: Returning {len(sources)} total sources")
         return sources
 
+    def _unescape_html_url(self, url):
+        return html.unescape(url or '')
+
+    def _ensure_full_url(self, base_url, url):
+        url = self._unescape_html_url(url)
+        if url.startswith('http://') or url.startswith('https://'):
+            return url
+        if url.startswith('//'):
+            return 'https:' + url
+        return urllib.parse.urljoin(base_url, url)
+
+    def _embed_api_origin(self, embed_url):
+        parsed = urllib.parse.urlparse(embed_url)
+        if parsed.netloc:
+            return f'{parsed.scheme}://{parsed.netloc}/'
+        return 'https://embed.wcostream.com/'
+
+    def _find_embed_url(self, page_content, episode_url):
+        """Locate the player embed URL using the original WNT2 detection order."""
+        if '"vjs_iframe"' in page_content:
+            match = re.search(
+                r'<iframe id="(?:[a-zA-Z0-9-]+)" class="vjs_iframe" rel="nofollow" src="([^"]+)"',
+                page_content,
+                re.DOTALL
+            )
+            if match:
+                return self._ensure_full_url(episode_url, match.group(1)), True
+
+        if 'uploads0" src=' in page_content:
+            match = re.search(
+                r'<iframe\s*id="(?:[a-zA-Z]+)uploads(?:[0-9]+)"\s*src="([^"]+)"',
+                page_content,
+                re.DOTALL
+            )
+            if match:
+                return self._ensure_full_url(episode_url, match.group(1)), False
+
+        if '-js-0" src=' in page_content:
+            match = re.search(
+                r'<iframe\s*(?:rel="nofollow")?\s*id="(?:[a-zA-Z]+)\-js\-(?:[0-9]+)"\s*src="([^"]+)"',
+                page_content,
+                re.DOTALL
+            )
+            if match:
+                return self._ensure_full_url(episode_url, match.group(1)), False
+
+        embed_match = re.search(
+            r'<iframe[^>]+src="((?:https?:)?//embed\.wcostream\.com/inc/embed/[^"]+)"',
+            page_content,
+            re.IGNORECASE
+        )
+        if embed_match:
+            return self._ensure_full_url(episode_url, embed_match.group(1)), False
+
+        embed_url_index = page_content.find('onclick="myFunction')
+        if embed_url_index <= 0:
+            embed_url_index = page_content.find('class="episode-descp"')
+
+        if embed_url_index > 0:
+            match = re.search(r'src="([^"]+)', page_content[embed_url_index:])
+            if match:
+                return self._ensure_full_url(episode_url, match.group(1)), False
+
+        skip_hosts = ('ads', 'analytics', 'disqus', 'facebook', 'twitter', 'check-login')
+        for iframe_url in re.findall(r'<iframe[^>]+src="([^"]+)"', page_content, re.IGNORECASE):
+            if any(skip in iframe_url.lower() for skip in skip_hosts):
+                continue
+            return self._ensure_full_url(episode_url, iframe_url), False
+
+        return None, False
+
+    def _normalize_embed_player_url(self, embed_url):
+        embed_url = self._unescape_html_url(embed_url)
+        if 'inc/embed/index.php' in embed_url:
+            embed_url = embed_url.replace('inc/embed/index.php', 'inc/embed/video-js.php')
+        return embed_url
+
+    def _fetch_player_html(self, embed_url, episode_url):
+        player_url = self._normalize_embed_player_url(embed_url)
+        headers = {
+            'User-Agent': self._WNT2_UA,
+            'Referer': episode_url,
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        }
+        player_html = self._make_request(player_url, headers=headers, use_cache=False)
+        return player_html, player_url
+
+    def _build_direct_source(self, title, version_type, lang, video_url, referer, quality_num, info_label):
+        video_headers = {
+            'User-Agent': self._WNT2_UA,
+            'Referer': referer,
+            'Accept': '*/*',
+        }
+        return {
+            'release_title': f"{title} - {version_type}",
+            'hash': f"{video_url}|{urllib.parse.urlencode(video_headers)}",
+            'type': 'direct',
+            'quality': quality_num,
+            'debrid_provider': '',
+            'provider': 'watchnixtoons2',
+            'size': 'NA',
+            'seeders': 0,
+            'byte_size': 0,
+            'info': [info_label],
+            'lang': lang,
+            'channel': 3,
+            'sub': 1,
+        }
+
+    def _resolve_api_url(self, player_html, embed_url):
+        api_origin = self._embed_api_origin(embed_url)
+
+        if 'getRedirectedUrl(videoUrl)' in player_html or 'getRedirectedUrl("' in player_html:
+            match = re.search(r'\$\.getJSON\("([^"]+)"', player_html, re.DOTALL)
+            if match:
+                path = match.group(1)
+                if path.startswith('http'):
+                    source_url = path
+                else:
+                    source_url = urllib.parse.urljoin(api_origin, path.lstrip('/'))
+                if 'json' not in source_url:
+                    source_url += '&json' if '?' in source_url else '?json'
+                return source_url
+
+        match = re.search(r'"(/inc/embed/getvidlink[^"]+)', player_html, re.DOTALL)
+        if match:
+            return urllib.parse.urljoin(api_origin, match.group(1).lstrip('/'))
+
+        return None
+
+    def _extract_api_sources_from_html(self, player_html, embed_url, title, version_type, lang):
+        sources = []
+        source_url = self._resolve_api_url(player_html, embed_url)
+        if not source_url:
+            return sources
+
+        control.log(f"Requesting WCO server API: {source_url}")
+        api_headers = {
+            'Accept': '*/*',
+            'Referer': embed_url,
+            'X-Requested-With': 'XMLHttpRequest',
+            'User-Agent': self._WNT2_UA,
+        }
+        server_resp = self._make_request(source_url, headers=api_headers, use_cache=False)
+        if not server_resp:
+            control.log("Failed to get WCO server API response")
+            return sources
+
+        try:
+            json_data = json.loads(server_resp)
+        except json.JSONDecodeError as exc:
+            control.log(f"Failed to parse WCO server JSON: {exc}")
+            control.log(f"Response content: {server_resp[:500]}")
+            return sources
+
+        control.log(f"WCO API response keys: {list(json_data.keys())}")
+        token_sd = json_data.get('enc', '')
+        token_hd = json_data.get('hd', '')
+        token_fhd = json_data.get('fhd', '')
+
+        server_base_url = json_data.get('server', '')
+        if server_base_url:
+            server_base_url = server_base_url.rstrip('/') + '/getvid?evid='
+
+        for quality_label, token, quality_num in (
+            ('SD', token_sd, 1),
+            ('HD', token_hd, 2),
+            ('FHD', token_fhd, 3),
+        ):
+            if server_base_url and token:
+                video_url = server_base_url + token
+                sources.append(self._build_direct_source(
+                    title, version_type, lang, video_url, embed_url, quality_num,
+                    f'API {quality_label} {version_type}'
+                ))
+                control.log(f"Added WCO API source: {quality_label} - {video_url}")
+
+        cdn_backup = json_data.get('cdn', '')
+        if cdn_backup and (token_sd or token_hd or token_fhd):
+            backup_token = token_fhd or token_hd or token_sd
+            backup_url = cdn_backup.rstrip('/') + '/getvid?evid=' + backup_token
+            sources.append(self._build_direct_source(
+                title, version_type, lang, backup_url, embed_url, 2,
+                f'CDN Backup {version_type}'
+            ))
+            control.log(f"Added CDN backup source: {backup_url}")
+
+        return sources
+
+    def _extract_m3u8_sources_from_html(self, player_html, embed_url, title, version_type, lang):
+        sources = []
+
+        source_match = re.search(r'<source\s*src="([^"]+)"', player_html, re.DOTALL)
+        if source_match:
+            m3u8_url = source_match.group(1)
+            sources.append(self._build_direct_source(
+                title, version_type, lang, m3u8_url, embed_url, 3,
+                f'M3U8 {version_type}'
+            ))
+            control.log(f"Added M3U8 source: {m3u8_url}")
+            return sources
+
+        redirect_match = re.search(r'getRedirectedUrl\("([^"]+)', player_html, re.DOTALL)
+        if redirect_match:
+            m3u8_url = redirect_match.group(1)
+            sources.append(self._build_direct_source(
+                title, version_type, lang, m3u8_url, embed_url, 3,
+                f'M3U8 {version_type}'
+            ))
+            control.log(f"Added redirected M3U8 source: {m3u8_url}")
+
+        return sources
+
+    def _extract_jwplayer_sources_from_html(self, player_html, embed_url, title, version_type, lang):
+        sources = []
+        sources_block = re.search(r'sources:\s*?\[(.*?)\]', player_html, re.DOTALL)
+        if not sources_block:
+            return sources
+
+        stream_pattern = re.compile(r'\{\s*?file:\s*?"(.*?)"(?:,\s*?label:\s*?"(.*?)")?')
+        for source_match in stream_pattern.finditer(sources_block.group(1)):
+            label = source_match.group(2) or 'Stream'
+            video_url = source_match.group(1)
+            if '1080' in label:
+                quality_num = 3
+            elif '720' in label:
+                quality_num = 2
+            else:
+                quality_num = 1
+            sources.append(self._build_direct_source(
+                title, version_type, lang, video_url, embed_url, quality_num,
+                f'{label} {version_type}'
+            ))
+            control.log(f"Added JWPlayer source: {label} - {video_url}")
+
+        return sources
+
+    def _extract_streams_from_player_html(self, player_html, embed_url, title, version_type, lang, is_m3u8_player=False):
+        if 'high volume of requests' in player_html:
+            control.log('WCO player blocked free users temporarily')
+            return []
+
+        if 'getvid?evid' in player_html:
+            sources = self._extract_api_sources_from_html(player_html, embed_url, title, version_type, lang)
+            if sources:
+                return sources
+
+        if is_m3u8_player:
+            sources = self._extract_m3u8_sources_from_html(player_html, embed_url, title, version_type, lang)
+            if sources:
+                return sources
+
+        sources = self._extract_m3u8_sources_from_html(player_html, embed_url, title, version_type, lang)
+        if sources:
+            return sources
+
+        return self._extract_jwplayer_sources_from_html(player_html, embed_url, title, version_type, lang)
+
     def _extract_advanced_sources(self, episode_url, page_content, version_type, lang, title):
-        """Extract sources using WNT2's exact approach with optimized server API detection"""
+        """Extract sources using the original WNT2 embed/player resolution flow."""
         sources = []
 
         try:
-            # FIRST: Try WNT2's premium workaround (the "playlist thing")
             premium_url = self._premium_workaround_check(page_content, episode_url)
             if premium_url:
-                source = {
-                    'release_title': f"{title} - {version_type}",
-                    'hash': f"{premium_url}|{urllib.parse.urlencode({'User-Agent': self._WNT2_UA, 'Referer': episode_url})}",
-                    'type': 'direct',
-                    'quality': 3,  # Premium usually has best quality (1080p)
-                    'debrid_provider': '',
-                    'provider': 'watchnixtoons2',
-                    'size': 'NA',
-                    'seeders': 0,
-                    'byte_size': 0,
-                    'info': [f'Premium {version_type}'],
-                    'lang': lang,
-                    'channel': 3,
-                    'sub': 1
-                }
-                sources.append(source)
+                sources.append(self._build_direct_source(
+                    title, version_type, lang, premium_url, episode_url, 3,
+                    f'Premium {version_type}'
+                ))
                 control.log(f"Added premium workaround source: {premium_url}")
 
-            # SECOND: Use WNT2's exact server API detection approach (optimized)
-            has_getjson = 'getJSON(' in page_content
-            has_iframe = '<iframe' in page_content
+            embed_url, is_m3u8_player = self._find_embed_url(page_content, episode_url)
+            if not embed_url:
+                control.log("No embed URL found on episode page")
+                return sources
 
-            # Try to find server API URLs even without the getvid indicator
-            source_url = None
+            control.log(f"Found embed URL: {embed_url}")
+            player_html, resolved_embed_url = self._fetch_player_html(embed_url, episode_url)
+            if not player_html:
+                control.log(f"Failed to fetch embed player page: {resolved_embed_url}")
+                return sources
 
-            if 'getvid?evid' in page_content:
-                # Check for redirected URL type first (like WNT2)
-                if 'getRedirectedUrl(videoUrl)' in page_content:
-                    # Type 1: jQuery getJSON with redirect pattern
-                    match = re.search(r'\$\.getJSON\(\"([^\"]+)\"', page_content, re.DOTALL)
-                    if match:
-                        source_url = match.group(1)
-                        if not source_url.startswith('http'):
-                            source_url = "https://embed.wcostream.com/" + source_url
-                        source_url += "&json"
-                        control.log(f"Found redirected getJSON API: {source_url}")
-                else:
-                    # Type 2: Direct getvidlink API pattern
-                    match = re.search(r'"(/inc/embed/getvidlink[^"]+)', page_content, re.DOTALL)
-                    if match:
-                        source_url = self._BASE_URL.rstrip('/') + match.group(1)
-                        control.log(f"Found direct getvidlink API: {source_url}")
-
-            # ALTERNATIVE: Look for getJSON patterns even without getvid indicator
-            elif has_getjson:
-                # Look for any getJSON calls that might be video APIs
-                getjson_matches = re.findall(r'\$\.getJSON\(["\']([^"\']+)["\']', page_content)
-                for match in getjson_matches:
-                    # Skip obvious non-video APIs
-                    if any(skip in match.lower() for skip in ['firebase', 'analytics', 'ads', 'login', 'check']):
-                        continue
-
-                    if not match.startswith('http'):
-                        if match.startswith('/'):
-                            source_url = self._BASE_URL.rstrip('/') + match
-                        else:
-                            source_url = "https://embed.wcostream.com/" + match
-                    else:
-                        source_url = match
-
-                    # Add &json if it looks like it needs it
-                    if 'embed' in source_url and 'json' not in source_url:
-                        source_url += "&json"
-
-                    control.log(f"Trying getJSON API: {source_url}")
-                    break  # Try the first promising one
-
-            # If we found a server API URL, try to extract qualities
-            if source_url:
-                control.log(f"Requesting server API: {source_url}")
-
-                api_headers = {
-                    'Accept': '*/*',
-                    'Referer': episode_url,
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'User-Agent': self._WNT2_UA
-                }
-
-                server_resp = self._make_request(source_url, headers=api_headers, use_cache=False)
-                if server_resp:
-                    try:
-                        json_data = json.loads(server_resp)
-                        control.log(f"Server API response keys: {list(json_data.keys())}")
-
-                        # Extract quality tokens (WNT2 style)
-                        token_sd = json_data.get('enc', '')  # Standard definition
-                        token_hd = json_data.get('hd', '')   # High definition
-                        token_fhd = json_data.get('fhd', '')  # Full high definition
-
-                        server_base_url = json_data.get('server', '')
-                        if server_base_url and not server_base_url.endswith('/getvid?evid='):
-                            server_base_url = server_base_url.rstrip('/') + '/getvid?evid='
-
-                        # Build sources for each quality level
-                        quality_sources = []
-                        if token_sd:
-                            quality_sources.append(('SD', token_sd, 1))
-                        if token_hd:
-                            quality_sources.append(('HD', token_hd, 2))
-                        if token_fhd:
-                            quality_sources.append(('FHD', token_fhd, 3))
-
-                        # Create source entries
-                        for quality_label, token, quality_num in quality_sources:
-                            if server_base_url and token:
-                                video_url = server_base_url + token
-
-                                video_headers = {
-                                    'User-Agent': self._WNT2_UA,
-                                    'Referer': episode_url,
-                                    'Accept': '*/*'
-                                }
-
-                                hlink = f"{video_url}|{urllib.parse.urlencode(video_headers)}"
-                                source = {
-                                    'release_title': f"{title} - {version_type}",
-                                    'hash': hlink,
-                                    'type': 'direct',
-                                    'quality': quality_num,
-                                    'debrid_provider': '',
-                                    'provider': 'watchnixtoons2',
-                                    'size': 'NA',
-                                    'seeders': 0,
-                                    'byte_size': 0,
-                                    'info': [f'API {quality_label} {version_type}'],
-                                    'lang': lang,
-                                    'channel': 3,
-                                    'sub': 1
-                                }
-                                sources.append(source)
-                                control.log(f"Added WNT2-style source: {quality_label} - {video_url}")
-
-                        # Also check for backup CDN (like WNT2)
-                        cdn_backup = json_data.get('cdn', '')
-                        if cdn_backup and (token_sd or token_hd or token_fhd):
-                            backup_token = token_fhd or token_hd or token_sd
-                            backup_url = cdn_backup.rstrip('/') + '/getvid?evid=' + backup_token
-
-                            backup_headers = {
-                                'User-Agent': self._WNT2_UA,
-                                'Referer': episode_url,
-                                'Accept': '*/*'
-                            }
-
-                            hlink = f"{backup_url}|{urllib.parse.urlencode(backup_headers)}"
-                            source = {
-                                'release_title': f"{title} - {version_type}",
-                                'hash': hlink,
-                                'type': 'direct',
-                                'quality': 2,  # Default backup quality
-                                'debrid_provider': '',
-                                'provider': 'watchnixtoons2',
-                                'size': 'NA',
-                                'seeders': 0,
-                                'byte_size': 0,
-                                'info': [f'CDN Backup {version_type}'],
-                                'lang': lang,
-                                'channel': 3,
-                                'sub': 1
-                            }
-                            sources.append(source)
-                            control.log(f"Added CDN backup source: {backup_url}")
-
-                    except json.JSONDecodeError as e:
-                        control.log(f"Failed to parse server JSON response: {str(e)}")
-                        control.log(f"Response content: {server_resp[:500]}")
-                else:
-                    control.log("Failed to get server API response")
-            else:
-                control.log("No server API URL found - trying fallback patterns")
-
-                # FALLBACK 1: Extract and process iframe content for video APIs (optimized)
-                if has_iframe:
-                    control.log("Found iframe - extracting iframe sources for video APIs")
-                    iframe_matches = re.findall(r'<iframe[^>]+src="([^"]+)"', page_content, re.IGNORECASE)
-
-                    # Filter and process only promising iframes concurrently
-                    promising_iframes = []
-                    for iframe_url in iframe_matches[:3]:  # Limit to first 3 iframes for speed
-                        # Skip ads and non-video iframes
-                        if any(skip in iframe_url.lower() for skip in ['ads', 'analytics', 'disqus', 'facebook', 'twitter']):
-                            continue
-
-                        if not iframe_url.startswith('http'):
-                            if iframe_url.startswith('//'):
-                                iframe_url = 'https:' + iframe_url
-                            elif iframe_url.startswith('/'):
-                                iframe_url = urllib.parse.urljoin(episode_url, iframe_url)
-                            else:
-                                iframe_url = urllib.parse.urljoin(episode_url, iframe_url)
-
-                        promising_iframes.append(iframe_url)
-
-                    # Process iframes concurrently for faster extraction
-                    def process_iframe_worker(iframe_url):
-                        control.log(f"Processing iframe: {iframe_url}")
-
-                        iframe_headers = {
-                            'User-Agent': self._WNT2_UA,
-                            'Referer': episode_url,
-                            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
-                        }
-
-                        iframe_content = self._make_request(iframe_url, headers=iframe_headers, use_cache=False)
-                        if iframe_content:
-                            return self._process_iframe_content(iframe_content, iframe_url, episode_url, title, version_type, lang)
-                        return []
-
-                    # Process iframes concurrently
-                    if promising_iframes:
-                        with ThreadPoolExecutor(max_workers=control.max_threads) as executor:
-                            iframe_futures = {executor.submit(process_iframe_worker, iframe_url): iframe_url for iframe_url in promising_iframes}
-
-                            for future in as_completed(iframe_futures):
-                                try:
-                                    iframe_sources = future.result()
-                                    if iframe_sources:
-                                        sources.extend(iframe_sources)
-                                        # Break after first successful iframe to save time
-                                        break
-                                except Exception as e:
-                                    control.log(f"Iframe processing failed: {str(e)}")
-
-                # FALLBACK 2: Basic iframe source if no APIs found
-                if not sources or len(sources) == 0:
-                    control.log("No API sources found, adding basic iframe fallback")
-                    iframe_pattern = re.search(r'<iframe[^>]+src="([^"]+)"', page_content)
-                    if iframe_pattern:
-                        iframe_url = iframe_pattern.group(1)
-                        if not iframe_url.startswith('http'):
-                            iframe_url = urllib.parse.urljoin(episode_url, iframe_url)
-
-                        source = {
-                            'release_title': f"{title} - {version_type}",
-                            'hash': f"{iframe_url}|{urllib.parse.urlencode({'User-Agent': self._WNT2_UA, 'Referer': episode_url})}",
-                            'type': 'direct',
-                            'quality': 2,  # Default
-                            'debrid_provider': '',
-                            'provider': 'watchnixtoons2',
-                            'size': 'NA',
-                            'seeders': 0,
-                            'byte_size': 0,
-                            'info': [f'Basic Iframe {version_type}'],
-                            'lang': lang,
-                            'channel': 3,
-                            'sub': 1
-                        }
-                        sources.append(source)
-                        control.log(f"Added basic iframe source: {iframe_url}")
+            sources.extend(self._extract_streams_from_player_html(
+                player_html,
+                resolved_embed_url,
+                title,
+                version_type,
+                lang,
+                is_m3u8_player,
+            ))
 
         except Exception as e:
             control.log(f"Advanced source extraction failed: {str(e)}", "error")
@@ -501,118 +537,6 @@ class Sources(BrowserBase):
         for i, source in enumerate(sources, 1):
             info_str = ' '.join(source.get('info', []))
             control.log(f"Source {i}: {info_str} - Quality: {source.get('quality')}")
-
-        return sources
-
-    def _process_iframe_content(self, iframe_content, iframe_url, episode_url, title, version_type, lang):
-        """Process iframe content for video APIs - optimized helper method"""
-        sources = []
-
-        # Check iframe for the patterns we missed in main page
-        iframe_has_getvid = 'getvid?evid' in iframe_content
-        iframe_has_getjson = 'getJSON(' in iframe_content
-        iframe_has_getvidlink = '/inc/embed/getvidlink' in iframe_content
-
-        # Try to find video APIs in iframe content
-        if iframe_has_getvid or iframe_has_getjson or iframe_has_getvidlink:
-            iframe_source_url = None
-
-            if iframe_has_getjson:
-                # Look for getJSON calls in iframe
-                getjson_matches = re.findall(r'\$\.getJSON\(["\']([^"\']+)["\']', iframe_content)
-                for match in getjson_matches:
-                    if any(skip in match.lower() for skip in ['firebase', 'analytics', 'ads', 'login']):
-                        continue
-
-                    if not match.startswith('http'):
-                        if match.startswith('/'):
-                            iframe_source_url = urllib.parse.urljoin(iframe_url, match)
-                        else:
-                            iframe_source_url = "https://embed.wcostream.com/" + match
-                    else:
-                        iframe_source_url = match
-
-                    if 'embed' in iframe_source_url and 'json' not in iframe_source_url:
-                        iframe_source_url += "&json"
-
-                    control.log(f"Found iframe getJSON API: {iframe_source_url}")
-                    break
-
-            elif iframe_has_getvidlink:
-                # Look for getvidlink in iframe
-                match = re.search(r'"(/inc/embed/getvidlink[^"]+)', iframe_content, re.DOTALL)
-                if match:
-                    iframe_source_url = urllib.parse.urljoin(iframe_url, match.group(1))
-                    control.log(f"Found iframe getvidlink API: {iframe_source_url}")
-
-            # If we found an API in iframe, try to extract qualities
-            if iframe_source_url:
-                control.log(f"Requesting iframe server API: {iframe_source_url}")
-
-                api_headers = {
-                    'Accept': '*/*',
-                    'Referer': iframe_url,
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'User-Agent': self._WNT2_UA
-                }
-
-                iframe_api_resp = self._make_request(iframe_source_url, headers=api_headers, use_cache=False)
-                if iframe_api_resp:
-                    try:
-                        iframe_json_data = json.loads(iframe_api_resp)
-                        control.log(f"Iframe API response keys: {list(iframe_json_data.keys())}")
-
-                        # Extract quality tokens from iframe API
-                        iframe_token_sd = iframe_json_data.get('enc', '')
-                        iframe_token_hd = iframe_json_data.get('hd', '')
-                        iframe_token_fhd = iframe_json_data.get('fhd', '')
-
-                        iframe_server_base_url = iframe_json_data.get('server', '')
-                        if iframe_server_base_url and not iframe_server_base_url.endswith('/getvid?evid='):
-                            iframe_server_base_url = iframe_server_base_url.rstrip('/') + '/getvid?evid='
-
-                        control.log(f"Iframe quality tokens - SD: {bool(iframe_token_sd)}, HD: {bool(iframe_token_hd)}, FHD: {bool(iframe_token_fhd)}")
-
-                        # Build sources from iframe API
-                        iframe_quality_sources = []
-                        if iframe_token_sd:
-                            iframe_quality_sources.append(('SD', iframe_token_sd, 1))
-                        if iframe_token_hd:
-                            iframe_quality_sources.append(('HD', iframe_token_hd, 2))
-                        if iframe_token_fhd:
-                            iframe_quality_sources.append(('FHD', iframe_token_fhd, 3))
-
-                        for quality_label, token, quality_num in iframe_quality_sources:
-                            if iframe_server_base_url and token:
-                                video_url = iframe_server_base_url + token
-
-                                video_headers = {
-                                    'User-Agent': self._WNT2_UA,
-                                    'Referer': iframe_url,
-                                    'Accept': '*/*'
-                                }
-
-                                hlink = f"{video_url}|{urllib.parse.urlencode(video_headers)}"
-                                source = {
-                                    'release_title': f"{title} - {version_type}",
-                                    'hash': hlink,
-                                    'type': 'direct',
-                                    'quality': quality_num,
-                                    'debrid_provider': '',
-                                    'provider': 'watchnixtoons2',
-                                    'size': 'NA',
-                                    'seeders': 0,
-                                    'byte_size': 0,
-                                    'info': [f'Iframe {quality_label} {version_type}'],
-                                    'lang': lang,
-                                    'channel': 3,
-                                    'sub': 1
-                                }
-                                sources.append(source)
-                                control.log(f"Added iframe API source: {quality_label} - {video_url}")
-
-                    except json.JSONDecodeError as e:
-                        control.log(f"Failed to parse iframe API JSON: {str(e)}")
 
         return sources
 
@@ -660,6 +584,70 @@ class Sources(BrowserBase):
 
         return cleaned
 
+    def _normalize_series_base_title(self, title):
+        base = (title or '').strip()
+        for suffix in (
+            ' english subbed',
+            ' english dubbed',
+            ' english dub',
+            ' subbed',
+            ' dubbed',
+        ):
+            if base.lower().endswith(suffix):
+                base = base[:-len(suffix)].strip()
+        return base
+
+    def _is_dub_episode(self, episode_data):
+        episode_title = episode_data.get('title', '').lower()
+        series_title = episode_data.get('series_title', '').lower()
+        combined = f"{episode_title} {series_title}"
+
+        sub_markers = ('english subbed', 'english sub', ' subbed')
+        dub_markers = ('english dubbed', 'english dub', ' dubbed')
+
+        if any(marker in combined for marker in sub_markers):
+            return False
+        if any(marker in combined for marker in dub_markers):
+            return True
+        if re.search(r'\bdub(?:bed)?\b', combined) and not re.search(r'\bsub(?:bed)?\b', combined):
+            return True
+        return False
+
+    def _episode_lang_key(self, episode_data):
+        return 3 if self._is_dub_episode(episode_data) else 2
+
+    def _get_series_variants(self, series_results):
+        if not series_results:
+            return []
+
+        anchor_base = self._normalize_series_base_title(series_results[0]['title']).lower()
+        variants = []
+        seen_urls = set()
+
+        for series in series_results:
+            series_base = self._normalize_series_base_title(series['title']).lower()
+            same_show = (
+                series_base == anchor_base
+                or self._titles_match(series_results[0]['title'], series['title'])
+            )
+            if not same_show:
+                continue
+            if series['url'] in seen_urls:
+                continue
+            seen_urls.add(series['url'])
+            variants.append(series)
+
+        return variants or [series_results[0]]
+
+    def _pick_sub_and_dub_episodes(self, episode_matches):
+        picked = {}
+        for match in episode_matches:
+            lang = self._episode_lang_key(match)
+            existing = picked.get(lang)
+            if not existing or match.get('priority', 99) < existing.get('priority', 99):
+                picked[lang] = match
+        return list(picked.values())
+
     def _parse_episode_range(self, range_str):
         """Parse episode range string like '1-13' or '13-25'"""
         if not range_str or '-' not in range_str:
@@ -676,47 +664,22 @@ class Sources(BrowserBase):
 
         return None
 
-    def _search_and_get_episode(self, search_title, season, mapped_episode, version_type):
+    def _search_and_get_episodes(self, search_title, season, mapped_episode, version_type):
         """
-        Search for a series and get the matching episode using original proven POST method
-        Returns the episode dict if found, None if not found
+        Search for a series and return matching SUB and DUB episodes when available.
+        Returns a list of episode dicts (0-2 items), not a single episode.
         """
         try:
-            # Search for the series using proven POST method
             series_results = self.search_series(search_title)
 
             if not series_results:
                 control.log(f"No series found for {version_type} search: {search_title}")
-                return None
+                return []
 
-            # Get the first series as the base
-            first_series = series_results[0]
-            first_title = first_series['title'].strip()
+            series_to_check = self._get_series_variants(series_results)
+            for series in series_to_check:
+                control.log(f"Checking series variant: {series['title']}")
 
-            # Look for additional series with "English Subbed" or "English Dubbed"
-            series_to_check = [first_series]
-
-            for series in series_results[1:]:  # Check remaining series
-                series_title = series['title'].strip()
-
-                # Check if this series is the same base title with English Subbed/Dubbed
-                if (series_title.lower().startswith(first_title.lower())
-                        and ("english subbed" in series_title.lower() or "english dubbed" in series_title.lower())):
-                    control.log(f"Found additional series variant: {series_title}")
-                    series_to_check.append(series)
-
-            # Prioritize series based on version_type
-            if version_type == "romaji":
-                # For romaji, prioritize "English Subbed" variants first
-                series_to_check.sort(key=lambda x: 0 if "english subbed" in x['title'].lower() else 1)
-            elif version_type == "english":
-                # For english, prioritize "English Dubbed" variants second
-                series_to_check.sort(key=lambda x: 0 if "english dubbed" in x['title'].lower() else 1)
-            elif version_type == "clean":
-                # For clean, prioritize "Raw" variants third
-                series_to_check.sort(key=lambda x: x['index'])
-
-            # Collect all episodes from all series variants
             all_episodes = []
 
             for series in series_to_check:
@@ -727,7 +690,6 @@ class Sources(BrowserBase):
                     control.log(f"No episodes found in series: {series['title']}")
                     continue
 
-                # Add series info to each episode for tracking
                 for episode in episodes:
                     episode['series_title'] = series['title']
                     episode['series_url'] = series['url']
@@ -736,27 +698,33 @@ class Sources(BrowserBase):
 
             if not all_episodes:
                 control.log("No episodes found in any series variant")
-                return None
+                return []
 
-            # Find matching episodes from all collected episodes
-            episode_matches = self.find_episode_match(all_episodes, season, mapped_episode)
-
-            if episode_matches:
-                best_match = episode_matches[0]
-                control.log(f"Found {version_type} episode in '{best_match['series_title']}': {best_match['title']} ({best_match['match_type']})")
-                return best_match
-            else:
+            episode_matches = self.find_episode_match(all_episodes, season, mapped_episode, search_title)
+            if not episode_matches:
                 control.log(f"No matching episode found in any series variant for Season {season} Episode {mapped_episode}")
-                # Show some examples of available episodes
                 if all_episodes:
                     control.log("Sample episodes found:")
                     for i, ep in enumerate(all_episodes[:5]):
                         control.log(f"{i + 1}. {ep['title']} (from {ep['series_title']})")
-                return None
+                return []
+
+            picked_episodes = self._pick_sub_and_dub_episodes(episode_matches)
+            for episode in picked_episodes:
+                lang_label = "DUB" if self._episode_lang_key(episode) == 3 else "SUB"
+                control.log(
+                    f"Found {version_type} {lang_label} episode in '{episode['series_title']}': "
+                    f"{episode['title']} ({episode['match_type']})"
+                )
+            return picked_episodes
 
         except Exception as e:
             control.log(f"Error in {version_type} search: {e}")
-            return None
+            return []
+
+    def _search_and_get_episode(self, search_title, season, mapped_episode, version_type):
+        episodes = self._search_and_get_episodes(search_title, season, mapped_episode, version_type)
+        return episodes[0] if episodes else None
 
     def truncate_search_query(self, title, max_length=40):
         """Truncate search query to fit character limit while keeping important info"""
@@ -899,7 +867,51 @@ class Sources(BrowserBase):
             control.log(f"Error getting episodes from {series_url}: {e}")
             return []
 
-    def find_episode_match(self, episodes, target_season, target_episode):
+    def _filter_by_title_match(self, search_title, episodes):
+        """Keep episode-number matches whose titles fuzzy-match the search query."""
+        if not search_title or not episodes:
+            return episodes or []
+
+        titles = [ep.get('title', '') for ep in episodes]
+        match_indices = get_fuzzy_match(search_title, titles)
+        if not match_indices:
+            for ep in episodes:
+                control.log(
+                    f"Rejected episode (title mismatch): {ep.get('title')} "
+                    f"(series: {ep.get('series_title', 'Unknown')})"
+                )
+            return []
+
+        filtered = []
+        matched_indices = set(match_indices)
+        for rank, idx in enumerate(match_indices):
+            ep = episodes[idx]
+            ep['title_rank'] = rank
+            filtered.append(ep)
+
+        for idx, ep in enumerate(episodes):
+            if idx not in matched_indices:
+                control.log(
+                    f"Rejected episode (title mismatch): {ep.get('title')} "
+                    f"(series: {ep.get('series_title', 'Unknown')})"
+                )
+        return filtered
+
+    def _is_better_episode(self, candidate, existing):
+        """Prefer lower episode priority, then better fuzzy title rank."""
+        if not existing:
+            return True
+
+        candidate_priority = candidate.get('priority', 99)
+        existing_priority = existing.get('priority', 99)
+        if candidate_priority != existing_priority:
+            return candidate_priority < existing_priority
+
+        candidate_rank = candidate.get('title_rank', 99)
+        existing_rank = existing.get('title_rank', 99)
+        return candidate_rank < existing_rank
+
+    def find_episode_match(self, episodes, target_season, target_episode, search_title=None):
         """Find the matching episode from the episode list using original priority system"""
         matches = []
 
@@ -907,12 +919,16 @@ class Sources(BrowserBase):
             title_text = episode['title']
 
             # Pattern 1: Exact season and episode match
-            season_episode_pattern = re.compile(rf'season\s+{target_season}\s+episode\s+{target_episode}(?!\d)', re.IGNORECASE)
-            if season_episode_pattern.search(title_text):
-                episode['match_type'] = 'Perfect Match (Season + Episode)'
-                episode['priority'] = 1
-                matches.append(episode)
-                continue
+            if target_season is not None:
+                season_episode_pattern = re.compile(
+                    rf'season\s+{target_season}\s+episode\s+{target_episode}(?!\d)',
+                    re.IGNORECASE
+                )
+                if season_episode_pattern.search(title_text):
+                    episode['match_type'] = 'Perfect Match (Season + Episode)'
+                    episode['priority'] = 1
+                    matches.append(episode)
+                    continue
 
             # Pattern 2: Episode only match (for shows without clear seasons)
             episode_only_pattern = re.compile(rf'episode\s+{target_episode}(?!\d)', re.IGNORECASE)
@@ -931,6 +947,10 @@ class Sources(BrowserBase):
 
         # Sort by priority (lower number = higher priority)
         matches.sort(key=lambda x: x['priority'])
+
+        if search_title:
+            matches = self._filter_by_title_match(search_title, matches)
+
         return matches
 
     def _titles_match(self, search_title, series_title):
@@ -969,37 +989,22 @@ class Sources(BrowserBase):
         return False
 
     def _extract_iframe_sources(self, page_content, version_type, lang, episode_data):
-        """Basic iframe source extraction fallback"""
-        sources = []
+        """Fallback extraction if advanced resolution returned nothing."""
+        episode_url = episode_data.get('url', '')
+        title = episode_data.get('title', 'Unknown')
+        embed_url, is_m3u8_player = self._find_embed_url(page_content, episode_url)
+        if not embed_url:
+            return []
 
-        try:
-            iframe_pattern = re.search(r'<iframe[^>]+src="([^"]+)"', page_content)
-            if iframe_pattern:
-                iframe_url = iframe_pattern.group(1)
-                episode_url = episode_data.get('url', '')
+        player_html, resolved_embed_url = self._fetch_player_html(embed_url, episode_url)
+        if not player_html:
+            return []
 
-                if not iframe_url.startswith('http'):
-                    iframe_url = urllib.parse.urljoin(episode_url, iframe_url)
-
-                source = {
-                    'release_title': f"{episode_data.get('title', 'Unknown')} - {version_type}",
-                    'hash': f"{iframe_url}|{urllib.parse.urlencode({'User-Agent': self._WNT2_UA, 'Referer': episode_url})}",
-                    'type': 'direct',
-                    'quality': 2,  # Default quality
-                    'debrid_provider': '',
-                    'provider': 'watchnixtoons2',
-                    'size': 'NA',
-                    'seeders': 0,
-                    'byte_size': 0,
-                    'info': [f'Basic {version_type}'],
-                    'lang': lang,
-                    'channel': 3,
-                    'sub': 1
-                }
-                sources.append(source)
-                control.log(f"Added basic iframe source: {iframe_url}")
-
-        except Exception as e:
-            control.log(f"Basic iframe extraction failed: {str(e)}", "error")
-
-        return sources
+        return self._extract_streams_from_player_html(
+            player_html,
+            resolved_embed_url,
+            title,
+            version_type,
+            lang,
+            is_m3u8_player,
+        )

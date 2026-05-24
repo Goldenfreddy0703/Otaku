@@ -226,7 +226,7 @@
                 <aligny>center</aligny>
                 <width>auto</width>
                 <textcolor>FFDDDDDD</textcolor>
-                <label>Torrents: [COLOR deepskyblue]$INFO[Window().Property(total_torrents)][/COLOR] | Cached: [COLOR  deepskyblue]$INFO[Window().Property(cached_torrents)][/COLOR] | Embeds: [COLOR deepskyblue]$INFO[Window().Property(hosters_sources)][/COLOR] | Cloudfiles: [COLOR deepskyblue]$INFO[Window().Property(cloud_sources)][/COLOR] | Localfiles: [COLOR deepskyblue]$INFO[Window().Property(local_sources)][/COLOR]</label>
+                <label>Torrents: [COLOR deepskyblue]$INFO[Window().Property(total_torrents)][/COLOR] | Hosters: [COLOR deepskyblue]$INFO[Window().Property(hoster_sources)][/COLOR] | Embeds: [COLOR deepskyblue]$INFO[Window().Property(embed_sources)][/COLOR] | Cloudfiles: [COLOR deepskyblue]$INFO[Window().Property(cloud_sources)][/COLOR] | Localfiles: [COLOR deepskyblue]$INFO[Window().Property(local_sources)][/COLOR]</label>
             </control>
             <control type="label">
                 <top>100</top>

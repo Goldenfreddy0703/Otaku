@@ -21,6 +21,15 @@ class Route:
         return func
 
 
+def multi_route(*paths):
+    """Register the same handler for multiple paths (equivalent to stacking @Route)."""
+    def decorator(func):
+        for path in paths:
+            Route(path)(func)
+        return func
+    return decorator
+
+
 def router_process(url, params=None):
     if not params:
         params = {}

@@ -5,7 +5,7 @@ Clean, organized caching and metadata storage.
 
 Architecture
 ------------
-SQL          - Thread-safe SQLite context manager (module-level lock)
+SQL          - Lock-free SQLite context manager (WAL mode concurrent access)
 Memory Cache - Window-property RAM cache with expiry
 General Cache- 3-tier caching: RAM → SQLite → fresh API call
 Shows        - Anime show / meta / episode CRUD
@@ -21,7 +21,6 @@ import hashlib
 import pickle
 import re
 import time
-import threading
 
 import xbmcgui
 import xbmcvfs
@@ -31,10 +30,8 @@ from resources.lib.ui import control
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-#  SQL - Thread-Safe SQLite Context Manager
+#  SQL - SQLite Context Manager (WAL-mode concurrent access)
 # ═══════════════════════════════════════════════════════════════════════════
-
-_db_lock = threading.Lock()
 
 
 def _dict_factory(cursor, row):
@@ -43,10 +40,10 @@ def _dict_factory(cursor, row):
 
 
 class SQL:
-    """Thread-safe SQLite context manager with optimized PRAGMAs.
+    """SQLite context manager with optimized PRAGMAs.
 
-    Uses a *module-level* lock so concurrent threads cannot
-    corrupt data.  Always closes the connection on exit.
+    WAL journal mode allows concurrent readers without locking.
+    isolation_level=None enables autocommit for faster writes.
 
     Usage::
 
@@ -55,33 +52,33 @@ class SQL:
             cursor.connection.commit()   # needed for writes
     """
 
-    def __init__(self, path, timeout=60):
+    def __init__(self, path, timeout=30):
         self.path = path
         self.timeout = timeout
 
     def __enter__(self):
-        _db_lock.acquire()
+        if not xbmcvfs.exists(control.dataPath):
+            xbmcvfs.mkdirs(control.dataPath)
         try:
-            xbmcvfs.mkdir(control.dataPath)
-            self._conn = dbapi2.connect(self.path, timeout=self.timeout)
+            self._conn = dbapi2.connect(self.path, timeout=self.timeout, isolation_level=None)
             self._conn.row_factory = _dict_factory
             self._conn.execute("PRAGMA foreign_keys = ON")
-            self._conn.execute("PRAGMA synchronous = NORMAL")
+            self._conn.execute("PRAGMA synchronous = OFF")
             self._conn.execute("PRAGMA journal_mode = WAL")
-            self._conn.execute("PRAGMA mmap_size = 268435456")  # 256 MB mmap I/O
+            self._conn.execute("PRAGMA mmap_size = 268435456")
             self._cursor = self._conn.cursor()
             return self._cursor
         except Exception:
-            _db_lock.release()
             raise
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         try:
-            self._conn.close()
+            if self._cursor is not None:
+                self._cursor.close()
+            if self._conn is not None:
+                self._conn.close()
         except Exception:
             pass
-        finally:
-            _db_lock.release()
 
         if exc_type:
             if exc_type is OperationalError:
@@ -155,6 +152,11 @@ def _init_cache_table():
         'CREATE TABLE IF NOT EXISTS cache '
         '(key TEXT UNIQUE, value TEXT, date INTEGER)'
     )
+    # Index once at init; avoid running DDL on every cache write (hot path).
+    _ensure_table(
+        control.cacheFile, 'cache_ix_key',
+        'CREATE UNIQUE INDEX IF NOT EXISTS ix_cache ON cache (key)'
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -187,8 +189,9 @@ def get(function, duration, *args, **kwargs):
     if row and is_cache_valid(row['date'], duration):
         try:
             data = ast.literal_eval(row['value'])
-            _mem_set(key, row['value'], duration)
-            return data
+            if data is not None:
+                _mem_set(key, row['value'], duration)
+                return data
         except Exception:
             control.log(
                 f"Cache corrupt for key {key}, fetching fresh data",
@@ -196,6 +199,8 @@ def get(function, duration, *args, **kwargs):
 
     # --- Tier 3: Fresh call ---
     result = function(*args, **kwargs)
+    if result is None:
+        return result
     result_repr = repr(result)
     _cache_write(key, result_repr)
     _mem_set(key, result_repr, duration)
@@ -280,6 +285,7 @@ def cache_clear():
         cur.execute("VACUUM")
         cur.connection.commit()
     _tables_ready.discard(f"{control.cacheFile}:cache")
+    _tables_ready.discard(f"{control.cacheFile}:cache_ix_key")
 
     clear_watchlist_cache()
     clear_watchlist_activity()
@@ -395,6 +401,19 @@ def update_episode_column(mal_id, episode, column, value):
         cur.execute(
             f'UPDATE episodes SET {column}=? WHERE mal_id=? AND number=?',
             (value, mal_id, episode))
+        cur.connection.commit()
+
+
+def update_episode_batch(episode_batch):
+    """Batch insert/replace episodes in a single transaction using executemany."""
+    if not episode_batch:
+        return
+    with SQL(control.malSyncDB) as cur:
+        cur.executemany(
+            'REPLACE INTO episodes '
+            '(mal_id, season, kodi_meta, last_updated, number, filler, anidb_ep_id) '
+            'VALUES (?, ?, ?, ?, ?, ?, ?)',
+            episode_batch)
         cur.connection.commit()
 
 

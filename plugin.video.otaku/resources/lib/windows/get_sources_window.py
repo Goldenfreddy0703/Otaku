@@ -18,9 +18,11 @@ class GetSources(BaseWindow):
         self.args = actionArgs
         self.progress = 0
         self.torrents_qual_len = [0, 0, 0, 0, 0]
+        self.hosters_qual_len = [0, 0, 0, 0, 0]
         self.embeds_qual_len = [0, 0, 0, 0, 0]
         self.torrentSources = []
         self.torrentCacheSources = []
+        self.hosterSources = []
         self.embedSources = []
         self.cloud_files = []
         self.local_files = []
@@ -41,11 +43,11 @@ class GetSources(BaseWindow):
         self.setProperty('process_started', 'true')
         if not self.silent:
             self.update_properties("4K: %s | 1080: %s | 720: %s | SD: %s| EQ: %s" % (
-                control.colorstr(self.torrents_qual_len[0] + self.embeds_qual_len[0]),
-                control.colorstr(self.torrents_qual_len[1] + self.embeds_qual_len[1]),
-                control.colorstr(self.torrents_qual_len[2] + self.embeds_qual_len[2]),
-                control.colorstr(self.torrents_qual_len[3] + self.embeds_qual_len[3]),
-                control.colorstr(self.torrents_qual_len[4] + self.embeds_qual_len[4])
+                control.colorstr(self.torrents_qual_len[0] + self.hosters_qual_len[0] + self.embeds_qual_len[0]),
+                control.colorstr(self.torrents_qual_len[1] + self.hosters_qual_len[1] + self.embeds_qual_len[1]),
+                control.colorstr(self.torrents_qual_len[2] + self.hosters_qual_len[2] + self.embeds_qual_len[2]),
+                control.colorstr(self.torrents_qual_len[3] + self.hosters_qual_len[3] + self.embeds_qual_len[3]),
+                control.colorstr(self.torrents_qual_len[4] + self.hosters_qual_len[4] + self.embeds_qual_len[4])
             ))
         self.close()
 
@@ -59,22 +61,22 @@ class GetSources(BaseWindow):
     def update_properties(self, text):
         """Optimized property updates - batch similar operations"""
         # Calculate totals once
-        total_4k = self.torrents_qual_len[0] + self.embeds_qual_len[0]
-        total_1080 = self.torrents_qual_len[1] + self.embeds_qual_len[1]
-        total_720 = self.torrents_qual_len[2] + self.embeds_qual_len[2]
-        total_sd = self.torrents_qual_len[3] + self.embeds_qual_len[3]
-        total_eq = self.torrents_qual_len[4] + self.embeds_qual_len[4]
+        total_4k = self.torrents_qual_len[0] + self.hosters_qual_len[0] + self.embeds_qual_len[0]
+        total_1080 = self.torrents_qual_len[1] + self.hosters_qual_len[1] + self.embeds_qual_len[1]
+        total_720 = self.torrents_qual_len[2] + self.hosters_qual_len[2] + self.embeds_qual_len[2]
+        total_sd = self.torrents_qual_len[3] + self.hosters_qual_len[3] + self.embeds_qual_len[3]
+        total_eq = self.torrents_qual_len[4] + self.hosters_qual_len[4] + self.embeds_qual_len[4]
 
         # Batch all property updates together
         self.setProperty('notification_text', str(text))
         self.setProperty('4k_sources', str(total_4k))
         self.setProperty('1080p_sources', str(total_1080))
         self.setProperty('720p_sources', str(total_720))
-        self.setProperty('SD_sources', str(total_sd))
-        self.setProperty('EQ_sources', str(total_eq))
+        self.setProperty('sd_sources', str(total_sd))
+        self.setProperty('eq_sources', str(total_eq))
         self.setProperty('total_torrents', str(len(self.torrentSources)))
-        self.setProperty('cached_torrents', str(len(self.torrentCacheSources)))
-        self.setProperty('hosters_sources', str(len(self.embedSources)))
+        self.setProperty('hoster_sources', str(len(self.hosterSources)))
+        self.setProperty('embed_sources', str(len(self.embedSources)))
         self.setProperty('cloud_sources', str(len(self.cloud_files)))
         self.setProperty('local_sources', str(len(self.local_files)))
         self.setProperty("remaining_providers_count", str(len(self.remainingProviders)))

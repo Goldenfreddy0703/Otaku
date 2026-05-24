@@ -147,14 +147,11 @@ class Anichart(BaseWindow):
                 control.draw_items(BROWSER.get_watch_order(anime), 'tvshows')
                 self.close()
             elif choice == "View Reviews":
-                payload = f"some_path/{anime}/0"
-                params = {}
-                Main.ANIME_REVIEWS(payload, params)
+                Main.draw_anime_reviews_listing(anime, page, 'animes', '0')
                 self.close()
             elif choice == "View Statistics":
-                payload = f"some_path/{anime}/0"
-                params = {}
-                Main.ANIME_STATISTICS(payload, params)
+                Main.open_anime_statistics(anime)
+                self.close()
             elif choice == "Delete From Database":
                 payload = f"some_path/{anime}/0"
                 params = {}

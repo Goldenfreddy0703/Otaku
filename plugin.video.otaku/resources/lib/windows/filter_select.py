@@ -1,8 +1,7 @@
 import xbmcgui
 
-from resources.lib.pages.__init__ import INFO_STRUCT
 from resources.lib.windows.base_window import BaseWindow
-from resources.lib.ui import control
+from resources.lib.ui import control, source_utils
 
 
 class FilterSelect(BaseWindow):
@@ -53,7 +52,7 @@ class FilterSelect(BaseWindow):
             sorted(
                 [
                     i
-                    for i in INFO_STRUCT[key]
+                    for i in source_utils.INFO_STRUCT[key]
                     if i
                     not in {
                         "SDR",

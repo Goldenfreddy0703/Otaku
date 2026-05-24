@@ -2,6 +2,7 @@ import pickle
 import datetime
 import time
 import random
+import threading
 
 from functools import partial
 from resources.lib.ui import utils, database, client, control
@@ -9,13 +10,42 @@ from resources.lib import indexers
 
 
 class JikanAPI:
+    _rate_lock = threading.Lock()
+    _request_timestamps = []
+
     def __init__(self):
         self.baseUrl = "https://api.jikan.moe/v4"
+
+    @classmethod
+    def _throttle_3req_per_second(cls):
+        """Global Jikan guard: max 3 requests over any 1 second window."""
+        while True:
+            wait_for = 0
+            with cls._rate_lock:
+                now = time.monotonic()
+                cls._request_timestamps = [t for t in cls._request_timestamps if (now - t) < 1.0]
+                if len(cls._request_timestamps) < 3:
+                    cls._request_timestamps.append(now)
+                    return
+                wait_for = max(0.0, 1.0 - (now - cls._request_timestamps[0]))
+            if wait_for > 0:
+                time.sleep(wait_for + 0.01)
 
     def get_anime_info(self, mal_id):
         response = client.get(f'{self.baseUrl}/anime/{mal_id}')
         if response:
             return response.json()['data']
+
+    def get_anime_synopsis(self, mal_id):
+        """Return synopsis/background for a MAL anime ID."""
+        try:
+            self._throttle_3req_per_second()
+            data = self.get_anime_info(mal_id)
+            if not data:
+                return None
+            return data.get('synopsis') or data.get('background') or None
+        except Exception:
+            return None
 
     def get_episode_meta(self, mal_id):
         url = f'{self.baseUrl}/anime/{mal_id}/episodes'
@@ -166,12 +196,10 @@ class JikanAPI:
         tvshowtitle = kodi_meta['title_userPreferred']
         if not (eps_watched := kodi_meta.get('eps_watched')) and control.getBool('interface.watchlist.data'):
             from resources.lib.WatchlistFlavor import WatchlistFlavor
-            flavor = WatchlistFlavor.get_first_enabled_flavor()
-            if flavor:
-                data = flavor.get_watchlist_anime_entry(mal_id)
-                if data.get('eps_watched'):
-                    eps_watched = kodi_meta['eps_watched'] = data['eps_watched']
-                    database.update_kodi_meta(mal_id, kodi_meta)
+            merged = WatchlistFlavor.get_merged_watchlist_eps_watched(mal_id)
+            if merged is not None:
+                eps_watched = kodi_meta['eps_watched'] = merged
+                database.update_kodi_meta(mal_id, kodi_meta)
         episodes = database.get_episode_list(mal_id)
         dub_data = indexers.process_dub(mal_id, kodi_meta['ename']) if control.getBool('jz.dub') else None
         if episodes:

@@ -1,45 +1,56 @@
-Otaku v5.2.72 — The "I Finally Got Off the Couch" Update
+Otaku v5.2.99 — The "We Didn't Stop Coding" Update
 
 Hey everyone,
 
-Let’s be real — I’ve been lazy. My last commit was January 11th and I basically disappeared for over a month. Life happened, motivation vanished, you know how it goes. But I’m back, and I came back to coding. This is one of the biggest updates Otaku has seen in a while, so buckle up.
+It's been a minute since our last news post, but the commits sure didn't stop. Since v5.2.72 we've shipped a ton of releases — new sources, smarter sorting, better watchlist handling, skip-intro improvements, and a whole lot of fixes under the hood. This is easily one of the biggest stretches of updates Otaku has ever had, so here's everything worth knowing from v5.2.91 through v5.2.99.
 
-What’s New? 
+What's New?
 
-AniList Enrichment — Massively Optimized:
-- Startup watchlist prefetch no longer hammers the AniList API with 20+ separate calls
-- All MAL IDs are collected and fetched in ONE single batch call, then cached for 7 days
-- Watchlist views now load AniList data from cache instantly instead of hitting the API every time
-- Fixed Simkl Next Up crash caused by null last_watched_at values from the API
-- Fixed same potential crash in MAL Next Up with null updated_at values
+New & Improved Sources:
+- Easynews (Usenet) is here — full settings, auth, search, resolve, and sort integration
+- Anikoto added as a new embed provider with MegaPlay extraction, subtitle support, and skip intro/outro settings
+- AnimePahe Alt option: optional proxied base URL when the main site gives you trouble
+- AnimePahe playback fixes: Referer headers on embed URLs and better MALSync session resolution from legacy links
+- WatchNixtoons2 overhauled: WCO embed/player resolution (video-js, getvidlink, VHS M3U8), separate SUB and DUB listings, and fuzzy title matching to pick the right episode across series variants
+- Removed Animix, Aniwave, HiAnime, and AnimeKai from the active embed registry (unreliable/broken hosts)
 
-Next Up — Completely Rebuilt:
-- Brand new top-level Next Up menu item accessible from every sub-menu
-- Choose which watchlist flavor powers your Next Up (AniList, Kitsu, MAL, Simkl, or auto)
-- Enable/disable Next Up right from Watchlist settings
-- Rewrote and centralized ~800 lines of duplicated code into a single shared builder
-- Way cleaner, way faster, way less buggy
+Source Sorting — Completely Rebuilt:
+- Replaced the old multi-pass sorting with a Seren-style composite tuple sorter
+- Sort options now merge cleanly with on-disk presets so new keys stay compatible
+- Sort Select UI updated with max_level-driven visibility and smarter preset handling
 
-Widget Playback — Finally Fixed:
-- Widgets now show full metadata (title, description, artwork) during playback
-- This was a long-standing issue that many of you reported — it’s gone now
-- Fixed crashes when playing Next Up episodes for shows not fully initialized
+Skip Intro/Outro — More Fallbacks:
+- Optional ffprobe chapter probing as a last resort after AniSkip, AnimeSkip, and embedded chapters
+- Finds ffprobe on PATH, beside Kodi, or via a custom settings path
+- Resolver and WatchlistPlayer pass chapter metadata through the full playback chain
 
-Artwork Improvements:
-- New title-based artwork search fallback for anime missing TVDB/TMDB mappings
-- If ID-based lookups fail, Otaku now searches by title to find artwork
-- Toggle it on/off in settings (on by default)
+Watchlist & Progress — Smarter Everywhere:
+- Merged eps_watched across all enabled watchlist flavors when local progress is missing
+- Indexers (AniDB, AniZip, Jikan, Kitsu, Otaku, Next Up, Simkl) now use that unified progress
+- Watchlist integration and AniList/Jikan endpoint handling tightened up across the board
 
-Watchlist Recode:
-- All enabled watchlists now update simultaneously — no more picking just one
-- Per-flavor completion detection using each service’s own episode counts
-- New per-flavor Watchlist Manager in the context menu
-- Unified status mapping across all flavors for consistent behavior
+Browsing & Navigation:
+- Updated AniList, MAL, and Otaku browser flows with improved routing and context menus
+- MAL/Otaku browser retries Jikan without multi-genre filters when the first query comes back empty
+- Ranked/browse date params normalized; fixed this_year and this_season end bounds
+- Schedule/AniChart and service/runtime improvements
+- Smart episode scroll rebuilt with safer wait_loop timing, focus retries, and more reliable auto-scroll
+
+Reliability & Performance:
+- MALSync single-fetch caching — no more hammering the same MAL ID over and over
+- Jikan requests retry up to 3 times; database cache no longer stores failed None responses
+- Source scraping refactored: registry-driven torrent, hoster, and embed workers running in parallel
+- Get Sources dialog now shows Torrent / Hoster / Embed counts with a quality summary line
+- Embed host defaults only reset when SCHEMA_VERSION bumps, not on every import
+- Returning users get an optional setup wizard prompt after schema migrations
+- Easynews search: concurrent queries with dedupe, stricter title matching, and safer filtering
+- Embed extractor cleanup and richer subtitle metadata passed through to the player/resolver
+- UI/client/database layer refactors for cleaner HTTP sessions, mapping, and thread scaling
 
 A Huge Thank You:
-Seriously, thank you to everyone who stuck around while I was MIA. Your patience, bug reports, and support mean the world. Special thanks to the team and everyone in the community who kept things going. You all are the reason Otaku exists.
+To everyone who reported broken sources, bad episode matches, and playback weirdness — you directly shaped a lot of this work. Special thanks to the team and the community for keeping Otaku moving while we pushed through this huge batch of releases. Your patience and feedback mean everything.
 
-I’ve got my motivation back and I’m excited to keep pushing this forward. If you run into any issues with this update, hit us up on GitHub.
+If anything feels off after updating, hit us up on GitHub. We've covered a lot of ground and there are bound to be edge cases we missed.
 
 Happy watching!
 

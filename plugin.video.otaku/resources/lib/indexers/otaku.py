@@ -489,12 +489,10 @@ class OtakuAPI:
         tvshowtitle = kodi_meta['title_userPreferred']
         if not (eps_watched := kodi_meta.get('eps_watched')) and control.getBool('interface.watchlist.data'):
             from resources.lib.WatchlistFlavor import WatchlistFlavor
-            flavor = WatchlistFlavor.get_first_enabled_flavor()
-            if flavor:
-                data = flavor.get_watchlist_anime_entry(mal_id)
-                if data.get('eps_watched'):
-                    eps_watched = kodi_meta['eps_watched'] = data['eps_watched']
-                    database.update_kodi_meta(mal_id, kodi_meta)
+            merged = WatchlistFlavor.get_merged_watchlist_eps_watched(mal_id)
+            if merged is not None:
+                eps_watched = kodi_meta['eps_watched'] = merged
+                database.update_kodi_meta(mal_id, kodi_meta)
         episodes = database.get_episode_list(mal_id)
         dub_data = indexers.process_dub(mal_id, kodi_meta['ename']) if control.getBool('jz.dub') else None
         if episodes:

@@ -840,14 +840,23 @@
 						<multiselect>true</multiselect>
 						<hidevalue>true</hidevalue>
 					</control>
+				</setting>
+			</group>
+
+			<!-- Hosters -->
+			<group id="2" label="30484" help="">
+				<setting id="provider.easynews" type="boolean" label="30473" help="">
+					<level>0</level>
+					<default>true</default>
+					<control type="toggle"/>
 					<dependencies>
-						<dependency type="visible" setting="provider.torrentio">true</dependency>
+						<dependency type="visible" setting="easynews.enabled">true</dependency>
 					</dependencies>
 				</setting>
 			</group>
 
 			<!-- Embeds -->
-			<group id="2" label="30131" help="">
+			<group id="3" label="30131" help="">
 				<setting id="embed.config" type="list[string]" label="30389" help="">
 					<level>0</level>
 					<default>doodstream,filelions,filemoon,hd-1,hd-2,hd-3,iga,kwik,megacloud,megaf,moonf,mp4upload,mp4u,mycloud,noads,noadsalt,swish,streamtape,streamwish,t-cloud,vidcdn,vidhide,vidplay,vidsrc,vidstream,yourupload,zto</default>
@@ -890,7 +899,12 @@
 						<hidevalue>true</hidevalue>
 					</control>
 				</setting>
-				<setting id="provider.animekai" type="boolean" label="30458" help="">
+				<!-- <setting id="provider.animekai" type="boolean" label="30458" help="">
+					<level>0</level>
+					<default>true</default>
+					<control type="toggle"/>
+				</setting> -->
+				<setting id="provider.anikoto" type="boolean" label="30485" help="">
 					<level>0</level>
 					<default>true</default>
 					<control type="toggle"/>
@@ -900,12 +914,20 @@
 					<default>true</default>
 					<control type="toggle"/>
 				</setting>
-				<setting id="provider.animix" type="boolean" label="30238" help="">
+				<setting id="provider.animepahealt" type="boolean" label="30486" help="" parent="provider.animepahe">
+					<level>0</level>
+					<default>false</default>
+					<control type="toggle"/>
+					<dependencies>
+						<dependency type="visible" setting="provider.animepahe">true</dependency>
+					</dependencies>
+				</setting>
+				<!-- <setting id="provider.animix" type="boolean" label="30238" help="">
 					<level>0</level>
 					<default>true</default>
 					<control type="toggle"/>
-				</setting>
-				<setting id="provider.animixalt" type="boolean" label="30243" help="" parent="provider.animix">
+				</setting> -->
+				<!-- <setting id="provider.animixalt" type="boolean" label="30243" help="" parent="provider.animix">
 					<level>0</level>
 					<default>false</default>
 					<control type="toggle"/>
@@ -917,7 +939,7 @@
 					<level>0</level>
 					<default>true</default>
 					<control type="toggle"/>
-				</setting>
+				</setting> -->
 				<!-- <setting id="provider.gogo" type="boolean" label="30236" help="">
 					<level>0</level>
 					<default>true</default>
@@ -931,11 +953,11 @@
 						<dependency type="visible" setting="provider.gogo">true</dependency>
 					</dependencies>
 				</setting> -->
-				<setting id="provider.hianime" type="boolean" label="30235" help="">
+				<!-- <setting id="provider.hianime" type="boolean" label="30235" help="">
 					<level>0</level>
 					<default>true</default>
 					<control type="toggle"/>
-				</setting>
+				</setting> -->
 				<setting id="provider.watchnixtoons2" type="boolean" label="30379" help="">
 					<level>0</level>
 					<default>true</default>
@@ -1227,8 +1249,31 @@
 				</setting>
 			</group>
 
+			<!-- FFprobe (optional chapter metadata; complements inputstream.ffmpegdirect playback) -->
+			<group id="3" label="30471" help="">
+				<setting id="ffprobe.chapters.enable" type="boolean" label="30467" help="30468">
+					<level>1</level>
+					<default>true</default>
+					<control type="toggle"/>
+				</setting>
+				<setting id="ffprobe.path" type="string" label="30469" help="30470" parent="ffprobe.chapters.enable">
+					<level>2</level>
+					<default/>
+					<constraints>
+						<allowempty>true</allowempty>
+					</constraints>
+					<control type="edit" format="string">
+						<heading>30469</heading>
+						<hidden>false</hidden>
+					</control>
+					<dependencies>
+						<dependency type="visible" setting="ffprobe.chapters.enable">true</dependency>
+					</dependencies>
+				</setting>
+			</group>
+
 			<!-- Skip Intro Dialog -->
-			<group id="3" label="30148" help="">
+			<group id="4" label="30148" help="">
 				<setting id="smartplay.skipintrodialog" type="boolean" label="30149" help="">
 					<level>0</level>
 					<default>true</default>
@@ -1318,7 +1363,7 @@
 			</group>
 
 			<!-- Playing Next Dialog -->
-			<group id="4" label="30145" help="">
+			<group id="5" label="30145" help="">
 				<setting id="smartplay.playingnextdialog" type="boolean" label="30146" help="">
 					<level>0</level>
 					<default>true</default>
@@ -2142,6 +2187,66 @@
 						<dependency type="visible" setting="easydebrid.enabled">true</dependency>
 					</dependencies>
 				</setting> -->
+			</group>
+			<!-- Easynews (HTTP Basic — username / password below) -->
+			<group id="8" label="30472" help="">
+				<setting id="easynews.enabled" type="boolean" label="30478" help="">
+					<level>0</level>
+					<default>false</default>
+					<control type="toggle"/>
+				</setting>
+				<setting id="easynews.user" type="string" label="30474" help="">
+					<level>0</level>
+					<default/>
+					<constraints>
+						<allowempty>true</allowempty>
+					</constraints>
+					<control type="edit" format="string"/>
+					<dependencies>
+						<dependency type="visible" setting="easynews.enabled">true</dependency>
+					</dependencies>
+				</setting>
+				<setting id="easynews.password" type="string" label="30475" help="">
+					<level>0</level>
+					<default/>
+					<constraints>
+						<allowempty>true</allowempty>
+					</constraints>
+					<control type="edit" format="string"/>
+					<dependencies>
+						<dependency type="visible" setting="easynews.enabled">true</dependency>
+					</dependencies>
+				</setting>
+				<setting id="easynews.auth.status" type="string" label="30480" help="">
+					<level>0</level>
+					<default/>
+					<constraints>
+						<allowempty>true</allowempty>
+					</constraints>
+					<control type="edit" format="string"/>
+					<enable>false</enable>
+					<dependencies>
+						<dependency type="visible" setting="easynews.enabled">true</dependency>
+					</dependencies>
+				</setting>
+				<setting id="easynews.auth_start" type="action" label="30481" help="">
+					<level>0</level>
+					<data>RunPlugin(plugin://plugin.video.otaku/auth/easynews)</data>
+					<control type="button" format="action">
+						<close>true</close>
+					</control>
+					<dependencies>
+						<dependency type="visible" setting="easynews.enabled">true</dependency>
+					</dependencies>
+				</setting>
+				<setting id="easynews.moderation" type="boolean" label="30476" help="">
+					<level>0</level>
+					<default>true</default>
+					<control type="toggle"/>
+					<dependencies>
+						<dependency type="visible" setting="easynews.enabled">true</dependency>
+					</dependencies>
+				</setting>
 			</group>
 		</category>
 
@@ -3906,6 +4011,26 @@
 					<control type="edit" format="integer"/>
 				</setting>
 				<setting id="animekai.skipoutro.start" type="integer" label="" help="">
+					<level>4</level>
+					<default>0</default>
+					<control type="edit" format="integer"/>
+				</setting>
+				<setting id="anikoto.skipintro.end" type="integer" label="" help="">
+					<level>4</level>
+					<default>0</default>
+					<control type="edit" format="integer"/>
+				</setting>
+				<setting id="anikoto.skipintro.start" type="integer" label="" help="">
+					<level>4</level>
+					<default>0</default>
+					<control type="edit" format="integer"/>
+				</setting>
+				<setting id="anikoto.skipoutro.end" type="integer" label="" help="">
+					<level>4</level>
+					<default>0</default>
+					<control type="edit" format="integer"/>
+				</setting>
+				<setting id="anikoto.skipoutro.start" type="integer" label="" help="">
 					<level>4</level>
 					<default>0</default>
 					<control type="edit" format="integer"/>

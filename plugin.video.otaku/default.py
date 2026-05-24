@@ -16,8 +16,6 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
 
-# import time
-# t0 = time.perf_counter_ns()
 import sys
 
 from resources.lib.ui import control
@@ -36,7 +34,3 @@ if __name__ == "__main__":
     plugin_params = control.get_plugin_params(sys.argv[2])
     router_process(plugin_url, plugin_params)
     control.log(f'Finished Running: {plugin_url=} {plugin_params=}')
-
-# t1 = time.perf_counter_ns()
-# totaltime = (t1-t0)/1_000_000
-# control.print(totaltime, 'ms')

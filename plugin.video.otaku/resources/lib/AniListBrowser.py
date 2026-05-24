@@ -1,4 +1,5 @@
 import ast
+import datetime
 import json
 import pickle
 import random
@@ -10,6 +11,45 @@ from functools import partial
 from resources.lib.ui import database, get_meta, utils, control, client
 from resources.lib.ui.BrowserBase import BrowserBase
 from resources.lib.ui.divide_flavors import div_flavor
+
+# Route slug -> AniList GenreCollection name (preset menus; not merged with saved genre filters)
+_ANILIST_GENRE_PRESETS = (
+    ('action', 'Action'),
+    ('adventure', 'Adventure'),
+    ('comedy', 'Comedy'),
+    ('drama', 'Drama'),
+    ('ecchi', 'Ecchi'),
+    ('fantasy', 'Fantasy'),
+    ('hentai', 'Hentai'),
+    ('horror', 'Horror'),
+    ('shoujo', 'Shoujo'),
+    ('mecha', 'Mecha'),
+    ('music', 'Music'),
+    ('mystery', 'Mystery'),
+    ('psychological', 'Psychological'),
+    ('romance', 'Romance'),
+    ('sci_fi', 'Sci-Fi'),
+    ('slice_of_life', 'Slice of Life'),
+    ('sports', 'Sports'),
+    ('supernatural', 'Supernatural'),
+    ('thriller', 'Thriller'),
+)
+
+
+def _apply_mal_picture_to_anime(anime):
+    """Replace cover with MAL CDN image when a mapping exists (setting general.malposters)."""
+    if not anime or not control.getBool('general.malposters'):
+        return
+    try:
+        anilist_id = anime['id']
+        mal_mapping = database.get_mappings(anilist_id, 'anilist_id')
+        if mal_mapping and 'mal_picture' in mal_mapping:
+            mal_picture = mal_mapping['mal_picture']
+            mal_picture_url = mal_picture.rsplit('.', 1)[0] + 'l.' + mal_picture.rsplit('.', 1)[1]
+            mal_picture_url = 'https://cdn.myanimelist.net/images/anime/' + mal_picture_url
+            anime['coverImage']['extraLarge'] = mal_picture_url
+    except Exception:
+        pass
 
 
 class AniListBrowser(BrowserBase):
@@ -47,7 +87,6 @@ class AniListBrowser(BrowserBase):
         return ()
 
     def get_season_year(self, period='current'):
-        import datetime
         date = datetime.datetime.today()
         year = date.year
         month = date.month
@@ -78,1249 +117,169 @@ class AniListBrowser(BrowserBase):
 
         return season, year
 
-    def get_airing_last_season(self, page, format, prefix=None):
-        season, year = self.get_season_year('last')
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'season': season,
-            'year': f'{year}%',
-            'sort': "TRENDING_DESC"
-        }
 
+    def _plugin_page_url(self, prefix, route_slug):
+        return f"{prefix}?page=%d" if prefix else f"{route_slug}?page=%d"
+
+    @staticmethod
+    def _coerce_anilist_media_format(fmt):
+        """GraphQL format_in expects [MediaFormat], not a single enum string."""
+        if isinstance(fmt, list):
+            return fmt
+        return [fmt]
+
+    def _apply_common_list_variables(self, variables, format):
         if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
+            variables['format'] = self._coerce_anilist_media_format(format)
+        elif self.format_in_type:
+            variables['format'] = self._coerce_anilist_media_format(self.format_in_type)
         if self.countryOfOrigin_type:
             variables['countryOfOrigin'] = self.countryOfOrigin_type
-
         if self.status:
             variables['status'] = self.status
-
         if self.genre:
             variables['includedGenres'] = self.genre
-
         if self.tag:
             variables['includedTags'] = self.tag
 
-        airing = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "airing_last_season?page=%d"
-        return self.process_anilist_view(airing, base_plugin_url, page)
+    def _fetch_page_and_process(self, variables, prefix, route_slug, page, format):
+        self._apply_common_list_variables(variables, format)
+        data = database.get(self.get_base_res, 24, variables)
+        return self.process_anilist_view(data, self._plugin_page_url(prefix, route_slug), page)
+
+    def _browse_season_airing(self, page, format, prefix, route_slug, period, sort):
+        season, year = self.get_season_year(period)
+        variables = {
+            'page': page,
+            'perpage': self.perpage,
+            'type': 'ANIME',
+            'season': season,
+            'year': f'{year}%',
+            'sort': sort,
+        }
+        return self._fetch_page_and_process(variables, prefix, route_slug, page, format)
+
+    def _ranked_media_list(self, page, format, prefix, route_slug, sort, period_mode='all_time'):
+        variables = {
+            'page': page,
+            'perpage': self.perpage,
+            'type': 'ANIME',
+            'sort': sort,
+        }
+        if period_mode == 'last_year':
+            _, year = self.get_season_year('')
+            variables['year'] = f'{year - 1}%'
+        elif period_mode == 'this_year':
+            _, year = self.get_season_year('')
+            variables['year'] = f'{year}%'
+        elif period_mode == 'last_season':
+            season, year = self.get_season_year('last')
+            variables['season'] = season
+            variables['year'] = f'{year}%'
+        elif period_mode == 'this_season':
+            season, year = self.get_season_year('this')
+            variables['season'] = season
+            variables['year'] = f'{year}%'
+        elif period_mode != 'all_time':
+            raise ValueError(period_mode)
+        return self._fetch_page_and_process(variables, prefix, route_slug, page, format)
+
+    def _browse_genre_preset(self, page, format, prefix, route_slug, genre_name):
+        variables = {
+            'page': page,
+            'perpage': self.perpage,
+            'type': 'ANIME',
+            'includedGenres': genre_name,
+            'sort': 'POPULARITY_DESC',
+        }
+        if format:
+            variables['format'] = self._coerce_anilist_media_format(format)
+        elif self.format_in_type:
+            variables['format'] = self._coerce_anilist_media_format(self.format_in_type)
+        if self.countryOfOrigin_type:
+            variables['countryOfOrigin'] = self.countryOfOrigin_type
+        if self.status:
+            variables['status'] = self.status
+        data = database.get(self.get_base_res, 24, variables)
+        return self.process_anilist_view(data, self._plugin_page_url(prefix, route_slug), page)
+
+    def get_airing_last_season(self, page, format, prefix=None):
+        return self._browse_season_airing(page, format, prefix, 'airing_last_season', 'last', 'TRENDING_DESC')
 
     def get_airing_this_season(self, page, format, prefix=None):
-        season, year = self.get_season_year('this')
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'season': season,
-            'year': f'{year}%',
-            'sort': "POPULARITY_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        if self.genre:
-            variables['includedGenres'] = self.genre
-
-        if self.tag:
-            variables['includedTags'] = self.tag
-
-        airing = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "airing_this_season?page=%d"
-        return self.process_anilist_view(airing, base_plugin_url, page)
+        return self._browse_season_airing(page, format, prefix, 'airing_this_season', 'this', 'POPULARITY_DESC')
 
     def get_airing_next_season(self, page, format, prefix=None):
-        season, year = self.get_season_year('next')
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'season': season,
-            'year': f'{year}%',
-            'sort': "POPULARITY_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        if self.genre:
-            variables['includedGenres'] = self.genre
-
-        if self.tag:
-            variables['includedTags'] = self.tag
-
-        airing = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "airing_next_season?page=%d"
-        return self.process_anilist_view(airing, base_plugin_url, page)
+        return self._browse_season_airing(page, format, prefix, 'airing_next_season', 'next', 'POPULARITY_DESC')
 
     def get_trending_last_year(self, page, format, prefix=None):
-        season, year = self.get_season_year('')
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'year': f'{year - 1}%',
-            'sort': "TRENDING_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        if self.genre:
-            variables['includedGenres'] = self.genre
-
-        if self.tag:
-            variables['includedTags'] = self.tag
-
-        trending = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "trending_last_year?page=%d"
-        return self.process_anilist_view(trending, base_plugin_url, page)
+        return self._ranked_media_list(page, format, prefix, 'trending_last_year', 'TRENDING_DESC', 'last_year')
 
     def get_trending_this_year(self, page, format, prefix=None):
-        season, year = self.get_season_year('')
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'year': f'{year}%',
-            'sort': "TRENDING_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        if self.genre:
-            variables['includedGenres'] = self.genre
-
-        if self.tag:
-            variables['includedTags'] = self.tag
-
-        trending = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "trending_this_year?page=%d"
-        return self.process_anilist_view(trending, base_plugin_url, page)
+        return self._ranked_media_list(page, format, prefix, 'trending_this_year', 'TRENDING_DESC', 'this_year')
 
     def get_trending_last_season(self, page, format, prefix=None):
-        season, year = self.get_season_year('last')
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'season': season,
-            'year': f'{year}%',
-            'sort': "TRENDING_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        if self.genre:
-            variables['includedGenres'] = self.genre
-
-        if self.tag:
-            variables['includedTags'] = self.tag
-
-        trending = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "trending_last_season?page=%d"
-        return self.process_anilist_view(trending, base_plugin_url, page)
+        return self._ranked_media_list(page, format, prefix, 'trending_last_season', 'TRENDING_DESC', 'last_season')
 
     def get_trending_this_season(self, page, format, prefix=None):
-        season, year = self.get_season_year('this')
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'season': season,
-            'year': f'{year}%',
-            'sort': "TRENDING_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        if self.genre:
-            variables['includedGenres'] = self.genre
-
-        if self.tag:
-            variables['includedTags'] = self.tag
-
-        trending = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "trending_this_season?page=%d"
-        return self.process_anilist_view(trending, base_plugin_url, page)
+        return self._ranked_media_list(page, format, prefix, 'trending_this_season', 'TRENDING_DESC', 'this_season')
 
     def get_all_time_trending(self, page, format, prefix=None):
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'sort': "TRENDING_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        if self.genre:
-            variables['includedGenres'] = self.genre
-
-        if self.tag:
-            variables['includedTags'] = self.tag
-
-        trending = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "all_time_trending?page=%d"
-        return self.process_anilist_view(trending, base_plugin_url, page)
+        return self._ranked_media_list(page, format, prefix, 'all_time_trending', 'TRENDING_DESC', 'all_time')
 
     def get_popular_last_year(self, page, format, prefix=None):
-        season, year = self.get_season_year('')
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'year': f'{year - 1}%',
-            'sort': "POPULARITY_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        if self.genre:
-            variables['includedGenres'] = self.genre
-
-        if self.tag:
-            variables['includedTags'] = self.tag
-
-        popular = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "popular_last_year?page=%d"
-        return self.process_anilist_view(popular, base_plugin_url, page)
+        return self._ranked_media_list(page, format, prefix, 'popular_last_year', 'POPULARITY_DESC', 'last_year')
 
     def get_popular_this_year(self, page, format, prefix=None):
-        season, year = self.get_season_year('')
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'year': f'{year}%',
-            'sort': "POPULARITY_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        if self.genre:
-            variables['includedGenres'] = self.genre
-
-        if self.tag:
-            variables['includedTags'] = self.tag
-
-        popular = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "popular_this_year?page=%d"
-        return self.process_anilist_view(popular, base_plugin_url, page)
+        return self._ranked_media_list(page, format, prefix, 'popular_this_year', 'POPULARITY_DESC', 'this_year')
 
     def get_popular_last_season(self, page, format, prefix=None):
-        season, year = self.get_season_year('last')
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'season': season,
-            'year': f'{year}%',
-            'sort': "POPULARITY_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        if self.genre:
-            variables['includedGenres'] = self.genre
-
-        if self.tag:
-            variables['includedTags'] = self.tag
-
-        popular = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "popular_last_season?page=%d"
-        return self.process_anilist_view(popular, base_plugin_url, page)
+        return self._ranked_media_list(page, format, prefix, 'popular_last_season', 'POPULARITY_DESC', 'last_season')
 
     def get_popular_this_season(self, page, format, prefix=None):
-        season, year = self.get_season_year('this')
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'season': season,
-            'year': f'{year}%',
-            'sort': "POPULARITY_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        if self.genre:
-            variables['includedGenres'] = self.genre
-
-        if self.tag:
-            variables['includedTags'] = self.tag
-
-        popular = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "popular_this_season?page=%d"
-        return self.process_anilist_view(popular, base_plugin_url, page)
+        return self._ranked_media_list(page, format, prefix, 'popular_this_season', 'POPULARITY_DESC', 'this_season')
 
     def get_all_time_popular(self, page, format, prefix=None):
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'sort': "POPULARITY_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        if self.genre:
-            variables['includedGenres'] = self.genre
-
-        if self.tag:
-            variables['includedTags'] = self.tag
-
-        popular = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "all_time_popular?page=%d"
-        return self.process_anilist_view(popular, base_plugin_url, page)
+        return self._ranked_media_list(page, format, prefix, 'all_time_popular', 'POPULARITY_DESC', 'all_time')
 
     def get_voted_last_year(self, page, format, prefix=None):
-        season, year = self.get_season_year('')
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'year': f'{year - 1}%',
-            'sort': "SCORE_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        if self.genre:
-            variables['includedGenres'] = self.genre
-
-        if self.tag:
-            variables['includedTags'] = self.tag
-
-        voted = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "voted_last_year?page=%d"
-        return self.process_anilist_view(voted, base_plugin_url, page)
+        return self._ranked_media_list(page, format, prefix, 'voted_last_year', 'SCORE_DESC', 'last_year')
 
     def get_voted_this_year(self, page, format, prefix=None):
-        season, year = self.get_season_year('')
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'year': f'{year}%',
-            'sort': "SCORE_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        if self.genre:
-            variables['includedGenres'] = self.genre
-
-        if self.tag:
-            variables['includedTags'] = self.tag
-
-        voted = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "voted_this_year?page=%d"
-        return self.process_anilist_view(voted, base_plugin_url, page)
+        return self._ranked_media_list(page, format, prefix, 'voted_this_year', 'SCORE_DESC', 'this_year')
 
     def get_voted_last_season(self, page, format, prefix=None):
-        season, year = self.get_season_year('last')
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'season': season,
-            'year': f'{year}%',
-            'sort': "SCORE_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        if self.genre:
-            variables['includedGenres'] = self.genre
-
-        if self.tag:
-            variables['includedTags'] = self.tag
-
-        voted = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "voted_last_season?page=%d"
-        return self.process_anilist_view(voted, base_plugin_url, page)
+        return self._ranked_media_list(page, format, prefix, 'voted_last_season', 'SCORE_DESC', 'last_season')
 
     def get_voted_this_season(self, page, format, prefix=None):
-        season, year = self.get_season_year('this')
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'season': season,
-            'year': f'{year}%',
-            'sort': "SCORE_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        if self.genre:
-            variables['includedGenres'] = self.genre
-
-        if self.tag:
-            variables['includedTags'] = self.tag
-
-        voted = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "voted_this_season?page=%d"
-        return self.process_anilist_view(voted, base_plugin_url, page)
+        return self._ranked_media_list(page, format, prefix, 'voted_this_season', 'SCORE_DESC', 'this_season')
 
     def get_all_time_voted(self, page, format, prefix=None):
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'sort': "SCORE_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        if self.genre:
-            variables['includedGenres'] = self.genre
-
-        if self.tag:
-            variables['includedTags'] = self.tag
-
-        voted = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "all_time_voted?page=%d"
-        return self.process_anilist_view(voted, base_plugin_url, page)
+        return self._ranked_media_list(page, format, prefix, 'all_time_voted', 'SCORE_DESC', 'all_time')
 
     def get_favourites_last_year(self, page, format, prefix=None):
-        season, year = self.get_season_year('')
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'year': f'{year - 1}%',
-            'sort': "FAVOURITES_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        if self.genre:
-            variables['includedGenres'] = self.genre
-
-        if self.tag:
-            variables['includedTags'] = self.tag
-
-        favourites = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "favourites_last_year?page=%d"
-        return self.process_anilist_view(favourites, base_plugin_url, page)
+        return self._ranked_media_list(page, format, prefix, 'favourites_last_year', 'FAVOURITES_DESC', 'last_year')
 
     def get_favourites_this_year(self, page, format, prefix=None):
-        season, year = self.get_season_year('')
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'year': f'{year}%',
-            'sort': "FAVOURITES_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        if self.genre:
-            variables['includedGenres'] = self.genre
-
-        if self.tag:
-            variables['includedTags'] = self.tag
-
-        favourites = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "favourites_this_year?page=%d"
-        return self.process_anilist_view(favourites, base_plugin_url, page)
+        return self._ranked_media_list(page, format, prefix, 'favourites_this_year', 'FAVOURITES_DESC', 'this_year')
 
     def get_favourites_last_season(self, page, format, prefix=None):
-        season, year = self.get_season_year('last')
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'season': season,
-            'year': f'{year}%',
-            'sort': "FAVOURITES_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        if self.genre:
-            variables['includedGenres'] = self.genre
-
-        if self.tag:
-            variables['includedTags'] = self.tag
-
-        favourites = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "favourites_last_season?page=%d"
-        return self.process_anilist_view(favourites, base_plugin_url, page)
+        return self._ranked_media_list(page, format, prefix, 'favourites_last_season', 'FAVOURITES_DESC', 'last_season')
 
     def get_favourites_this_season(self, page, format, prefix=None):
-        season, year = self.get_season_year('this')
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'season': season,
-            'year': f'{year}%',
-            'sort': "FAVOURITES_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        if self.genre:
-            variables['includedGenres'] = self.genre
-
-        if self.tag:
-            variables['includedTags'] = self.tag
-
-        favourites = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "favourites_this_season?page=%d"
-        return self.process_anilist_view(favourites, base_plugin_url, page)
+        return self._ranked_media_list(page, format, prefix, 'favourites_this_season', 'FAVOURITES_DESC', 'this_season')
 
     def get_all_time_favourites(self, page, format, prefix=None):
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'sort': "FAVOURITES_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        if self.genre:
-            variables['includedGenres'] = self.genre
-
-        if self.tag:
-            variables['includedTags'] = self.tag
-
-        favourites = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "all_time_favourites?page=%d"
-        return self.process_anilist_view(favourites, base_plugin_url, page)
+        return self._ranked_media_list(page, format, prefix, 'all_time_favourites', 'FAVOURITES_DESC', 'all_time')
 
     def get_top_100(self, page, format, prefix=None):
         variables = {
             'page': page,
             'perpage': self.perpage,
-            'type': "ANIME",
-            'sort': "SCORE_DESC"
+            'type': 'ANIME',
+            'sort': 'SCORE_DESC',
         }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        if self.genre:
-            variables['includedGenres'] = self.genre
-
-        if self.tag:
-            variables['includedTags'] = self.tag
-
-        top_100 = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "top_100?page=%d"
-        return self.process_anilist_view(top_100, base_plugin_url, page)
-
-    def get_genre_action(self, page, format, prefix=None):
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'includedGenres': "Action",
-            'sort': "POPULARITY_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        genre = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_action?page=%d"
-        return self.process_anilist_view(genre, base_plugin_url, page)
-
-    def get_genre_adventure(self, page, format, prefix=None):
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'includedGenres': "Adventure",
-            'sort': "POPULARITY_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        genre = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_adventure?page=%d"
-        return self.process_anilist_view(genre, base_plugin_url, page)
-
-    def get_genre_comedy(self, page, format, prefix=None):
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'includedGenres': "Comedy",
-            'sort': "POPULARITY_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        genre = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_comedy?page=%d"
-        return self.process_anilist_view(genre, base_plugin_url, page)
-
-    def get_genre_drama(self, page, format, prefix=None):
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'includedGenres': "Drama",
-            'sort': "POPULARITY_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        genre = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_drama?page=%d"
-        return self.process_anilist_view(genre, base_plugin_url, page)
-
-    def get_genre_ecchi(self, page, format, prefix=None):
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'includedGenres': "Ecchi",
-            'sort': "POPULARITY_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        genre = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_ecchi?page=%d"
-        return self.process_anilist_view(genre, base_plugin_url, page)
-
-    def get_genre_fantasy(self, page, format, prefix=None):
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'includedGenres': "Fantasy",
-            'sort': "POPULARITY_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        genre = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_fantasy?page=%d"
-        return self.process_anilist_view(genre, base_plugin_url, page)
-
-    def get_genre_hentai(self, page, format, prefix=None):
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'includedGenres': "Hentai",
-            'sort': "POPULARITY_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        genre = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_hentai?page=%d"
-        return self.process_anilist_view(genre, base_plugin_url, page)
-
-    def get_genre_horror(self, page, format, prefix=None):
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'includedGenres': "Horror",
-            'sort': "POPULARITY_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        genre = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_horror?page=%d"
-        return self.process_anilist_view(genre, base_plugin_url, page)
-
-    def get_genre_shoujo(self, page, format, prefix=None):
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'includedGenres': "Shoujo",
-            'sort': "POPULARITY_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        genre = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_shoujo?page=%d"
-        return self.process_anilist_view(genre, base_plugin_url, page)
-
-    def get_genre_mecha(self, page, format, prefix=None):
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'includedGenres': "Mecha",
-            'sort': "POPULARITY_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        genre = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_mecha?page=%d"
-        return self.process_anilist_view(genre, base_plugin_url, page)
-
-    def get_genre_music(self, page, format, prefix=None):
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'includedGenres': "Music",
-            'sort': "POPULARITY_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        genre = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_music?page=%d"
-        return self.process_anilist_view(genre, base_plugin_url, page)
-
-    def get_genre_mystery(self, page, format, prefix=None):
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'includedGenres': "Mystery",
-            'sort': "POPULARITY_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        genre = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_mystery?page=%d"
-        return self.process_anilist_view(genre, base_plugin_url, page)
-
-    def get_genre_psychological(self, page, format, prefix=None):
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'includedGenres': "Psychological",
-            'sort': "POPULARITY_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        genre = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_psychological?page=%d"
-        return self.process_anilist_view(genre, base_plugin_url, page)
-
-    def get_genre_romance(self, page, format, prefix=None):
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'includedGenres': "Romance",
-            'sort': "POPULARITY_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        genre = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_romance?page=%d"
-        return self.process_anilist_view(genre, base_plugin_url, page)
-
-    def get_genre_sci_fi(self, page, format, prefix=None):
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'includedGenres': "Sci-Fi",
-            'sort': "POPULARITY_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        genre = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_sci_fi?page=%d"
-        return self.process_anilist_view(genre, base_plugin_url, page)
-
-    def get_genre_slice_of_life(self, page, format, prefix=None):
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'includedGenres': "Slice of Life",
-            'sort': "POPULARITY_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        genre = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_slice_of_life?page=%d"
-        return self.process_anilist_view(genre, base_plugin_url, page)
-
-    def get_genre_sports(self, page, format, prefix=None):
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'includedGenres': "Sports",
-            'sort': "POPULARITY_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        genre = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_sports?page=%d"
-        return self.process_anilist_view(genre, base_plugin_url, page)
-
-    def get_genre_supernatural(self, page, format, prefix=None):
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'includedGenres': "Supernatural",
-            'sort': "POPULARITY_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        genre = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_supernatural?page=%d"
-        return self.process_anilist_view(genre, base_plugin_url, page)
-
-    def get_genre_thriller(self, page, format, prefix=None):
-        variables = {
-            'page': page,
-            'perpage': self.perpage,
-            'type': "ANIME",
-            'includedGenres': "Thriller",
-            'sort': "POPULARITY_DESC"
-        }
-
-        if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
-
-        if self.countryOfOrigin_type:
-            variables['countryOfOrigin'] = self.countryOfOrigin_type
-
-        if self.status:
-            variables['status'] = self.status
-
-        genre = database.get(self.get_base_res, 24, variables)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_thriller?page=%d"
-        return self.process_anilist_view(genre, base_plugin_url, page)
+        return self._fetch_page_and_process(variables, prefix, 'top_100', page, format)
 
     def get_search(self, query, page, format, prefix=None):
         variables = {
@@ -1332,18 +291,20 @@ class AniListBrowser(BrowserBase):
         }
 
         if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
+            variables['format'] = self._coerce_anilist_media_format(format)
+        elif self.format_in_type:
+            variables['format'] = self._coerce_anilist_media_format(self.format_in_type)
 
         search = self.get_search_res(variables)
+        if not search:
+            search = {'ANIME': [], 'pageInfo': {'hasNextPage': False}}
         if control.getBool('search.adult'):
             variables['isAdult'] = True
             search_adult = self.get_search_res(variables)
-            for i in search_adult["ANIME"]:
-                i['title']['english'] = f'{i["title"]["english"]} - {control.colorstr("Adult", "red")}'
-            search['ANIME'] += search_adult['ANIME']
+            if search_adult and search_adult.get('ANIME'):
+                for i in search_adult['ANIME']:
+                    i['title']['english'] = f'{i["title"]["english"]} - {control.colorstr("Adult", "red")}'
+                search['ANIME'] = (search.get('ANIME') or []) + search_adult['ANIME']
         base_plugin_url = f"{prefix}/{query}?page=%d" if prefix else f"search_anime/{query}?page=%d"
         return self.process_anilist_view(search, base_plugin_url, page)
 
@@ -1376,13 +337,12 @@ class AniListBrowser(BrowserBase):
 
         watch_order_list = []
         if anime_info is not None:
-            # Find all 'a' tags in the entire page with href attributes that match the desired URL pattern
             mal_links = soup.find_all('a', href=re.compile(r'https://myanimelist\.net/anime/\d+'))
-
-            # Extract the MAL IDs from these tags
-            mal_ids = [re.search(r'\d+', link['href']).group() for link in mal_links]
-
-            watch_order_list = []
+            mal_ids = []
+            for link in mal_links:
+                m = re.search(r'\d+', link['href'])
+                if m:
+                    mal_ids.append(m.group())
             for idmal in mal_ids:
                 variables = {
                     'idMal': int(idmal),
@@ -1394,6 +354,241 @@ class AniListBrowser(BrowserBase):
                     watch_order_list.append(anilist_item)
 
         return self.process_watch_order_view(watch_order_list)
+
+    @staticmethod
+    def _normalize_anilist_review_node(node):
+        user = node.get('user') or {}
+        name = user.get('name') or 'Anonymous'
+        avatar = (user.get('avatar') or {}).get('large') or control.OTAKU_LOGO3_PATH
+        body = node.get('body') or node.get('summary') or ''
+        body = re.sub(r'<br\s*/?>', '\n', body, flags=re.I)
+        body = re.sub(r'<[^>]+>', '', body)
+        rating = node.get('rating')
+        tag_list = [str(rating)] if rating else []
+        created = node.get('createdAt')
+        if isinstance(created, int):
+            date_short = datetime.datetime.utcfromtimestamp(created).strftime('%Y-%m-%d')
+        else:
+            created_text = str(created or '')
+            date_short = created_text[:10] if len(created_text) >= 10 else created_text
+        score = node.get('score')
+        if score is None:
+            score_disp = '?'
+        elif isinstance(score, int) and score > 10:
+            score_disp = f'{score}/100'
+        else:
+            score_disp = score
+        return {
+            'user': {'username': name, 'images': {'jpg': {'image_url': avatar}}},
+            'score': score_disp,
+            'tags': tag_list,
+            'date': date_short,
+            'is_spoiler': False,
+            'is_preliminary': False,
+            'reactions': {
+                'nice': 0, 'love_it': 0, 'funny': 0, 'informative': 0,
+                'well_written': 0, 'creative': 0,
+            },
+            'review': body,
+        }
+
+    def get_media_reviews_res(self, variables):
+        query = '''
+        query ($idMal: Int, $page: Int, $perPage: Int) {
+          Media(idMal: $idMal, type: ANIME) {
+            reviews(page: $page, perPage: $perPage, sort: [ID_DESC]) {
+              pageInfo {
+                hasNextPage
+                currentPage
+              }
+              edges {
+                node {
+                  summary
+                  body
+                  score
+                  rating
+                  createdAt
+                  user {
+                    name
+                    avatar {
+                      large
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+        '''
+        response = client.post(self._BASE_URL, json_data={'query': query, 'variables': variables})
+        if not response:
+            return None
+        results = response.json()
+        if not results or results.get('errors'):
+            return None
+        return results.get('data', {}).get('Media')
+
+    def get_media_stats_res(self, variables):
+        query = '''
+        query ($idMal: Int) {
+          Media(idMal: $idMal, type: ANIME) {
+            stats {
+              statusDistribution {
+                status
+                amount
+              }
+              scoreDistribution {
+                score
+                amount
+              }
+            }
+          }
+        }
+        '''
+        response = client.post(self._BASE_URL, json_data={'query': query, 'variables': variables})
+        if not response:
+            return None
+        results = response.json()
+        if not results or results.get('errors'):
+            return None
+        media = results.get('data', {}).get('Media')
+        if not media:
+            return None
+        return media.get('stats')
+
+    def _map_anilist_stats_to_stats_window(self, stats):
+        if not stats:
+            return None
+        status_distribution = stats.get('statusDistribution') or []
+        sums = {'watching': 0, 'completed': 0, 'on_hold': 0, 'dropped': 0, 'plan_to_watch': 0}
+        status_key = {
+            'CURRENT': 'watching',
+            'PLANNING': 'plan_to_watch',
+            'COMPLETED': 'completed',
+            'DROPPED': 'dropped',
+            'PAUSED': 'on_hold',
+        }
+        for row in status_distribution:
+            st = row.get('status')
+            amt = int(row.get('amount') or 0)
+            key = status_key.get(st)
+            if key:
+                sums[key] += amt
+        total = sum(sums.values())
+        score_dist = stats.get('scoreDistribution') or []
+        buckets = {i: {'score': i, 'votes': 0, 'percentage': 0.0} for i in range(1, 11)}
+        for entry in score_dist:
+            s = entry.get('score')
+            if s is None:
+                continue
+            try:
+                si = int(s)
+            except (TypeError, ValueError):
+                continue
+            amt = int(entry.get('amount') or 0)
+            if si % 10 == 0 and 10 <= si <= 100:
+                bin_idx = si // 10
+            elif 1 <= si <= 10:
+                bin_idx = si
+            else:
+                bin_idx = max(1, min(10, (si + 9) // 10))
+            buckets[bin_idx]['votes'] += amt
+        total_score_votes = sum(buckets[i]['votes'] for i in range(1, 11))
+        for i in range(1, 11):
+            v = buckets[i]['votes']
+            buckets[i]['percentage'] = round((v / total_score_votes) * 100, 1) if total_score_votes else 0.0
+        scores_list = [buckets[i] for i in range(1, 11)]
+        return {
+            'watching': sums['watching'],
+            'completed': sums['completed'],
+            'on_hold': sums['on_hold'],
+            'dropped': sums['dropped'],
+            'plan_to_watch': sums['plan_to_watch'],
+            'total': total,
+            'scores': scores_list,
+        }
+
+    def refetch_reviews_page(self, mal_id, page):
+        try:
+            mid = int(mal_id)
+        except (TypeError, ValueError):
+            return None
+        per_page = min(max(self.perpage, 1), 50)
+        variables = {'idMal': mid, 'page': page, 'perPage': per_page}
+        media = database.get(self.get_media_reviews_res, 24, variables)
+        if not media:
+            return None
+        rev = media.get('reviews') or {}
+        edges = rev.get('edges') or []
+        nodes = [e.get('node') for e in edges if e.get('node')]
+        return [self._normalize_anilist_review_node(n) for n in nodes]
+
+    def get_reviews_page(self, mal_id, page, path, eps_watched):
+        try:
+            mid = int(mal_id)
+        except (TypeError, ValueError):
+            return None
+        per_page = min(max(self.perpage, 1), 50)
+        variables = {'idMal': mid, 'page': page, 'perPage': per_page}
+        media = database.get(self.get_media_reviews_res, 24, variables)
+        if not media:
+            return None
+        rev = media.get('reviews') or {}
+        edges = rev.get('edges') or []
+        nodes = [e.get('node') for e in edges if e.get('node')]
+        reviews = [self._normalize_anilist_review_node(n) for n in nodes]
+        page_info = rev.get('pageInfo') or {}
+        has_next = page_info.get('hasNextPage', False)
+        items = []
+        for idx, review in enumerate(reviews):
+            user = review.get('user', {})
+            username = user.get('username', 'Anonymous')
+            sraw = review.get('score', '?')
+            if isinstance(sraw, str) and '/' in sraw:
+                score_show = sraw
+            else:
+                score_show = f'{sraw}/10'
+            tags = review.get('tags', [])
+            tag_str = tags[0] if tags else ''
+            date = (review.get('date') or '')[:10]
+            is_spoiler = review.get('is_spoiler', False)
+            is_preliminary = review.get('is_preliminary', False)
+            spoiler_tag = ' [COLOR red][Spoiler][/COLOR]' if is_spoiler else ''
+            preliminary_tag = ' [COLOR yellow][Preliminary][/COLOR]' if is_preliminary else ''
+            title = f"[COLOR deepskyblue]{username}[/COLOR] - {score_show} [COLOR orange][{tag_str}][/COLOR]{spoiler_tag}{preliminary_tag}  ({date})"
+            preview = review.get('review', '')[:200].replace('\n', ' ') + '...'
+            info = {
+                'title': title,
+                'plot': preview,
+                'mediatype': 'video',
+            }
+            art_url = user.get('images', {}).get('jpg', {}).get('image_url') or control.OTAKU_LOGO3_PATH
+            items.append(utils.allocate_item(
+                title,
+                f'view_review/{mal_id}/{idx}/',
+                False, False,
+                [],
+                art_url,
+                info,
+                fanart=art_url,
+                poster=art_url,
+            ))
+        if has_next:
+            next_title = f'[COLOR deepskyblue]>>> {control.lang(30464)} (Page {page + 1}) >>>[/COLOR]'
+            next_url = f'anime_reviews/{path}/{mal_id}/{eps_watched}?page={page + 1}'
+            items.append(utils.allocate_item(next_title, next_url, True, False, [], 'next.png', {'plot': next_title}, fanart='next.png'))
+        return {'items': items, 'reviews': reviews}
+
+    def get_statistics_payload(self, mal_id):
+        try:
+            mid = int(mal_id)
+        except (TypeError, ValueError):
+            return None
+        variables = {'idMal': mid}
+        raw_stats = database.get(self.get_media_stats_res, 24, variables)
+        if not raw_stats:
+            return None
+        return self._map_anilist_stats_to_stats_window(raw_stats)
 
     def get_anime(self, mal_id):
         variables = {
@@ -1510,18 +705,9 @@ class AniListBrowser(BrowserBase):
 
         json_res = results.get('data', {}).get('Page')
 
-        if control.getBool('general.malposters'):
-            try:
-                for anime in json_res['ANIME']:
-                    anilist_id = anime['id']
-                    mal_mapping = database.get_mappings(anilist_id, 'anilist_id')
-                    if mal_mapping and 'mal_picture' in mal_mapping:
-                        mal_picture = mal_mapping['mal_picture']
-                        mal_picture_url = mal_picture.rsplit('.', 1)[0] + 'l.' + mal_picture.rsplit('.', 1)[1]
-                        mal_picture_url = 'https://cdn.myanimelist.net/images/anime/' + mal_picture_url
-                        anime['coverImage']['extraLarge'] = mal_picture_url
-            except Exception:
-                pass
+        if json_res and json_res.get('ANIME'):
+            for anime in json_res['ANIME']:
+                _apply_mal_picture_to_anime(anime)
 
         if json_res:
             return json_res
@@ -1530,7 +716,7 @@ class AniListBrowser(BrowserBase):
         query = '''
         query (
             $page: Int=1,
-            $perpage: Int=20
+            $perpage: Int=20,
             $type: MediaType,
             $isAdult: Boolean = false,
             $format: [MediaFormat],
@@ -1623,18 +809,9 @@ class AniListBrowser(BrowserBase):
 
         json_res = results.get('data', {}).get('Page')
 
-        if control.getBool('general.malposters'):
-            try:
-                for anime in json_res['ANIME']:
-                    anilist_id = anime['id']
-                    mal_mapping = database.get_mappings(anilist_id, 'anilist_id')
-                    if mal_mapping and 'mal_picture' in mal_mapping:
-                        mal_picture = mal_mapping['mal_picture']
-                        mal_picture_url = mal_picture.rsplit('.', 1)[0] + 'l.' + mal_picture.rsplit('.', 1)[1]
-                        mal_picture_url = 'https://cdn.myanimelist.net/images/anime/' + mal_picture_url
-                        anime['coverImage']['extraLarge'] = mal_picture_url
-            except Exception:
-                pass
+        if json_res and json_res.get('ANIME'):
+            for anime in json_res['ANIME']:
+                _apply_mal_picture_to_anime(anime)
 
         if json_res:
             return json_res
@@ -1730,19 +907,11 @@ class AniListBrowser(BrowserBase):
 
         json_res = results.get('data', {}).get('Media', {}).get('recommendations')
 
-        if control.getBool('general.malposters'):
-            try:
-                for recommendation in json_res['edges']:
-                    anime = recommendation['node']['mediaRecommendation']
-                    anilist_id = anime['id']
-                    mal_mapping = database.get_mappings(anilist_id, 'anilist_id')
-                    if mal_mapping and 'mal_picture' in mal_mapping:
-                        mal_picture = mal_mapping['mal_picture']
-                        mal_picture_url = mal_picture.rsplit('.', 1)[0] + 'l.' + mal_picture.rsplit('.', 1)[1]
-                        mal_picture_url = 'https://cdn.myanimelist.net/images/anime/' + mal_picture_url
-                        anime['coverImage']['extraLarge'] = mal_picture_url
-            except Exception:
-                pass
+        if json_res and json_res.get('edges'):
+            for recommendation in json_res['edges']:
+                anime = recommendation.get('node', {}).get('mediaRecommendation')
+                if anime:
+                    _apply_mal_picture_to_anime(anime)
 
         if json_res:
             return json_res
@@ -1831,19 +1000,9 @@ class AniListBrowser(BrowserBase):
 
         json_res = results.get('data', {}).get('Media', {}).get('relations')
 
-        if control.getBool('general.malposters'):
-            try:
-                for relation in json_res['edges']:
-                    anime = relation['node']
-                    anilist_id = anime['id']
-                    mal_mapping = database.get_mappings(anilist_id, 'anilist_id')
-                    if mal_mapping and 'mal_picture' in mal_mapping:
-                        mal_picture = mal_mapping['mal_picture']
-                        mal_picture_url = mal_picture.rsplit('.', 1)[0] + 'l.' + mal_picture.rsplit('.', 1)[1]
-                        mal_picture_url = 'https://cdn.myanimelist.net/images/anime/' + mal_picture_url
-                        anime['coverImage']['extraLarge'] = mal_picture_url
-            except Exception:
-                pass
+        if json_res and json_res.get('edges'):
+            for relation in json_res['edges']:
+                _apply_mal_picture_to_anime(relation.get('node'))
 
         if json_res:
             return json_res
@@ -2006,23 +1165,29 @@ class AniListBrowser(BrowserBase):
             return json_res
 
     def process_anilist_view(self, json_res, base_plugin_url, page):
-        hasNextPage = json_res['pageInfo']['hasNextPage']
+        if not json_res or not json_res.get('ANIME'):
+            return []
+        has_next = json_res.get('pageInfo', {}).get('hasNextPage', False)
         get_meta.collect_meta(json_res['ANIME'])
         mapfunc = partial(self.base_anilist_view, completed=self.open_completed())
-        all_results = list(filter(lambda x: True if x else False, map(mapfunc, json_res['ANIME'])))
-        all_results += self.handle_paging(hasNextPage, base_plugin_url, page)
+        all_results = [x for x in map(mapfunc, json_res['ANIME']) if x]
+        all_results += self.handle_paging(has_next, base_plugin_url, page)
         return all_results
 
     def process_recommendations_view(self, json_res, base_plugin_url, page):
-        hasNextPage = json_res['pageInfo']['hasNextPage']
-        res = [edge['node']['mediaRecommendation'] for edge in json_res['edges'] if edge['node']['mediaRecommendation']]
+        if not json_res or not json_res.get('edges'):
+            return []
+        has_next = json_res.get('pageInfo', {}).get('hasNextPage', False)
+        res = [edge['node']['mediaRecommendation'] for edge in json_res['edges'] if edge['node'].get('mediaRecommendation')]
         get_meta.collect_meta(res)
         mapfunc = partial(self.base_anilist_view, completed=self.open_completed())
-        all_results = list(filter(lambda x: True if x else False, map(mapfunc, res)))
-        all_results += self.handle_paging(hasNextPage, base_plugin_url, page)
+        all_results = [x for x in map(mapfunc, res) if x]
+        all_results += self.handle_paging(has_next, base_plugin_url, page)
         return all_results
 
     def process_relations_view(self, json_res):
+        if not json_res or not json_res.get('edges'):
+            return []
         res = []
         for edge in json_res['edges']:
             if edge['relationType'] != 'ADAPTATION':
@@ -2031,15 +1196,13 @@ class AniListBrowser(BrowserBase):
                 res.append(tnode)
         get_meta.collect_meta(res)
         mapfunc = partial(self.base_anilist_view, completed=self.open_completed())
-        all_results = list(filter(lambda x: True if x else False, map(mapfunc, res)))
-        return all_results
+        return [x for x in map(mapfunc, res) if x]
 
     def process_watch_order_view(self, json_res):
-        res = json_res
+        res = json_res or []
         get_meta.collect_meta(res)
         mapfunc = partial(self.base_anilist_view, completed=self.open_completed())
-        all_results = list(filter(lambda x: True if x else False, map(mapfunc, res)))
-        return all_results
+        return [x for x in map(mapfunc, res) if x]
 
     def process_res(self, res):
         self.database_update_show(res)
@@ -2389,19 +1552,15 @@ class AniListBrowser(BrowserBase):
         }
 
         if format:
-            variables['format'] = format
-
-        if self.format_in_type:
-            variables['format'] = self.format_in_type
+            variables['format'] = self._coerce_anilist_media_format(format)
+        elif self.format_in_type:
+            variables['format'] = self._coerce_anilist_media_format(self.format_in_type)
 
         if self.countryOfOrigin_type:
             variables['countryOfOrigin'] = self.countryOfOrigin_type
 
         if self.status:
             variables['status'] = self.status
-
-        if format:
-            variables['format'] = format
 
         try:
             from resources.lib import Main
@@ -2423,18 +1582,8 @@ class AniListBrowser(BrowserBase):
             genre_set = set(genre_filter)
             anime_res = [a for a in anime_res if genre_set.issubset(set(a.get('genres', [])))]
 
-        if control.getBool('general.malposters'):
-            try:
-                for anime in anime_res:
-                    anilist_id = anime['id']
-                    mal_mapping = database.get_mappings(anilist_id, 'anilist_id')
-                    if mal_mapping and 'mal_picture' in mal_mapping:
-                        mal_picture = mal_mapping['mal_picture']
-                        mal_picture_url = mal_picture.rsplit('.', 1)[0] + 'l.' + mal_picture.rsplit('.', 1)[1]
-                        mal_picture_url = 'https://cdn.myanimelist.net/images/anime/' + mal_picture_url
-                        anime['coverImage']['extraLarge'] = mal_picture_url
-            except Exception:
-                pass
+        for anime in anime_res:
+            _apply_mal_picture_to_anime(anime)
 
         mapfunc = partial(self.base_anilist_view, completed=self.open_completed())
         get_meta.collect_meta(anime_res)
@@ -2479,3 +1628,17 @@ class AniListBrowser(BrowserBase):
                 selected_tags.append(selected_tag)
 
         return selected_genres_mal, selected_genres_anilist, selected_tags
+
+
+def _install_anilist_genre_methods():
+    for slug, genre_name in _ANILIST_GENRE_PRESETS:
+        def make_genre(_slug, _name):
+            def method(self, page, format, prefix=None):
+                return self._browse_genre_preset(page, format, prefix, f'genre_{_slug}', _name)
+            method.__name__ = f'get_genre_{_slug}'
+            method.__doc__ = f'Browse anime by AniList genre preset {_name}.'
+            return method
+        setattr(AniListBrowser, f'get_genre_{slug}', make_genre(slug, genre_name))
+
+
+_install_anilist_genre_methods()

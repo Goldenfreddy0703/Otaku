@@ -17,7 +17,7 @@ import pickle
 import service
 import json
 
-from resources.lib.ui import control, database
+from resources.lib.ui import control, database, source_utils
 from resources.lib.endpoints import aniskip, anime_skip
 from resources.lib import indexers
 
@@ -68,7 +68,9 @@ class WatchlistPlayer(player):
         self.preferred_subtitle_type = control.getInt('subtitles.types')
         self.preferred_subtitle_keyword = control.getInt('subtitles.keywords')
 
-    def handle_player(self, mal_id, watchlist_update, episode, resume, path, type, provider, context):
+        self.ffprobe_chapters = []
+
+    def handle_player(self, mal_id, watchlist_update, episode, resume, path, type, provider, context, ffprobe_chapters=None):
         self.mal_id = mal_id
         self._watchlist_update = watchlist_update
         self.episode = episode
@@ -78,6 +80,12 @@ class WatchlistPlayer(player):
         self.type = type
         self.provider = provider
         self.context = context
+        self.ffprobe_chapters = list(ffprobe_chapters) if ffprobe_chapters else []
+        if self.ffprobe_chapters:
+            control.log(
+                'ffprobe chapters (%d): %s' % (len(self.ffprobe_chapters), [c.get('title') for c in self.ffprobe_chapters]),
+                'info',
+            )
 
         # Process skip times asynchronously to not block playback
         if not self._skip_processed:
@@ -93,6 +101,7 @@ class WatchlistPlayer(player):
                 self.process_embed('aniwave')
                 self.process_embed('hianime')
                 self.process_embed('animekai')
+                self.process_embed('anikoto')
                 self.process_aniskip()
                 self.process_animeskip()
                 self._skip_processed = True
@@ -236,7 +245,7 @@ class WatchlistPlayer(player):
         # Continue with audio/subtitle setup which is needed immediately
         if self.type not in ['embed', 'direct']:
             self.setup_audio_and_subtitles()
-        elif self.provider in ['aniwave', 'h!anime']:
+        elif self.provider in ['aniwave', 'hianime', 'anikoto']:
             self.setup_audio_and_subtitles()
 
         # Handle different media types
@@ -244,6 +253,13 @@ class WatchlistPlayer(player):
             # Handle playlist building if needed
             if self.media_type == 'episode' and playList.size() == 1:
                 self.build_playlist()
+
+            # Wait for embed / AniSkip / AnimeSkip, then ffprobe chapters as last fallback
+            timeout = 30
+            while not self._skip_processed and timeout > 0:
+                xbmc.sleep(100)
+                timeout -= 1
+            self.process_ffprobe_chapter_skips()
 
             # Handle skip intro functionality
             self._handle_skip_intro()
@@ -499,7 +515,90 @@ class WatchlistPlayer(player):
                     else:
                         self.showSubtitles(True)
 
-    # ── Skip Time Processing (AniSkip / AnimeSkip / Embed) ────────────
+    # ── Skip Time Processing (AniSkip / AnimeSkip / Embed / FFprobe chapters) ─
+
+    def process_ffprobe_chapter_skips(self):
+        """
+        Last-resort intro/outro windows from ffprobe chapter titles + timestamps.
+        Runs only after embed / AniSkip / AnimeSkip; does not override them.
+        """
+        if not control.getBool('ffprobe.chapters.enable'):
+            return
+        if not self.ffprobe_chapters or not self.total_time:
+            return
+
+        total = float(self.total_time)
+        # Allow small clock slop vs container duration
+        max_end = total + 5.0
+
+        if self.skipintro_aniskip_enable and not self.skipintro_aniskip:
+            intro_cap = max(600.0, total * 0.25)
+            for ch in sorted(self.ffprobe_chapters, key=lambda c: float(c.get('start', 0) or 0)):
+                title = ch.get('title') or ''
+                if not source_utils.chapter_title_matches_intro(title):
+                    continue
+                start = float(ch.get('start', 0)) + self.skipintro_offset
+                end = float(ch.get('end', 0)) + self.skipintro_offset
+                duration = end - start
+                if (
+                    0 <= start < end <= max_end
+                    and duration >= 4.0
+                    and duration <= 360.0
+                    and start <= intro_cap
+                ):
+                    self.skipintro_start = int(start)
+                    self.skipintro_end = int(end)
+                    self.skipintro_aniskip = True
+                    control.log(
+                        'ffprobe chapter intro fallback [%s] %s-%ss'
+                        % (title, self.skipintro_start, self.skipintro_end),
+                        'info',
+                    )
+                    break
+
+        if self.skipoutro_aniskip_enable and not self.skipoutro_aniskip:
+            preview_only_markers = (
+                'next episode',
+                'next time',
+                '次回予告',
+                'episode preview',
+                'web preview',
+            )
+            outro_candidates = []
+            for ch in sorted(self.ffprobe_chapters, key=lambda c: float(c.get('start', 0) or 0)):
+                title = ch.get('title') or ''
+                if not source_utils.chapter_title_matches_outro(title):
+                    continue
+                st = float(ch.get('start', 0) or 0)
+                if st < total * 0.45:
+                    continue
+                tlow = title.lower()
+                if any(m in tlow for m in preview_only_markers) and not any(
+                    k in tlow for k in ('ending', 'credit', 'nced', 'エンディング')
+                ):
+                    continue
+                outro_candidates.append(ch)
+
+            if outro_candidates:
+                outro_ch = outro_candidates[0]
+                title = outro_ch.get('title') or ''
+                start = float(outro_ch.get('start', 0)) + self.skipoutro_offset
+                end = float(outro_ch.get('end', 0)) + self.skipoutro_offset
+                duration = end - start
+                if (
+                    start < end <= max_end
+                    and duration >= 4.0
+                    and duration <= 600.0
+                    and start >= total * 0.4
+                ):
+                    self.skipoutro_start = int(start)
+                    self.skipoutro_end = int(end)
+                    self.skipoutro_aniskip = True
+                    control.log(
+                        'ffprobe chapter outro fallback [%s] %s-%ss'
+                        % (title, self.skipoutro_start, self.skipoutro_end),
+                        'info',
+                    )
 
     def process_aniskip(self):
         if self.skipintro_aniskip_enable and not self.skipintro_aniskip:

@@ -1,4 +1,60 @@
-- Changelog v5.2.90 (2026-04-14):
+Changelog v5.2.99 (2026-05-23):
+- WatchNixtoons2: fuzzy title-match filtering on episode candidates; tie-break by priority then title rank; season pattern when season set
+- AnimePahe: minor embed hash formatting fix (Referer suffix concatenation instead of nested f-string)
+
+Changelog v5.2.98 (2026-05-24):
+- AnimePahe: fix embed playback by appending Referer to source URLs; MALSync legacy links use active base URL (Alt too)
+- Embed extractor: removed debug print output from load_video_from_url header/referer parsing
+
+Changelog v5.2.97 (2026-05-22):
+- Embed providers: removed Animix, Aniwave, HiAnime, and AnimeKai from the active source registry
+- WatchNixtoons2: fixed WCO embed/player resolution (video-js.php, getvidlink API, VHS M3U8 paths)
+- WatchNixtoons2: collect English Subbed and Dubbed WCO listings separately so SUB and DUB both resolve
+
+Changelog v5.2.96 (2026-05-19):
+- AnimePahe Alt: optional proxied base URL (provider.animepahealt; visible when AnimePahe is on)
+- MAL/Jikan: retry get_mal_base_res up to 3 times; ui/database.get no longer caches or returns None from failed fetches
+- Added Anikoto provider (MegaPlay embeds) with skip intro/outro settings, extractor, and player integration
+- Embed/resolver: MegaPlay host, richer subtitle metadata/lang detection; subtitle headers passed through get_sub
+- Source sort: Seren-style composite tuple sorter; merged sort_options.json defaults; Sort Select max_level UI visibility
+- MALSync: single fetch_mal_anime cache reused by get_slugs/get_title; AnimePahe session resolve from legacy redirects
+
+Changelog v5.2.95 (2026-05-13):
+- Easynews: broader queries, concurrent search with dedupe, stricter title matching, and safer result filtering/sorting
+- Embed host defaults: reapplied only when SCHEMA_VERSION bumps (no longer reset on every BrowserBase import)
+- Returning users: after a schema migration, optional prompt to open the setup wizard (sources/sort review)
+
+Changelog v5.2.94 (2026-05-12):
+- Added Easynews (Usenet) as a hoster source with settings, auth, search, and resolve
+- Refactored source scraping: registry-driven torrent/hoster/embed workers; hosters kept separate from torrent lists
+- Get sources dialog: Torrent / Hoster / Embed counts and quality line; filter vocabulary (INFO_STRUCT) lives in source_utils
+- Router and Easynews auth reliability fixes; sort options include Easynews
+
+Changelog v5.2.93 (2026-05-10):
+- Optional ffprobe chapter probing as a last-resort for skip intro/outro (after AniSkip, AnimeSkip, embedded chapters)
+- New ffprobe_chapters helper: probe play URLs with headers; find ffprobe on PATH, beside Kodi, or via settings path
+- Resolver passes chapter metadata on linkinfo; WatchlistPlayer applies ffprobe chapters after other skip sources
+- source_utils: chapter title keyword helpers for intro/outro detection
+- Settings and language strings to enable ffprobe chapters and set a custom ffprobe path
+
+Changelog v5.2.92 (2026-05-09):
+- MAL/Otaku browser: retry Jikan without multi-genre filter when the first query is empty (genres are ANDed)
+- Ranked/browse dates: normalize params to ISO strings; fix this_year/this_season end bounds
+- Watchlist: max eps_watched across enabled services when using watchlist data and there is no local progress
+- Indexers (anidb, anizip, jikanmoe, kitsu, otaku, next up, simkl) use merged progress; read errors debug-logged
+- Smart episode scroll: shorter label, wait_loop can require items and uses safer timing bounds
+- draw_items: brief sleep before view mode changes
+- Scroll path retries infolabel/focus reads before firstpage/SetFocus
+
+Changelog v5.2.91 (2026-05-06):
+- Updated AniList, MAL, and Otaku browser flows
+- Improved main navigation, routing, and context menu behaviors
+- Refined UI client/control/database helpers and utility handling
+- Added schedule/anichart and service/runtime improvements
+- Updated watchlist integration and AniList/Jikan endpoint handling
+- Improved anime page handling (AnimePahe, local files, debrid cloud files)
+
+Changelog v5.2.90 (2026-04-14):
 - Added Torrentio provider with filename matching and provider config options
 - Added Torrentio to torrent source selection and settings (toggle and provider list)
 - Improved Debrid cache usage and Torrentio parsing for better source results

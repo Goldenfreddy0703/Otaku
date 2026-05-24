@@ -1,20 +1,54 @@
-import json
-import random
-import pickle
 import ast
-import re
-import os
 import datetime
+import json
+import os
+import pickle
+import random
+import re
 
 from bs4 import BeautifulSoup
 from functools import partial
+
 from resources.lib.ui import database, control, client, utils, get_meta
 from resources.lib.ui.BrowserBase import BrowserBase
 from resources.lib.ui.divide_flavors import div_flavor
 
+# MAL genre id for preset genre menu entries (Jikan /genres/anime uses same ids)
+_MAL_GENRE_PRESETS = (
+    ('action', '1'),
+    ('adventure', '2'),
+    ('comedy', '4'),
+    ('drama', '8'),
+    ('ecchi', '9'),
+    ('fantasy', '10'),
+    ('hentai', '12'),
+    ('horror', '14'),
+    ('shoujo', '25'),
+    ('mecha', '18'),
+    ('music', '19'),
+    ('mystery', '7'),
+    ('psychological', '40'),
+    ('romance', '22'),
+    ('sci_fi', '24'),
+    ('slice_of_life', '36'),
+    ('sports', '30'),
+    ('supernatural', '37'),
+    ('thriller', '41'),
+)
+
 
 class OtakuBrowser(BrowserBase):
     _BASE_URL = "https://api.jikan.moe/v4"
+
+    # Indices returned by get_season_year()
+    _IX_YEAR_START = 2
+    _IX_YEAR_END = 3
+    _IX_SEASON_START = 4
+    _IX_SEASON_END = 5
+    _IX_LAST_SEASON_START = 6
+    _IX_LAST_SEASON_END = 7
+    _IX_LAST_YEAR_START = 8
+    _IX_LAST_YEAR_END = 9
 
     def __init__(self):
         self.title_lang = ['title', 'title_english'][control.getInt("titlelanguage")]
@@ -32,11 +66,12 @@ class OtakuBrowser(BrowserBase):
             with open(control.genre_json, 'r') as f:
                 settings = json.load(f)
                 genres = settings.get('selected_genres_mal', [])
-                return (', '.join(genres))
-        return ()
+                return ', '.join(genres)
+        return ''
 
-    def process_otaku_view(self, mal_res, base_plugin_url, page):
-        # Support direct, nested, and list 'entry' (e.g., relations response)
+    @staticmethod
+    def _flatten_mal_data_items(mal_res):
+        """Normalize direct items and nested/list 'entry' shapes (e.g. relations)."""
         mal_items_flat = []
         mal_ids = []
         for item in mal_res.get('data', []):
@@ -44,41 +79,40 @@ class OtakuBrowser(BrowserBase):
                 mal_ids.append(item['mal_id'])
                 mal_items_flat.append(item)
             elif 'entry' in item:
-                # If entry is a list, flatten it
-                if isinstance(item['entry'], list):
-                    for entry in item['entry']:
+                entries = item['entry']
+                if isinstance(entries, list):
+                    for entry in entries:
                         if 'mal_id' in entry:
                             mal_ids.append(entry['mal_id'])
-                            # Merge relation info into entry for context
-                            entry_with_relation = dict(entry)
+                            merged = dict(entry)
                             if 'relation' in item:
-                                entry_with_relation['relation'] = item['relation']
-                            mal_items_flat.append(entry_with_relation)
-                elif isinstance(item['entry'], dict) and 'mal_id' in item['entry']:
-                    mal_ids.append(item['entry']['mal_id'])
-                    entry_with_relation = dict(item['entry'])
+                                merged['relation'] = item['relation']
+                            mal_items_flat.append(merged)
+                elif isinstance(entries, dict) and 'mal_id' in entries:
+                    mal_ids.append(entries['mal_id'])
+                    merged = dict(entries)
                     if 'relation' in item:
-                        entry_with_relation['relation'] = item['relation']
-                    mal_items_flat.append(entry_with_relation)
+                        merged['relation'] = item['relation']
+                    mal_items_flat.append(merged)
+        return mal_ids, mal_items_flat
+
+    def process_otaku_view(self, mal_res, base_plugin_url, page):
+        mal_ids, mal_items_flat = self._flatten_mal_data_items(mal_res)
 
         anilist_res = self.get_anilist_base_res(mal_ids)
         get_meta.collect_meta(mal_items_flat)
-        get_meta.collect_meta(anilist_res)  # anilist_res is now a list
-        # Build AniList lookup by MAL ID
+        get_meta.collect_meta(anilist_res)
         anilist_by_mal_id = {item['idMal']: item for item in anilist_res if 'idMal' in item}
 
         def mapfunc(mal_item):
-            # Extract mal_id from direct item
             mal_id = mal_item.get('mal_id')
             anilist_item = anilist_by_mal_id.get(mal_id)
             return self.base_otaku_view(mal_item, anilist_item, completed=self.open_completed())
 
         all_results = [mapfunc(mal_item) for mal_item in mal_items_flat]
-        # Only handle paging if 'pagination' exists
-        hasNextPage = False
         if 'pagination' in mal_res:
-            hasNextPage = mal_res['pagination'].get('has_next_page', False)
-            all_results += self.handle_paging(hasNextPage, base_plugin_url, page)
+            has_next = mal_res['pagination'].get('has_next_page', False)
+            all_results += self.handle_paging(has_next, base_plugin_url, page)
         return all_results
 
     def process_res(self, mal_res):
@@ -94,7 +128,6 @@ class OtakuBrowser(BrowserBase):
         mal_res = database.get(self.get_mal_base_res, 24, f"{self._BASE_URL}/anime/{mal_id}")
         data = mal_res.get('data', None)
         mal_id = data['mal_id']
-        # Optionally fetch AniList data if needed
         anilist_res = self.get_anilist_base_res([mal_id])
         get_meta.collect_meta([data])
         get_meta.collect_meta(anilist_res)
@@ -125,6 +158,7 @@ class OtakuBrowser(BrowserBase):
                 control.notify(control.ADDON_NAME, "Invalid year. Please select a year between 1916 and {0}.".format(year + 1))
                 return None, None, None, None, None, None, None, None, None, None, None, None, None, None
 
+        season = None
         if self.season_type:
             if 0 <= self.season_type < 4:
                 season = seasons[self.season_type]
@@ -150,39 +184,139 @@ class OtakuBrowser(BrowserBase):
             else:
                 season = seasons[int((month - 1) / 3)]
 
-        # Adjust the start and end dates for this season
         season_start_date = season_start_dates[season]
         season_end_date = season_end_dates[season]
 
-        # Adjust the start and end dates for this year
         year_start_date = datetime.date(year, 1, 1)
         year_end_date = datetime.date(year, 12, 31)
 
-        # Adjust the start and end dates for last season
         last_season_index = (seasons.index(season) - 1) % 4
         last_season = seasons[last_season_index]
         last_season_year = year if last_season != 'FALL' or month > 3 else year - 1
         season_start_date_last = season_start_dates[last_season].replace(year=last_season_year)
         season_end_date_last = season_end_dates[last_season].replace(year=last_season_year)
 
-        # Adjust the start and end dates for last year
         year_start_date_last = datetime.date(year - 1, 1, 1)
         year_end_date_last = datetime.date(year - 1, 12, 31)
 
-        # Adjust the start and end dates for next season
         next_season_index = (seasons.index(season) + 1) % 4
         next_season = seasons[next_season_index]
         next_season_year = year if next_season != 'WINTER' else year + 1
         season_start_date_next = season_start_dates[next_season].replace(year=next_season_year)
         season_end_date_next = season_end_dates[next_season].replace(year=next_season_year)
 
-        # Adjust the start and end dates for next year
         year_start_date_next = datetime.date(year + 1, 1, 1)
         year_end_date_next = datetime.date(year + 1, 12, 31)
 
         return (season, year, year_start_date, year_end_date, season_start_date, season_end_date,
                 season_start_date_last, season_end_date_last, year_start_date_last, year_end_date_last,
                 season_start_date_next, season_end_date_next, year_start_date_next, year_end_date_next)
+
+    def _plugin_page_url(self, prefix, route_slug):
+        return f"{prefix}?page=%d" if prefix else f"{route_slug}?page=%d"
+
+    def _apply_season_format_params(self, params, format_val):
+        if format_val:
+            params['filter'] = format_val
+        elif self.format_in_type:
+            params['filter'] = self.format_in_type
+
+    def _apply_anime_type_params(self, params, format_val):
+        if format_val:
+            params['type'] = format_val
+        elif self.format_in_type:
+            params['type'] = self.format_in_type
+
+    def _apply_content_filters(self, params):
+        if self.status:
+            params['status'] = self.status
+        if self.rating:
+            params['rating'] = self.rating
+        if self.genre:
+            params['genres'] = self.genre
+
+    def _browse_anime_list(self, page, format, prefix, route_slug, extra_params=None, relax_on_empty=False):
+        params = {
+            'page': page,
+            'limit': self.perpage,
+            'sfw': self.adult,
+        }
+        if extra_params:
+            params.update(extra_params)
+        self._apply_anime_type_params(params, format)
+        self._apply_content_filters(params)
+        mal_res = database.get(self.get_mal_base_res, 24, f"{self._BASE_URL}/anime", params)
+        if relax_on_empty and mal_res and not mal_res.get('data'):
+            # Jikan treats multiple genre ids as a strict AND filter.
+            # For ranked pages this can easily return 0 items; retry without multi-genre filter.
+            genres = params.get('genres')
+            if isinstance(genres, str) and ',' in genres:
+                params_relaxed = dict(params)
+                params_relaxed.pop('genres', None)
+                mal_res_relaxed = database.get(self.get_mal_base_res, 24, f"{self._BASE_URL}/anime", params_relaxed)
+                if mal_res_relaxed and mal_res_relaxed.get('data'):
+                    mal_res = mal_res_relaxed
+        return self.process_otaku_view(mal_res, self._plugin_page_url(prefix, route_slug), page)
+
+    def _date_extra_from_bounds(self, sy, mode):
+        if mode == 'last_year':
+            return {'start_date': sy[self._IX_LAST_YEAR_START], 'end_date': sy[self._IX_LAST_YEAR_END]}
+        if mode == 'this_year':
+            return {'start_date': sy[self._IX_YEAR_START], 'end_date': sy[self._IX_YEAR_END]}
+        if mode == 'last_season':
+            return {'start_date': sy[self._IX_LAST_SEASON_START], 'end_date': sy[self._IX_LAST_SEASON_END]}
+        if mode == 'this_season':
+            return {'start_date': sy[self._IX_SEASON_START], 'end_date': sy[self._IX_SEASON_END]}
+        return {}
+
+    @staticmethod
+    def _normalize_date_params(params):
+        normalized = {}
+        for key, value in params.items():
+            if value in (None, ''):
+                continue
+            if hasattr(value, 'isoformat'):
+                normalized[key] = value.isoformat()
+            else:
+                normalized[key] = value
+        return normalized
+
+    def _ranked_anime_list(self, page, format, prefix, route_slug, order_by, sort, date_mode=None):
+        sy = self.get_season_year('')
+        extra = {'order_by': order_by, 'sort': sort}
+        if date_mode:
+            extra.update(self._date_extra_from_bounds(sy, date_mode))
+        extra = self._normalize_date_params(extra)
+        return self._browse_anime_list(page, format, prefix, route_slug, extra, relax_on_empty=True)
+
+    def _browse_season_airing(self, page, format, prefix, route_slug, period):
+        season, year, _, _, _, _, _, _, _, _, _, _, _, _ = self.get_season_year(period)
+        params = {
+            'page': page,
+            'limit': self.perpage,
+            'sfw': self.adult,
+        }
+        self._apply_season_format_params(params, format)
+        airing = database.get(self.get_mal_base_res, 24, f"{self._BASE_URL}/seasons/{year}/{season}", params)
+        return self.process_otaku_view(airing, self._plugin_page_url(prefix, route_slug), page)
+
+    def _browse_genre_preset(self, page, format, prefix, route_slug, mal_genre_id):
+        # Preset genre menus use a fixed MAL genre id; do not merge saved multi-genre settings.
+        params = {
+            'page': page,
+            'limit': self.perpage,
+            'sfw': self.adult,
+            'order_by': 'members',
+            'genres': mal_genre_id,
+            'sort': 'desc',
+        }
+        self._apply_anime_type_params(params, format)
+        if self.status:
+            params['status'] = self.status
+        if self.rating:
+            params['rating'] = self.rating
+        mal_res = database.get(self.get_mal_base_res, 24, f"{self._BASE_URL}/anime", params)
+        return self.process_otaku_view(mal_res, self._plugin_page_url(prefix, route_slug), page)
 
     def get_anime(self, mal_id):
         mal_res = database.get(self.get_mal_base_res, 24, f"{self._BASE_URL}/anime/{mal_id}")
@@ -195,7 +329,6 @@ class OtakuBrowser(BrowserBase):
 
     def get_relations(self, mal_id, page=1, prefix=None):
         relations = database.get(self.get_mal_base_res, 24, f'{self._BASE_URL}/anime/{mal_id}/relations')
-        # Keep only anime entries in each relation
         for item in relations.get('data', []):
             if 'entry' in item and isinstance(item['entry'], list):
                 item['entry'] = [entry for entry in item['entry'] if entry.get('type', '').lower() == 'anime']
@@ -205,47 +338,115 @@ class OtakuBrowser(BrowserBase):
     def get_watch_order(self, mal_id):
         url = 'https://chiaki.site/?/tools/watch_order/id/{}'.format(mal_id)
         response = client.get(url)
-        if response:
-            soup = BeautifulSoup(response.text, 'html.parser')
-        else:
-            soup = None
+        soup = BeautifulSoup(response.text, 'html.parser') if response else None
 
-        # Find the element with the desired information
-        anime_info = soup.find('tr', {'data-id': str(mal_id)})
-
+        anime_info = soup.find('tr', {'data-id': str(mal_id)}) if soup else None
         watch_order_list = []
         if anime_info is not None:
-            # Find all 'a' tags in the entire page with href attributes that match the desired URL pattern
             mal_links = soup.find_all('a', href=re.compile(r'https://myanimelist\.net/anime/\d+'))
+            mal_ids = []
+            for link in mal_links:
+                m = re.search(r'\d+', link['href'])
+                if m:
+                    mal_ids.append(m.group())
+            get_meta.collect_meta([{'mal_id': mid} for mid in mal_ids])
 
-            # Extract the MAL IDs from these tags
-            mal_ids = [re.search(r'\d+', link['href']).group() for link in mal_links]
-            meta_ids = [{'mal_id': mal_id} for mal_id in mal_ids]
-            get_meta.collect_meta(meta_ids)
-
-            watch_order_list = []
-            count = 0
             retry_limit = 3
-
-            for idmal in mal_ids:
+            for idx, idmal in enumerate(mal_ids):
                 retries = 0
                 while retries < retry_limit:
                     mal_item = database.get(self.get_mal_base_res, 24, f'{self._BASE_URL}/anime/{idmal}')
-
                     if mal_item is not None and 'data' in mal_item:
                         watch_order_list.append(mal_item['data'])
                         break
-                    else:
-                        retries += 1
-                        control.sleep(int(100 * retries))  # Reduced linear backoff
-
-                count += 1
-                if count % 3 == 0:
-                    control.sleep(1000)  # Ensure we do not exceed 3 requests per second
+                    retries += 1
+                    control.sleep(int(100 * retries))
+                if (idx + 1) % 3 == 0:
+                    control.sleep(1000)
 
         mapfunc = partial(self.base_otaku_view, completed=self.open_completed())
-        all_results = list(map(mapfunc, watch_order_list))
-        return all_results
+        return list(map(mapfunc, watch_order_list))
+
+    def _fetch_jikan_reviews_json(self, mal_id, page):
+        try:
+            mid = int(mal_id)
+        except (TypeError, ValueError):
+            return None
+        params = {
+            'page': page,
+            'preliminary': 'true',
+            'spoilers': 'true',
+        }
+        res = database.get(self.get_mal_base_res, 24, f'{self._BASE_URL}/anime/{mid}/reviews', params)
+        if not res or not isinstance(res, dict):
+            return None
+        return res
+
+    def refetch_reviews_page(self, mal_id, page):
+        res = self._fetch_jikan_reviews_json(mal_id, page)
+        if res is None:
+            return None
+        return res.get('data') or []
+
+    def get_reviews_page(self, mal_id, page, path, eps_watched):
+        res = self._fetch_jikan_reviews_json(mal_id, page)
+        if res is None:
+            return None
+        reviews = res.get('data') or []
+        pagination = res.get('pagination') or {}
+        has_next = pagination.get('has_next_page', False)
+        items = []
+        for idx, review in enumerate(reviews):
+            user = review.get('user', {})
+            username = user.get('username', 'Anonymous')
+            sraw = review.get('score', '?')
+            if isinstance(sraw, str) and '/' in sraw:
+                score_show = sraw
+            else:
+                score_show = f'{sraw}/10'
+            tags = review.get('tags', [])
+            tag_str = tags[0] if tags else ''
+            date = review.get('date', '')[:10]
+            is_spoiler = review.get('is_spoiler', False)
+            is_preliminary = review.get('is_preliminary', False)
+            spoiler_tag = ' [COLOR red][Spoiler][/COLOR]' if is_spoiler else ''
+            preliminary_tag = ' [COLOR yellow][Preliminary][/COLOR]' if is_preliminary else ''
+            title = f"[COLOR deepskyblue]{username}[/COLOR] - {score_show} [COLOR orange][{tag_str}][/COLOR]{spoiler_tag}{preliminary_tag}  ({date})"
+            preview = review.get('review', '')[:200].replace('\n', ' ') + '...'
+            info = {
+                'title': title,
+                'plot': preview,
+                'mediatype': 'video',
+            }
+            art_url = user.get('images', {}).get('jpg', {}).get('image_url') or control.OTAKU_LOGO3_PATH
+            items.append(utils.allocate_item(
+                title,
+                f'view_review/{mal_id}/{idx}/',
+                False, False,
+                [],
+                art_url,
+                info,
+                fanart=art_url,
+                poster=art_url,
+            ))
+        if has_next:
+            next_title = f'[COLOR deepskyblue]>>> {control.lang(30464)} (Page {page + 1}) >>>[/COLOR]'
+            next_url = f'anime_reviews/{path}/{mal_id}/{eps_watched}?page={page + 1}'
+            items.append(utils.allocate_item(next_title, next_url, True, False, [], 'next.png', {'plot': next_title}, fanart='next.png'))
+        return {'items': items, 'reviews': reviews}
+
+    def get_statistics_payload(self, mal_id):
+        try:
+            mid = int(mal_id)
+        except (TypeError, ValueError):
+            return None
+        res = database.get(self.get_mal_base_res, 24, f'{self._BASE_URL}/anime/{mid}/statistics')
+        if not res or not isinstance(res, dict):
+            return None
+        data = res.get('data')
+        if not data:
+            return None
+        return data
 
     def get_search(self, query, page, format, prefix=None):
         params = {
@@ -254,11 +455,9 @@ class OtakuBrowser(BrowserBase):
             "limit": self.perpage,
             'sfw': self.adult
         }
-
         if format:
             params['type'] = format
-
-        if self.format_in_type:
+        elif self.format_in_type:
             params['type'] = self.format_in_type
 
         search = database.get(self.get_mal_base_res, 24, f"{self._BASE_URL}/anime", params)
@@ -266,658 +465,73 @@ class OtakuBrowser(BrowserBase):
         return self.process_otaku_view(search, base_plugin_url, page)
 
     def get_airing_last_season(self, page, format, prefix=None):
-        season, year, _, _, _, _, _, _, _, _, _, _, _, _ = self.get_season_year('last')
-        params = {
-            'page': page,
-            'limit': self.perpage,
-            'sfw': self.adult,
-        }
-
-        if format:
-            params['filter'] = format
-
-        if self.format_in_type:
-            params['filter'] = self.format_in_type
-
-        airing = database.get(self.get_mal_base_res, 24, f"{self._BASE_URL}/seasons/{year}/{season}", params)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "airing_last_season?page=%d"
-        return self.process_otaku_view(airing, base_plugin_url, page)
+        return self._browse_season_airing(page, format, prefix, 'airing_last_season', 'last')
 
     def get_airing_this_season(self, page, format, prefix=None):
-        season, year, _, _, _, _, _, _, _, _, _, _, _, _ = self.get_season_year('this')
-        params = {
-            'page': page,
-            'limit': self.perpage,
-            'sfw': self.adult
-        }
-
-        if format:
-            params['filter'] = format
-
-        if self.format_in_type:
-            params['filter'] = self.format_in_type
-
-        airing = database.get(self.get_mal_base_res, 24, f"{self._BASE_URL}/seasons/{year}/{season}", params)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "airing_this_season?page=%d"
-        return self.process_otaku_view(airing, base_plugin_url, page)
+        return self._browse_season_airing(page, format, prefix, 'airing_this_season', 'this')
 
     def get_airing_next_season(self, page, format, prefix=None):
-        season, year, _, _, _, _, _, _, _, _, _, _, _, _ = self.get_season_year('next')
-        params = {
-            'page': page,
-            'limit': self.perpage,
-            'sfw': self.adult
-        }
-
-        if format:
-            params['filter'] = format
-
-        if self.format_in_type:
-            params['filter'] = self.format_in_type
-
-        airing = database.get(self.get_mal_base_res, 24, f"{self._BASE_URL}/seasons/{year}/{season}", params)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "airing_next_season?page=%d"
-        return self.process_otaku_view(airing, base_plugin_url, page)
+        return self._browse_season_airing(page, format, prefix, 'airing_next_season', 'next')
 
     def get_trending_last_year(self, page, format, prefix=None):
-        _, _, _, _, _, _, _, _, year_start_date_last, year_end_date_last, _, _, _, _ = self.get_season_year('')
-        params = {
-            'page': page,
-            'limit': self.perpage,
-            'sfw': self.adult,
-            'start_date': year_start_date_last,
-            'end_date': year_end_date_last,
-            'order_by': 'members',
-            'sort': 'desc'
-        }
-
-        if format:
-            params['type'] = format
-
-        if self.format_in_type:
-            params['type'] = self.format_in_type
-
-        if self.status:
-            params['status'] = self.status
-
-        if self.rating:
-            params['rating'] = self.rating
-
-        if self.genre:
-            params['genres'] = self.genre
-
-        trending = database.get(self.get_mal_base_res, 24, f"{self._BASE_URL}/anime", params)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "trending_last_year?page=%d"
-        return self.process_otaku_view(trending, base_plugin_url, page)
+        return self._ranked_anime_list(page, format, prefix, 'trending_last_year', 'members', 'desc', 'last_year')
 
     def get_trending_this_year(self, page, format, prefix=None):
-        _, _, year_start_date, _, _, _, _, _, _, _, _, _, _, _ = self.get_season_year('')
-        params = {
-            'page': page,
-            'limit': self.perpage,
-            'sfw': self.adult,
-            'start_date': year_start_date,
-            'order_by': 'members',
-            'sort': 'desc'
-        }
-
-        if format:
-            params['type'] = format
-
-        if self.format_in_type:
-            params['type'] = self.format_in_type
-
-        if self.status:
-            params['status'] = self.status
-
-        if self.rating:
-            params['rating'] = self.rating
-
-        if self.genre:
-            params['genres'] = self.genre
-
-        trending = database.get(self.get_mal_base_res, 24, f"{self._BASE_URL}/anime", params)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "trending_this_year?page=%d"
-        return self.process_otaku_view(trending, base_plugin_url, page)
+        return self._ranked_anime_list(page, format, prefix, 'trending_this_year', 'members', 'desc', 'this_year')
 
     def get_trending_last_season(self, page, format, prefix=None):
-        _, _, _, _, _, _, season_start_date_last, season_end_date_last, _, _, _, _, _, _ = self.get_season_year('')
-        params = {
-            'page': page,
-            'limit': self.perpage,
-            'sfw': self.adult,
-            'start_date': season_start_date_last,
-            'end_date': season_end_date_last,
-            'order_by': 'members',
-            'sort': 'desc'
-        }
-
-        if format:
-            params['type'] = format
-
-        if self.format_in_type:
-            params['type'] = self.format_in_type
-
-        if self.status:
-            params['status'] = self.status
-
-        if self.rating:
-            params['rating'] = self.rating
-
-        if self.genre:
-            params['genres'] = self.genre
-
-        trending = database.get(self.get_mal_base_res, 24, f"{self._BASE_URL}/anime", params)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "trending_last_season?page=%d"
-        return self.process_otaku_view(trending, base_plugin_url, page)
+        return self._ranked_anime_list(page, format, prefix, 'trending_last_season', 'members', 'desc', 'last_season')
 
     def get_trending_this_season(self, page, format, prefix=None):
-        _, _, _, _, season_start_date, _, _, _, _, _, _, _, _, _ = self.get_season_year('')
-        params = {
-            'page': page,
-            'limit': self.perpage,
-            'sfw': self.adult,
-            'start_date': season_start_date,
-            'order_by': 'members',
-            'sort': 'desc'
-        }
-
-        if format:
-            params['type'] = format
-
-        if self.format_in_type:
-            params['type'] = self.format_in_type
-
-        if self.status:
-            params['status'] = self.status
-
-        if self.rating:
-            params['rating'] = self.rating
-
-        if self.genre:
-            params['genres'] = self.genre
-
-        trending = database.get(self.get_mal_base_res, 24, f"{self._BASE_URL}/anime", params)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "trending_this_season?page=%d"
-        return self.process_otaku_view(trending, base_plugin_url, page)
+        return self._ranked_anime_list(page, format, prefix, 'trending_this_season', 'members', 'desc', 'this_season')
 
     def get_all_time_trending(self, page, format, prefix=None):
-        params = {
-            'page': page,
-            'limit': self.perpage,
-            'sfw': self.adult,
-            'order_by': 'members',
-            'sort': 'desc'
-        }
-
-        if format:
-            params['type'] = format
-
-        if self.format_in_type:
-            params['type'] = self.format_in_type
-
-        if self.status:
-            params['status'] = self.status
-
-        if self.rating:
-            params['rating'] = self.rating
-
-        if self.genre:
-            params['genres'] = self.genre
-
-        trending = database.get(self.get_mal_base_res, 24, f"{self._BASE_URL}/anime", params)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "all_time_trending?page=%d"
-        return self.process_otaku_view(trending, base_plugin_url, page)
+        return self._ranked_anime_list(page, format, prefix, 'all_time_trending', 'members', 'desc')
 
     def get_popular_last_year(self, page, format, prefix=None):
-        _, _, _, _, _, _, _, _, year_start_date_last, year_end_date_last, _, _, _, _ = self.get_season_year('')
-        params = {
-            'page': page,
-            'limit': self.perpage,
-            'sfw': self.adult,
-            'start_date': year_start_date_last,
-            'end_date': year_end_date_last,
-            'order_by': 'popularity',
-            'sort': 'asc'
-        }
-
-        if format:
-            params['type'] = format
-
-        if self.format_in_type:
-            params['type'] = self.format_in_type
-
-        if self.status:
-            params['status'] = self.status
-
-        if self.rating:
-            params['rating'] = self.rating
-
-        if self.genre:
-            params['genres'] = self.genre
-
-        popular = database.get(self.get_mal_base_res, 24, f"{self._BASE_URL}/anime", params)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "popular_last_year?page=%d"
-        return self.process_otaku_view(popular, base_plugin_url, page)
+        return self._ranked_anime_list(page, format, prefix, 'popular_last_year', 'popularity', 'asc', 'last_year')
 
     def get_popular_this_year(self, page, format, prefix=None):
-        _, _, year_start_date, _, _, _, _, _, _, _, _, _, _, _ = self.get_season_year('')
-        params = {
-            'page': page,
-            'limit': self.perpage,
-            'sfw': self.adult,
-            'start_date': year_start_date,
-            'order_by': 'popularity',
-            'sort': 'asc'
-        }
-
-        if format:
-            params['type'] = format
-
-        if self.format_in_type:
-            params['type'] = self.format_in_type
-
-        if self.status:
-            params['status'] = self.status
-
-        if self.rating:
-            params['rating'] = self.rating
-
-        if self.genre:
-            params['genres'] = self.genre
-
-        popular = database.get(self.get_mal_base_res, 24, f"{self._BASE_URL}/anime", params)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "popular_this_year?page=%d"
-        return self.process_otaku_view(popular, base_plugin_url, page)
+        return self._ranked_anime_list(page, format, prefix, 'popular_this_year', 'popularity', 'asc', 'this_year')
 
     def get_popular_last_season(self, page, format, prefix=None):
-        _, _, _, _, _, _, season_start_date_last, season_end_date_last, _, _, _, _, _, _ = self.get_season_year('')
-        params = {
-            'page': page,
-            'limit': self.perpage,
-            'sfw': self.adult,
-            'start_date': season_start_date_last,
-            'end_date': season_end_date_last,
-            'order_by': 'popularity',
-            'sort': 'asc'
-        }
-
-        if format:
-            params['type'] = format
-
-        if self.format_in_type:
-            params['type'] = self.format_in_type
-
-        if self.status:
-            params['status'] = self.status
-
-        if self.rating:
-            params['rating'] = self.rating
-
-        if self.genre:
-            params['genres'] = self.genre
-
-        popular = database.get(self.get_mal_base_res, 24, f"{self._BASE_URL}/anime", params)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "popular_last_season?page=%d"
-        return self.process_otaku_view(popular, base_plugin_url, page)
+        return self._ranked_anime_list(page, format, prefix, 'popular_last_season', 'popularity', 'asc', 'last_season')
 
     def get_popular_this_season(self, page, format, prefix=None):
-        _, _, _, _, season_start_date, _, _, _, _, _, _, _, _, _ = self.get_season_year('')
-        params = {
-            'page': page,
-            'limit': self.perpage,
-            'sfw': self.adult,
-            'start_date': season_start_date,
-            'order_by': 'popularity',
-            'sort': 'asc'
-        }
-
-        if format:
-            params['type'] = format
-
-        if self.format_in_type:
-            params['type'] = self.format_in_type
-
-        if self.status:
-            params['status'] = self.status
-
-        if self.rating:
-            params['rating'] = self.rating
-
-        if self.genre:
-            params['genres'] = self.genre
-
-        popular = database.get(self.get_mal_base_res, 24, f"{self._BASE_URL}/anime", params)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "popular_this_season?page=%d"
-        return self.process_otaku_view(popular, base_plugin_url, page)
+        return self._ranked_anime_list(page, format, prefix, 'popular_this_season', 'popularity', 'asc', 'this_season')
 
     def get_all_time_popular(self, page, format, prefix=None):
-        params = {
-            'page': page,
-            'limit': self.perpage,
-            'sfw': self.adult,
-            'order_by': 'popularity',
-            'sort': 'asc'
-        }
-
-        if format:
-            params['type'] = format
-
-        if self.format_in_type:
-            params['type'] = self.format_in_type
-
-        if self.status:
-            params['status'] = self.status
-
-        if self.rating:
-            params['rating'] = self.rating
-
-        if self.genre:
-            params['genres'] = self.genre
-
-        popular = database.get(self.get_mal_base_res, 24, f"{self._BASE_URL}/anime", params)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "all_time_popular?page=%d"
-        return self.process_otaku_view(popular, base_plugin_url, page)
+        return self._ranked_anime_list(page, format, prefix, 'all_time_popular', 'popularity', 'asc')
 
     def get_voted_last_year(self, page, format, prefix=None):
-        _, _, _, _, _, _, _, _, year_start_date_last, year_end_date_last, _, _, _, _ = self.get_season_year('')
-        params = {
-            'page': page,
-            'limit': self.perpage,
-            'sfw': self.adult,
-            'start_date': year_start_date_last,
-            'end_date': year_end_date_last,
-            'order_by': 'score',
-            'sort': 'desc'
-        }
-
-        if format:
-            params['type'] = format
-
-        if self.format_in_type:
-            params['type'] = self.format_in_type
-
-        if self.status:
-            params['status'] = self.status
-
-        if self.rating:
-            params['rating'] = self.rating
-
-        if self.genre:
-            params['genres'] = self.genre
-
-        voted = database.get(self.get_mal_base_res, 24, f"{self._BASE_URL}/anime", params)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "voted_last_year?page=%d"
-        return self.process_otaku_view(voted, base_plugin_url, page)
+        return self._ranked_anime_list(page, format, prefix, 'voted_last_year', 'score', 'desc', 'last_year')
 
     def get_voted_this_year(self, page, format, prefix=None):
-        _, _, year_start_date, _, _, _, _, _, _, _, _, _, _, _ = self.get_season_year('')
-        params = {
-            'page': page,
-            'limit': self.perpage,
-            'sfw': self.adult,
-            'start_date': year_start_date,
-            'order_by': 'score',
-            'sort': 'desc'
-        }
-
-        if format:
-            params['type'] = format
-
-        if self.format_in_type:
-            params['type'] = self.format_in_type
-
-        if self.status:
-            params['status'] = self.status
-
-        if self.rating:
-            params['rating'] = self.rating
-
-        if self.genre:
-            params['genres'] = self.genre
-
-        voted = database.get(self.get_mal_base_res, 24, f"{self._BASE_URL}/anime", params)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "voted_this_year?page=%d"
-        return self.process_otaku_view(voted, base_plugin_url, page)
+        return self._ranked_anime_list(page, format, prefix, 'voted_this_year', 'score', 'desc', 'this_year')
 
     def get_voted_last_season(self, page, format, prefix=None):
-        _, _, _, _, _, _, season_start_date_last, season_end_date_last, _, _, _, _, _, _ = self.get_season_year('')
-        params = {
-            'page': page,
-            'limit': self.perpage,
-            'sfw': self.adult,
-            'start_date': season_start_date_last,
-            'end_date': season_end_date_last,
-            'order_by': 'score',
-            'sort': 'desc'
-        }
-
-        if format:
-            params['type'] = format
-
-        if self.format_in_type:
-            params['type'] = self.format_in_type
-
-        if self.status:
-            params['status'] = self.status
-
-        if self.rating:
-            params['rating'] = self.rating
-
-        if self.genre:
-            params['genres'] = self.genre
-
-        voted = database.get(self.get_mal_base_res, 24, f"{self._BASE_URL}/anime", params)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "voted_last_season?page=%d"
-        return self.process_otaku_view(voted, base_plugin_url, page)
+        return self._ranked_anime_list(page, format, prefix, 'voted_last_season', 'score', 'desc', 'last_season')
 
     def get_voted_this_season(self, page, format, prefix=None):
-        _, _, _, _, season_start_date, _, _, _, _, _, _, _, _, _ = self.get_season_year('')
-        params = {
-            'page': page,
-            'limit': self.perpage,
-            'sfw': self.adult,
-            'start_date': season_start_date,
-            'order_by': 'score',
-            'sort': 'desc'
-        }
-
-        if format:
-            params['type'] = format
-
-        if self.format_in_type:
-            params['type'] = self.format_in_type
-
-        if self.status:
-            params['status'] = self.status
-
-        if self.rating:
-            params['rating'] = self.rating
-
-        if self.genre:
-            params['genres'] = self.genre
-
-        voted = database.get(self.get_mal_base_res, 24, f"{self._BASE_URL}/anime", params)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "voted_this_season?page=%d"
-        return self.process_otaku_view(voted, base_plugin_url, page)
+        return self._ranked_anime_list(page, format, prefix, 'voted_this_season', 'score', 'desc', 'this_season')
 
     def get_all_time_voted(self, page, format, prefix=None):
-        params = {
-            'page': page,
-            'limit': self.perpage,
-            'sfw': self.adult,
-            'order_by': 'score',
-            'sort': 'desc'
-        }
-
-        if format:
-            params['type'] = format
-
-        if self.format_in_type:
-            params['type'] = self.format_in_type
-
-        if self.status:
-            params['status'] = self.status
-
-        if self.rating:
-            params['rating'] = self.rating
-
-        if self.genre:
-            params['genres'] = self.genre
-
-        voted = database.get(self.get_mal_base_res, 24, f"{self._BASE_URL}/anime", params)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "all_time_voted?page=%d"
-        return self.process_otaku_view(voted, base_plugin_url, page)
+        return self._ranked_anime_list(page, format, prefix, 'all_time_voted', 'score', 'desc')
 
     def get_favourites_last_year(self, page, format, prefix=None):
-        _, _, _, _, _, _, _, _, year_start_date_last, year_end_date_last, _, _, _, _ = self.get_season_year('')
-        params = {
-            'page': page,
-            'limit': self.perpage,
-            'sfw': self.adult,
-            'start_date': year_start_date_last,
-            'end_date': year_end_date_last,
-            'order_by': 'favorites',
-            'sort': 'desc'
-        }
-
-        if format:
-            params['type'] = format
-
-        if self.format_in_type:
-            params['type'] = self.format_in_type
-
-        if self.status:
-            params['status'] = self.status
-
-        if self.rating:
-            params['rating'] = self.rating
-
-        if self.genre:
-            params['genres'] = self.genre
-
-        favourites = database.get(self.get_mal_base_res, 24, f"{self._BASE_URL}/anime", params)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "favourites_last_year?page=%d"
-        return self.process_otaku_view(favourites, base_plugin_url, page)
+        return self._ranked_anime_list(page, format, prefix, 'favourites_last_year', 'favorites', 'desc', 'last_year')
 
     def get_favourites_this_year(self, page, format, prefix=None):
-        _, _, year_start_date, _, _, _, _, _, _, _, _, _, _, _ = self.get_season_year('')
-        params = {
-            'page': page,
-            'limit': self.perpage,
-            'sfw': self.adult,
-            'start_date': year_start_date,
-            'order_by': 'favorites',
-            'sort': 'desc'
-        }
-
-        if format:
-            params['type'] = format
-
-        if self.format_in_type:
-            params['type'] = self.format_in_type
-
-        if self.status:
-            params['status'] = self.status
-
-        if self.rating:
-            params['rating'] = self.rating
-
-        if self.genre:
-            params['genres'] = self.genre
-
-        favourites = database.get(self.get_mal_base_res, 24, f"{self._BASE_URL}/anime", params)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "favourites_this_year?page=%d"
-        return self.process_otaku_view(favourites, base_plugin_url, page)
+        return self._ranked_anime_list(page, format, prefix, 'favourites_this_year', 'favorites', 'desc', 'this_year')
 
     def get_favourites_last_season(self, page, format, prefix=None):
-        _, _, _, _, _, _, season_start_date_last, season_end_date_last, _, _, _, _, _, _ = self.get_season_year('')
-        params = {
-            'page': page,
-            'limit': self.perpage,
-            'sfw': self.adult,
-            'start_date': season_start_date_last,
-            'end_date': season_end_date_last,
-            'order_by': 'favorites',
-            'sort': 'desc'
-        }
-
-        if format:
-            params['type'] = format
-
-        if self.format_in_type:
-            params['type'] = self.format_in_type
-
-        if self.status:
-            params['status'] = self.status
-
-        if self.rating:
-            params['rating'] = self.rating
-
-        if self.genre:
-            params['genres'] = self.genre
-
-        favourites = database.get(self.get_mal_base_res, 24, f"{self._BASE_URL}/anime", params)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "favourites_last_season?page=%d"
-        return self.process_otaku_view(favourites, base_plugin_url, page)
+        return self._ranked_anime_list(page, format, prefix, 'favourites_last_season', 'favorites', 'desc', 'last_season')
 
     def get_favourites_this_season(self, page, format, prefix=None):
-        _, _, _, _, season_start_date, _, _, _, _, _, _, _, _, _ = self.get_season_year('')
-        params = {
-            'page': page,
-            'limit': self.perpage,
-            'sfw': self.adult,
-            'start_date': season_start_date,
-            'order_by': 'favorites',
-            'sort': 'desc'
-        }
-
-        if format:
-            params['type'] = format
-
-        if self.format_in_type:
-            params['type'] = self.format_in_type
-
-        if self.status:
-            params['status'] = self.status
-
-        if self.rating:
-            params['rating'] = self.rating
-
-        if self.genre:
-            params['genres'] = self.genre
-
-        favourites = database.get(self.get_mal_base_res, 24, f"{self._BASE_URL}/anime", params)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "favourites_this_season?page=%d"
-        return self.process_otaku_view(favourites, base_plugin_url, page)
+        return self._ranked_anime_list(page, format, prefix, 'favourites_this_season', 'favorites', 'desc', 'this_season')
 
     def get_all_time_favourites(self, page, format, prefix=None):
-        params = {
-            'page': page,
-            'limit': self.perpage,
-            'sfw': self.adult,
-            'order_by': 'favorites',
-            'sort': 'desc'
-        }
-
-        if format:
-            params['type'] = format
-
-        if self.format_in_type:
-            params['type'] = self.format_in_type
-
-        if self.status:
-            params['status'] = self.status
-
-        if self.rating:
-            params['rating'] = self.rating
-
-        if self.genre:
-            params['genres'] = self.genre
-
-        favourites = database.get(self.get_mal_base_res, 24, f"{self._BASE_URL}/anime", params)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "all_time_favourites?page=%d"
-        return self.process_otaku_view(favourites, base_plugin_url, page)
+        return self._ranked_anime_list(page, format, prefix, 'all_time_favourites', 'favorites', 'desc')
 
     def get_top_100(self, page, format, prefix=None):
         params = {
@@ -925,525 +539,20 @@ class OtakuBrowser(BrowserBase):
             'limit': self.perpage,
             'sfw': self.adult,
         }
-
-        if format:
-            params['type'] = format
-
-        if self.format_in_type:
-            params['type'] = self.format_in_type
-
-        if self.status:
-            params['status'] = self.status
-
-        if self.rating:
-            params['rating'] = self.rating
-
-        if self.genre:
-            params['genres'] = self.genre
-
+        self._apply_anime_type_params(params, format)
+        self._apply_content_filters(params)
         top_100 = database.get(self.get_mal_base_res, 24, f"{self._BASE_URL}/top/anime", params)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "top_100?page=%d"
-        return self.process_otaku_view(top_100, base_plugin_url, page)
-
-    def get_genre_action(self, page, format, prefix=None):
-        params = {
-            'page': page,
-            'limit': self.perpage,
-            'sfw': self.adult,
-            'order_by': 'members',
-            "genres": "1",
-            'sort': 'desc'
-        }
-
-        if format:
-            params['type'] = format
-
-        if self.format_in_type:
-            params['type'] = self.format_in_type
-
-        if self.status:
-            params['status'] = self.status
-
-        if self.rating:
-            params['rating'] = self.rating
-
-        genre = database.get(self.get_mal_base_res, 24, f"{self._BASE_URL}/anime", params)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_action?page=%d"
-        return self.process_otaku_view(genre, base_plugin_url, page)
-
-    def get_genre_adventure(self, page, format, prefix=None):
-        params = {
-            'page': page,
-            'limit': self.perpage,
-            'sfw': self.adult,
-            'order_by': 'members',
-            "genres": "2",
-            'sort': 'desc'
-        }
-
-        if format:
-            params['type'] = format
-
-        if self.format_in_type:
-            params['type'] = self.format_in_type
-
-        if self.status:
-            params['status'] = self.status
-
-        if self.rating:
-            params['rating'] = self.rating
-
-        genre = database.get(self.get_mal_base_res, 24, f"{self._BASE_URL}/anime", params)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_adventure?page=%d"
-        return self.process_otaku_view(genre, base_plugin_url, page)
-
-    def get_genre_comedy(self, page, format, prefix=None):
-        params = {
-            'page': page,
-            'limit': self.perpage,
-            'sfw': self.adult,
-            'order_by': 'members',
-            "genres": "4",
-            'sort': 'desc'
-        }
-
-        if format:
-            params['type'] = format
-
-        if self.format_in_type:
-            params['type'] = self.format_in_type
-
-        if self.status:
-            params['status'] = self.status
-
-        if self.rating:
-            params['rating'] = self.rating
-
-        genre = database.get(self.get_mal_base_res, 24, f"{self._BASE_URL}/anime", params)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_comedy?page=%d"
-        return self.process_otaku_view(genre, base_plugin_url, page)
-
-    def get_genre_drama(self, page, format, prefix=None):
-        params = {
-            'page': page,
-            'limit': self.perpage,
-            'sfw': self.adult,
-            'order_by': 'members',
-            "genres": "8",
-            'sort': 'desc'
-        }
-
-        if format:
-            params['type'] = format
-
-        if self.format_in_type:
-            params['type'] = self.format_in_type
-
-        if self.status:
-            params['status'] = self.status
-
-        if self.rating:
-            params['rating'] = self.rating
-
-        genre = database.get(self.get_mal_base_res, 24, f"{self._BASE_URL}/anime", params)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_drama?page=%d"
-        return self.process_otaku_view(genre, base_plugin_url, page)
-
-    def get_genre_ecchi(self, page, format, prefix=None):
-        params = {
-            'page': page,
-            'limit': self.perpage,
-            'sfw': self.adult,
-            'order_by': 'members',
-            "genres": "9",
-            'sort': 'desc'
-        }
-
-        if format:
-            params['type'] = format
-
-        if self.format_in_type:
-            params['type'] = self.format_in_type
-
-        if self.status:
-            params['status'] = self.status
-
-        if self.rating:
-            params['rating'] = self.rating
-
-        genre = database.get(self.get_mal_base_res, 24, f"{self._BASE_URL}/anime", params)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_ecchi?page=%d"
-        return self.process_otaku_view(genre, base_plugin_url, page)
-
-    def get_genre_fantasy(self, page, format, prefix=None):
-        params = {
-            'page': page,
-            'limit': self.perpage,
-            'sfw': self.adult,
-            'order_by': 'members',
-            "genres": "10",
-            'sort': 'desc'
-        }
-
-        if format:
-            params['type'] = format
-
-        if self.format_in_type:
-            params['type'] = self.format_in_type
-
-        if self.status:
-            params['status'] = self.status
-
-        if self.rating:
-            params['rating'] = self.rating
-
-        genre = database.get(self.get_mal_base_res, 24, f"{self._BASE_URL}/anime", params)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_fantasy?page=%d"
-        return self.process_otaku_view(genre, base_plugin_url, page)
-
-    def get_genre_hentai(self, page, format, prefix=None):
-        params = {
-            'page': page,
-            'limit': self.perpage,
-            'sfw': self.adult,
-            'order_by': 'members',
-            "genres": "12",
-            'sort': 'desc'
-        }
-
-        if format:
-            params['type'] = format
-
-        if self.format_in_type:
-            params['type'] = self.format_in_type
-
-        if self.status:
-            params['status'] = self.status
-
-        if self.rating:
-            params['rating'] = self.rating
-
-        genre = database.get(self.get_mal_base_res, 24, f"{self._BASE_URL}/anime", params)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_hentai?page=%d"
-        return self.process_otaku_view(genre, base_plugin_url, page)
-
-    def get_genre_horror(self, page, format, prefix=None):
-        params = {
-            'page': page,
-            'limit': self.perpage,
-            'sfw': self.adult,
-            'order_by': 'members',
-            "genres": "14",
-            'sort': 'desc'
-        }
-
-        if format:
-            params['type'] = format
-
-        if self.format_in_type:
-            params['type'] = self.format_in_type
-
-        if self.status:
-            params['status'] = self.status
-
-        if self.rating:
-            params['rating'] = self.rating
-
-        genre = database.get(self.get_mal_base_res, 24, f"{self._BASE_URL}/anime", params)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_horror?page=%d"
-        return self.process_otaku_view(genre, base_plugin_url, page)
-
-    def get_genre_shoujo(self, page, format, prefix=None):
-        params = {
-            'page': page,
-            'limit': self.perpage,
-            'sfw': self.adult,
-            'order_by': 'members',
-            "genres": "25",
-            'sort': 'desc'
-        }
-
-        if format:
-            params['type'] = format
-
-        if self.format_in_type:
-            params['type'] = self.format_in_type
-
-        if self.status:
-            params['status'] = self.status
-
-        if self.rating:
-            params['rating'] = self.rating
-
-        genre = database.get(self.get_mal_base_res, 24, f"{self._BASE_URL}/anime", params)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_shoujo?page=%d"
-        return self.process_otaku_view(genre, base_plugin_url, page)
-
-    def get_genre_mecha(self, page, format, prefix=None):
-        params = {
-            'page': page,
-            'limit': self.perpage,
-            'sfw': self.adult,
-            'order_by': 'members',
-            "genres": "18",
-            'sort': 'desc'
-        }
-
-        if format:
-            params['type'] = format
-
-        if self.format_in_type:
-            params['type'] = self.format_in_type
-
-        if self.status:
-            params['status'] = self.status
-
-        if self.rating:
-            params['rating'] = self.rating
-
-        genre = database.get(self.get_mal_base_res, 24, f"{self._BASE_URL}/anime", params)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_mecha?page=%d"
-        return self.process_otaku_view(genre, base_plugin_url, page)
-
-    def get_genre_music(self, page, format, prefix=None):
-        params = {
-            'page': page,
-            'limit': self.perpage,
-            'sfw': self.adult,
-            'order_by': 'members',
-            "genres": "19",
-            'sort': 'desc'
-        }
-
-        if format:
-            params['type'] = format
-
-        if self.format_in_type:
-            params['type'] = self.format_in_type
-
-        if self.status:
-            params['status'] = self.status
-
-        if self.rating:
-            params['rating'] = self.rating
-
-        genre = database.get(self.get_mal_base_res, 24, f"{self._BASE_URL}/anime", params)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_music?page=%d"
-        return self.process_otaku_view(genre, base_plugin_url, page)
-
-    def get_genre_mystery(self, page, format, prefix=None):
-        params = {
-            'page': page,
-            'limit': self.perpage,
-            'sfw': self.adult,
-            'order_by': 'members',
-            "genres": "7",
-            'sort': 'desc'
-        }
-
-        if format:
-            params['type'] = format
-
-        if self.format_in_type:
-            params['type'] = self.format_in_type
-
-        if self.status:
-            params['status'] = self.status
-
-        if self.rating:
-            params['rating'] = self.rating
-
-        genre = database.get(self.get_mal_base_res, 24, f"{self._BASE_URL}/anime", params)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_mystery?page=%d"
-        return self.process_otaku_view(genre, base_plugin_url, page)
-
-    def get_genre_psychological(self, page, format, prefix=None):
-        params = {
-            'page': page,
-            'limit': self.perpage,
-            'sfw': self.adult,
-            'order_by': 'members',
-            "genres": "40",
-            'sort': 'desc'
-        }
-
-        if format:
-            params['type'] = format
-
-        if self.format_in_type:
-            params['type'] = self.format_in_type
-
-        if self.status:
-            params['status'] = self.status
-
-        if self.rating:
-            params['rating'] = self.rating
-
-        genre = database.get(self.get_mal_base_res, 24, f"{self._BASE_URL}/anime", params)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_psychological?page=%d"
-        return self.process_otaku_view(genre, base_plugin_url, page)
-
-    def get_genre_romance(self, page, format, prefix=None):
-        params = {
-            'page': page,
-            'limit': self.perpage,
-            'sfw': self.adult,
-            'order_by': 'members',
-            "genres": "22",
-            'sort': 'desc'
-        }
-
-        if format:
-            params['type'] = format
-
-        if self.format_in_type:
-            params['type'] = self.format_in_type
-
-        if self.status:
-            params['status'] = self.status
-
-        if self.rating:
-            params['rating'] = self.rating
-
-        genre = database.get(self.get_mal_base_res, 24, f"{self._BASE_URL}/anime", params)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_romance?page=%d"
-        return self.process_otaku_view(genre, base_plugin_url, page)
-
-    def get_genre_sci_fi(self, page, format, prefix=None):
-        params = {
-            'page': page,
-            'limit': self.perpage,
-            'sfw': self.adult,
-            'order_by': 'members',
-            "genres": "24",
-            'sort': 'desc'
-        }
-
-        if format:
-            params['type'] = format
-
-        if self.format_in_type:
-            params['type'] = self.format_in_type
-
-        if self.status:
-            params['status'] = self.status
-
-        if self.rating:
-            params['rating'] = self.rating
-
-        genre = database.get(self.get_mal_base_res, 24, f"{self._BASE_URL}/anime", params)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_sci_fi?page=%d"
-        return self.process_otaku_view(genre, base_plugin_url, page)
-
-    def get_genre_slice_of_life(self, page, format, prefix=None):
-        params = {
-            'page': page,
-            'limit': self.perpage,
-            'sfw': self.adult,
-            'order_by': 'members',
-            "genres": "36",
-            'sort': 'desc'
-        }
-
-        if format:
-            params['type'] = format
-
-        if self.format_in_type:
-            params['type'] = self.format_in_type
-
-        if self.status:
-            params['status'] = self.status
-
-        if self.rating:
-            params['rating'] = self.rating
-
-        genre = database.get(self.get_mal_base_res, 24, f"{self._BASE_URL}/anime", params)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_slice_of_life?page=%d"
-        return self.process_otaku_view(genre, base_plugin_url, page)
-
-    def get_genre_sports(self, page, format, prefix=None):
-        params = {
-            'page': page,
-            'limit': self.perpage,
-            'sfw': self.adult,
-            'order_by': 'members',
-            "genres": "30",
-            'sort': 'desc'
-        }
-
-        if format:
-            params['type'] = format
-
-        if self.format_in_type:
-            params['type'] = self.format_in_type
-
-        if self.status:
-            params['status'] = self.status
-
-        if self.rating:
-            params['rating'] = self.rating
-
-        genre = database.get(self.get_mal_base_res, 24, f"{self._BASE_URL}/anime", params)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_sports?page=%d"
-        return self.process_otaku_view(genre, base_plugin_url, page)
-
-    def get_genre_supernatural(self, page, format, prefix=None):
-        params = {
-            'page': page,
-            'limit': self.perpage,
-            'sfw': self.adult,
-            'order_by': 'members',
-            "genres": "37",
-            'sort': 'desc'
-        }
-
-        if format:
-            params['type'] = format
-
-        if self.format_in_type:
-            params['type'] = self.format_in_type
-
-        if self.status:
-            params['status'] = self.status
-
-        if self.rating:
-            params['rating'] = self.rating
-
-        genre = database.get(self.get_mal_base_res, 24, f"{self._BASE_URL}/anime", params)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_supernatural?page=%d"
-        return self.process_otaku_view(genre, base_plugin_url, page)
-
-    def get_genre_thriller(self, page, format, prefix=None):
-        params = {
-            'page': page,
-            'limit': self.perpage,
-            'sfw': self.adult,
-            'order_by': 'members',
-            "genres": "41",
-            'sort': 'desc'
-        }
-
-        if format:
-            params['type'] = format
-
-        if self.format_in_type:
-            params['type'] = self.format_in_type
-
-        if self.status:
-            params['status'] = self.status
-
-        if self.rating:
-            params['rating'] = self.rating
-
-        genre = database.get(self.get_mal_base_res, 24, f"{self._BASE_URL}/anime", params)
-        base_plugin_url = f"{prefix}?page=%d" if prefix else "genre_thriller?page=%d"
-        return self.process_otaku_view(genre, base_plugin_url, page)
+        return self.process_otaku_view(top_100, self._plugin_page_url(prefix, 'top_100'), page)
 
     @staticmethod
     def get_mal_base_res(url, params=None):
-        r = client.get(url, params=params)
-        if r:
-            return r.json()
+        for attempt in range(3):
+            r = client.get(url, params=params)
+            if r:
+                return r.json()
+            if attempt < 2:
+                control.sleep(1000 * (attempt + 1))
+        control.log(f'Jikan request failed: {url}', level='warning')
 
     @staticmethod
     def get_anilist_base_res(mal_ids, page=1, media_type="ANIME"):
@@ -1524,105 +633,50 @@ class OtakuBrowser(BrowserBase):
         }
         '''
 
-        # Fetch first page to check if pagination needed
         variables = {"page": 1, "malIds": mal_ids, "type": media_type}
         result = client.post(_ANILIST_BASE_URL, json_data={'query': query, 'variables': variables})
+        if not result:
+            return []
         results = result.json()
-        page_data = results.get('data', {}).get('Page', {})
-        all_media = page_data.get('media', [])
-        has_next = page_data.get('pageInfo', {}).get('hasNextPage', False)
+        # AniList often returns "data": null; .get("data", {}) still yields None when the key exists.
+        page_data = ((results or {}).get('data') or {}).get('Page') or {}
+        all_media = page_data.get('media') or []
+        has_next = (page_data.get('pageInfo') or {}).get('hasNextPage', False)
 
-        # If only one page, return immediately
         if not has_next:
             return all_media
 
-        # If multiple pages, fetch remaining pages in parallel
-        # AniList has no strict rate limit, so we can be more aggressive
         def fetch_page(page_num):
             try:
                 vars = {"page": page_num, "malIds": mal_ids, "type": media_type}
                 resp = client.post(_ANILIST_BASE_URL, json_data={'query': query, 'variables': vars})
                 if resp:
                     resp_json = resp.json()
-                    return resp_json.get('data', {}).get('Page', {}).get('media', [])
+                    return (((resp_json or {}).get('data') or {}).get('Page') or {}).get('media') or []
                 return []
             except Exception as e:
                 control.log(f"AniList: Failed to fetch page {page_num}: {str(e)}")
                 return []
 
-        # Estimate max pages (AniList returns ~50 per page for mal_ids query)
-        # Conservative estimate: fetch up to 5 pages in parallel (250 anime)
-        max_pages = min(5, len(mal_ids) // 50 + 2)  # +2 for safety margin
+        max_pages = min(5, len(mal_ids) // 50 + 2)
 
         page_numbers = list(range(2, max_pages + 1))
         all_page_results = utils.parallel_process(page_numbers, fetch_page)
 
-        # Combine all results
         for page_media in all_page_results:
-            if page_media:  # Only extend if we got data
+            if page_media:
                 all_media.extend(page_media)
             else:
-                break  # Stop if we hit an empty page
+                break
 
         control.log(f"AniList: Fetched {len(all_media)} media items total")
         return all_media
-
-    # @div_flavor
-    # def recommendation_relation_view(self, mal_res, completed=None, mal_dub=None):
-    #     if mal_res.get('entry'):
-    #         mal_res = mal_res['entry']
-    #     if not completed:
-    #         completed = {}
-
-    #     mal_id = mal_res['mal_id']
-    #     meta_ids = database.get_mappings(mal_id, 'mal_id')
-
-    #     title = mal_res['title']
-    #     if mal_res.get('relation'):
-    #         title += ' [I]%s[/I]' % control.colorstr(mal_res['relation'], 'limegreen')
-
-    #     info = {
-    #         'UniqueIDs': {
-    #             'mal_id': str(mal_id),
-    #             **database.get_unique_ids(mal_id, 'mal_id')
-    #         },
-    #         'title': title,
-    #         'mediatype': 'tvshow'
-    #     }
-
-    #     if completed.get(str(mal_id)):
-    #         info['playcount'] = 1
-
-    #     dub = True if mal_dub and mal_dub.get(str(mal_res.get('idMal'))) else False
-
-    #     image = mal_res['images']['webp']['large_image_url'] if mal_res.get('images') else None
-
-    #     base = {
-    #         "name": title,
-    #         "url": f'animes/{mal_id}/',
-    #         "image": image,
-    #         "poster": image,
-    #         'fanart': image,
-    #         "banner": image,
-    #         "info": info
-    #     }
-
-    #     anime_media_episodes = meta_ids.get('anime_media_episodes', '0')
-    #     total_episodes = int(anime_media_episodes.split('-')[-1].strip())
-
-    #     if meta_ids.get('anime_media_type') in ['MOVIE', 'ONA', 'OVA', 'SPECIAL'] and total_episodes == 1:
-    #         base['url'] = f'play_movie/{mal_id}/'
-    #         base['info']['mediatype'] = 'movie'
-    #         return utils.parse_view(base, False, True, dub)
-    #     return utils.parse_view(base, True, False, dub)
 
     def get_genres(self, page, format):
         mal_res = database.get(self.get_mal_base_res, 24, f'{self._BASE_URL}/genres/anime')
 
         genre = mal_res['data']
-        genres_list = []
-        for x in genre:
-            genres_list.append(x['name'])
+        genres_list = [x['name'] for x in genre]
         multiselect = control.multiselect_dialog(control.lang(30040), genres_list, preselect=[])
         if not multiselect:
             return []
@@ -1647,8 +701,7 @@ class OtakuBrowser(BrowserBase):
 
         if format:
             params['type'] = format
-
-        if self.format_in_type:
+        elif self.format_in_type:
             params['type'] = self.format_in_type
 
         if self.status:
@@ -1677,34 +730,27 @@ class OtakuBrowser(BrowserBase):
         if not completed:
             completed = {}
 
-        # Use mal_id from MAL, fallback to AniList if needed
         mal_id = mal_res.get('mal_id') if mal_res else (anilist_res.get('idMal') if anilist_res else None)
         anilist_id = anilist_res.get('id') if anilist_res else None
 
-        # Update database if not present
         self.database_update_show(mal_res, anilist_res)
 
         show_meta = database.get_show_meta(mal_id)
         kodi_meta = pickle.loads(show_meta.get('art')) if show_meta else {}
 
-        # Title logic: for relations, use 'name' if present, else prefer MAL, fallback to AniList
         title = None
         if mal_res:
-            # Use 'name' for relation entries
             title = mal_res.get('name') or mal_res.get(self.title_lang) or mal_res.get('title')
         if not title and anilist_res:
             title = anilist_res['title'].get(self.title_lang) or anilist_res['title'].get('romaji')
-        # Ensure title is always a string
         if title is None:
             title = ''
 
-        # Add relation info
         if mal_res and mal_res.get('relation'):
             title += ' [I]%s[/I]' % control.colorstr(mal_res['relation'], 'limegreen')
         elif anilist_res and anilist_res.get('relationType'):
             title += ' [I]%s[/I]' % control.colorstr(anilist_res['relationType'], 'limegreen')
 
-        # Plot/synopsis
         plot = mal_res.get('synopsis') if mal_res and mal_res.get('synopsis') else None
         if not plot and anilist_res and anilist_res.get('description'):
             desc = anilist_res['description']
@@ -1714,32 +760,26 @@ class OtakuBrowser(BrowserBase):
             desc = desc.replace('\n', '')
             plot = desc
 
-        # Genres
         genre = [x['name'] for x in mal_res.get('genres', [])] if mal_res else None
-        if (not genre or not genre) and anilist_res:
+        if not genre and anilist_res:
             genre = anilist_res.get('genres')
 
-        # Studios
         studio = [x['name'] for x in mal_res.get('studios', [])] if mal_res else None
-        if (not studio or not studio) and anilist_res:
+        if not studio and anilist_res:
             studio = [x['node'].get('name') for x in anilist_res['studios']['edges']]
 
-        # Status
         status = mal_res.get('status') if mal_res else None
         if not status and anilist_res:
             status = anilist_res.get('status')
 
-        # Duration
         duration = self.duration_to_seconds(mal_res.get('duration')) if mal_res and mal_res.get('duration') else None
         if not duration and anilist_res and anilist_res.get('duration'):
             duration = anilist_res['duration'] * 60
 
-        # Country
         country = None
         if anilist_res:
             country = [anilist_res.get('countryOfOrigin', '')]
 
-        # Rating/score
         rating = mal_res.get('rating') if mal_res else None
         info_rating = None
         if mal_res and isinstance(mal_res.get('score'), float):
@@ -1752,7 +792,6 @@ class OtakuBrowser(BrowserBase):
                 total_votes = sum([score['amount'] for score in anilist_res['stats']['scoreDistribution']])
                 info_rating['votes'] = total_votes
 
-        # Trailer
         trailer = None
         if mal_res and mal_res.get('trailer'):
             trailer = f"plugin://plugin.video.youtube/play/?video_id={mal_res['trailer']['youtube_id']}"
@@ -1765,12 +804,10 @@ class OtakuBrowser(BrowserBase):
             except (KeyError, TypeError):
                 pass
 
-        # Playcount
         playcount = None
         if completed and completed.get(str(mal_id)):
             playcount = 1
 
-        # Premiered/year
         premiered = None
         year = None
         if mal_res and mal_res.get('aired') and mal_res['aired'].get('from'):
@@ -1788,7 +825,6 @@ class OtakuBrowser(BrowserBase):
                 premiered = ''
             year = start_date['year']
 
-        # Cast
         cast = None
         if anilist_res and anilist_res.get('characters'):
             try:
@@ -1801,7 +837,6 @@ class OtakuBrowser(BrowserBase):
             except (IndexError, KeyError, TypeError):
                 pass
 
-        # UniqueIDs
         unique_ids = {'mal_id': str(mal_id)}
         if anilist_id:
             unique_ids['anilist_id'] = str(anilist_id)
@@ -1833,20 +868,16 @@ class OtakuBrowser(BrowserBase):
         if trailer:
             info['trailer'] = trailer
 
-        # Dub
         dub = True if mal_dub and mal_dub.get(str(mal_id)) else False
 
-        # Images
         image = None
         poster = None
         fanart = None
 
-        # MAL images
         if mal_res and mal_res.get('images'):
             image = mal_res['images']['webp'].get('large_image_url')
             poster = image
             fanart = kodi_meta['fanart'] if kodi_meta.get('fanart') else image
-        # AniList fallback for missing images
         if not image and anilist_res and anilist_res.get('coverImage'):
             image = anilist_res['coverImage'].get('extraLarge')
         if not poster and anilist_res and anilist_res.get('coverImage'):
@@ -1863,7 +894,6 @@ class OtakuBrowser(BrowserBase):
             "info": info
         }
 
-        # Pull all artwork from kodi_meta (already respects settings and is pre-selected)
         if kodi_meta.get('banner'):
             base['banner'] = kodi_meta['banner']
         if kodi_meta.get('thumb'):
@@ -1876,7 +906,6 @@ class OtakuBrowser(BrowserBase):
             clearlogo = kodi_meta['clearlogo']
             base['clearlogo'] = random.choice(clearlogo) if isinstance(clearlogo, list) else clearlogo
 
-        # Movie/episode logic
         episodes = mal_res.get('episodes') or (anilist_res.get('episodes') if anilist_res else None)
 
         if episodes == 1:
@@ -1890,7 +919,6 @@ class OtakuBrowser(BrowserBase):
         Combines MAL and AniList data for database update.
         Uses MAL as primary, fills missing fields from AniList if available.
         """
-        # Determine mal_id
         mal_id = None
         if mal_res and 'mal_id' in mal_res:
             mal_id = mal_res['mal_id']
@@ -1899,7 +927,6 @@ class OtakuBrowser(BrowserBase):
         if not mal_id:
             return
 
-        # Title
         title_userPreferred = None
         name = None
         ename = None
@@ -1921,7 +948,6 @@ class OtakuBrowser(BrowserBase):
         else:
             titles = ''
 
-        # Start date
         start_date = None
         if mal_res and mal_res.get('aired') and mal_res['aired'].get('from'):
             start_date = mal_res['aired']['from']
@@ -1935,23 +961,18 @@ class OtakuBrowser(BrowserBase):
             else:
                 start_date = ''
 
-        # Episodes
         episodes = mal_res.get('episodes') if mal_res and 'episodes' in mal_res else (anilist_res.get('episodes') if anilist_res and 'episodes' in anilist_res else None)
 
-        # Poster
         poster = None
         if mal_res and mal_res.get('images') and mal_res['images'].get('webp'):
             poster = mal_res['images']['webp'].get('large_image_url')
         if not poster and anilist_res and anilist_res.get('coverImage'):
             poster = anilist_res['coverImage'].get('extraLarge')
 
-        # Status
         status = mal_res.get('status') if mal_res and 'status' in mal_res else (anilist_res.get('status') if anilist_res and 'status' in anilist_res else None)
 
-        # Format
         format_ = mal_res.get('type') if mal_res and 'type' in mal_res else (anilist_res.get('format') if anilist_res and 'format' in anilist_res else '')
 
-        # Plot
         plot = mal_res.get('synopsis') if mal_res and 'synopsis' in mal_res else None
         if not plot and anilist_res and anilist_res.get('description'):
             desc = anilist_res['description']
@@ -1961,22 +982,18 @@ class OtakuBrowser(BrowserBase):
             desc = desc.replace('\n', '')
             plot = desc
 
-        # Duration
         duration = self.duration_to_seconds(mal_res.get('duration')) if mal_res and 'duration' in mal_res else None
         if not duration and anilist_res and 'duration' in anilist_res and anilist_res['duration'] is not None:
             duration = anilist_res['duration'] * 60
 
-        # Genre
         genre = [x['name'] for x in mal_res.get('genres', [])] if mal_res else None
-        if (not genre or not genre) and anilist_res:
+        if not genre and anilist_res:
             genre = anilist_res.get('genres')
 
-        # Studio
         studio = [x['name'] for x in mal_res.get('studios', [])] if mal_res else None
-        if (not studio or not studio) and anilist_res and anilist_res.get('studios'):
+        if not studio and anilist_res and anilist_res.get('studios'):
             studio = [x['node'].get('name') for x in anilist_res['studios']['edges']]
 
-        # MPAA/country
         mpaa = mal_res.get('rating') if mal_res and 'rating' in mal_res else None
         country = [anilist_res.get('countryOfOrigin', '')] if anilist_res and 'countryOfOrigin' in anilist_res else None
 
@@ -1998,7 +1015,6 @@ class OtakuBrowser(BrowserBase):
             'country': country,
         }
 
-        # Premiered/year
         try:
             if mal_res and mal_res.get('aired') and mal_res['aired'].get('from'):
                 start_date = mal_res['aired']['from']
@@ -2011,7 +1027,6 @@ class OtakuBrowser(BrowserBase):
         except Exception:
             pass
 
-        # Cast
         try:
             if anilist_res and anilist_res.get('characters'):
                 cast = []
@@ -2024,7 +1039,6 @@ class OtakuBrowser(BrowserBase):
         except Exception:
             pass
 
-        # Rating
         try:
             if mal_res and isinstance(mal_res.get('score'), float):
                 kodi_meta['rating'] = {'score': mal_res['score']}
@@ -2038,7 +1052,6 @@ class OtakuBrowser(BrowserBase):
         except Exception:
             pass
 
-        # Trailer
         try:
             if mal_res and mal_res.get('trailer'):
                 kodi_meta['trailer'] = f"plugin://plugin.video.youtube/play/?video_id={mal_res['trailer']['youtube_id']}"
@@ -2069,3 +1082,18 @@ class OtakuBrowser(BrowserBase):
         selected_tags = []
 
         return selected_genres_mal, selected_genres_anilist, selected_tags
+
+
+def _install_genre_methods():
+    """Attach get_genre_* methods expected by Main._draw_genre_page (one-liners)."""
+    for slug, gid in _MAL_GENRE_PRESETS:
+        def make_genre(_slug, _gid):
+            def method(self, page, format, prefix=None):
+                return self._browse_genre_preset(page, format, prefix, f'genre_{_slug}', _gid)
+            method.__name__ = f'get_genre_{_slug}'
+            method.__doc__ = f'Browse anime with MAL genre preset {_slug} (id {_gid}).'
+            return method
+        setattr(OtakuBrowser, f'get_genre_{slug}', make_genre(slug, gid))
+
+
+_install_genre_methods()

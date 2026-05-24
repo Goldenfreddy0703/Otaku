@@ -1,5 +1,5 @@
 import re
-import threading
+from concurrent.futures import ThreadPoolExecutor
 
 from resources.lib.ui import source_utils, control
 from resources.lib.ui.BrowserBase import BrowserBase
@@ -14,24 +14,22 @@ class Sources(BrowserBase):
     def get_sources(self, query, mal_id, episode, season=None):
         debrid = control.enabled_debrid()
         cloud = control.enabled_cloud()
+        tasks = []
         if debrid.get('realdebrid') and cloud.get('realdebrid'):
-            t = threading.Thread(target=self.rd_cloud_inspection, args=(query, mal_id, episode, season))
-            t.start()
-            self.threads.append(t)
+            tasks.append(self.rd_cloud_inspection)
         if debrid.get('premiumize') and cloud.get('premiumize'):
-            t = threading.Thread(target=self.premiumize_cloud_inspection, args=(query, mal_id, episode, season))
-            t.start()
-            self.threads.append(t)
+            tasks.append(self.premiumize_cloud_inspection)
         if debrid.get('alldebrid') and cloud.get('alldebrid'):
-            t = threading.Thread(target=self.alldebrid_cloud_inspection, args=(query, mal_id, episode, season))
-            t.start()
-            self.threads.append(t)
+            tasks.append(self.alldebrid_cloud_inspection)
         if debrid.get('torbox') and cloud.get('torbox'):
-            t = threading.Thread(target=self.torbox_cloud_inspection, args=(query, mal_id, episode, season))
-            t.start()
-            self.threads.append(t)
-        for i in self.threads:
-            i.join()
+            tasks.append(self.torbox_cloud_inspection)
+
+        if tasks:
+            max_workers = max(1, min(control.max_threads or 1, len(tasks)))
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = [executor.submit(task, query, mal_id, episode, season) for task in tasks]
+                for future in futures:
+                    future.result()
         return self.cloud_files
 
     def rd_cloud_inspection(self, query, mal_id, episode, season=None):

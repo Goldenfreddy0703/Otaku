@@ -8,6 +8,12 @@ from resources.lib import MetaBrowser
 BROWSER = MetaBrowser.BROWSER
 
 
+def _watchlist_paging_per_page():
+    if not control.getBool('interface.watchlist.paging'):
+        return 0
+    return max(0, control.getInt('interface.perpage.watchlist'))
+
+
 def get_auth_dialog(flavor):
     from resources.lib.windows import wlf_auth
     auth = wlf_auth.WatchlistFlavorAuth('wlf_auth_%s.xml' % flavor, control.ADDON_PATH, flavor=flavor).doModal()
@@ -43,7 +49,13 @@ def NEXT_UP(payload, params):
 def NEXT_UP_PAGES(payload, params):
     offset = int(payload)
     page = int(params.get('page', 1))
-    control.draw_items(WatchlistFlavor.get_next_up(offset, page), 'videos')
+    items = WatchlistFlavor.get_next_up(offset, page)
+    control.draw_items(items, 'videos')
+    pp = _watchlist_paging_per_page()
+    if pp > 0:
+        control.schedule_next_page_prefetch(
+            items,
+            lambda o=offset, pp=pp, pg=page: WatchlistFlavor.get_next_up(o + pp, pg + 1))
 
 
 @Route('watchlist_status_type/*')
@@ -51,7 +63,13 @@ def WATCHLIST_STATUS_TYPE(payload, params):
     flavor, status = payload.rsplit("/")
     next_up = bool(params.get('next_up'))
     content_type = 'videos' if next_up else 'tvshows'
-    control.draw_items(WatchlistFlavor.watchlist_status_request(flavor, status, next_up), content_type)
+    items = WatchlistFlavor.watchlist_status_request(flavor, status, next_up)
+    control.draw_items(items, content_type)
+    pp = _watchlist_paging_per_page()
+    if pp > 0:
+        control.schedule_next_page_prefetch(
+            items,
+            lambda fl=flavor, st=status, nu=next_up, pp=pp: WatchlistFlavor.watchlist_status_request(fl, st, nu, pp, 2))
 
 
 @Route('watchlist_status_type_pages/*')
@@ -60,7 +78,18 @@ def WATCHLIST_STATUS_TYPE_PAGES(payload, params):
     page = int(params.get('page', 1))
     next_up = bool(params.get('next_up'))
     content_type = 'videos' if next_up else 'tvshows'
-    control.draw_items(WatchlistFlavor.watchlist_status_request(flavor, status, next_up, offset, page), content_type)
+    items = WatchlistFlavor.watchlist_status_request(flavor, status, next_up, offset, page)
+    control.draw_items(items, content_type)
+    pp = _watchlist_paging_per_page()
+    if pp > 0:
+        try:
+            off = int(offset)
+        except (TypeError, ValueError):
+            off = 0
+        control.schedule_next_page_prefetch(
+            items,
+            lambda fl=flavor, st=status, nu=next_up, o=off, pp=pp, pg=page: WatchlistFlavor.watchlist_status_request(
+                fl, st, nu, o + pp, pg + 1))
 
 
 @Route('watchlist_to_ep/*')

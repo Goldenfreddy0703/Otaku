@@ -100,10 +100,9 @@ def parse_history_view(res, cm):
     format = control.getSetting('format')
     format_to_url, _ = get_format_to_url_mappings()
 
-    url = format_to_url.get(format)
-    if url:
-        encoded_res = quote(res, safe='')
-        return allocate_item(res, f'{url}{encoded_res}', True, False, cm, 'search.png', {})
+    url = format_to_url.get(format) or format_to_url['anime']
+    encoded_res = quote(res, safe='')
+    return allocate_item(res, f'{url}{encoded_res}', True, False, cm, 'search.png', {})
 
 
 def search_history(search_array, format):

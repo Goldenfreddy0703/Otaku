@@ -59,24 +59,15 @@ def load_video_from_url(in_url):
                                              data)
 
         control.log("Probing source: %s" % in_url)
-        print(f"Initial URL: {in_url}")
 
         headers = None
         if '|' in in_url:
             in_url, headers = in_url.split('|')
-            print(f"Split URL: {in_url}")
-            print(f"Raw headers: {headers}")
-
             headers = dict([item.split('=') for item in headers.split('&')])
-            print(f"Parsed headers: {headers}")
-
             for header in headers:
                 headers[header] = urllib.parse.unquote_plus(headers[header])
-                print(f"Decoded header: {header} = {headers[header]}")
 
         response = client.get(in_url, headers=headers)
-        print(f"Response object: {response}")
-
         return found_extractor['parser'](response.url,
                                          response.text,
                                          response.headers.get('Referer'))
@@ -417,8 +408,113 @@ def __relative_url(original_url, new_url):
         return urllib.parse.urljoin(original_url, new_url)
 
 
-def get_sub(sub_url, sub_lang):
-    response = client.get(sub_url)
+# Kodi language code -> label keywords (exact + substring match)
+_SUB_LANG_RULES = {
+    'eng': ('english', 'en'),
+    'jpn': ('japanese', 'ja'),
+    'spa': ('spanish', 'español', 'espanol', 'castilian'),
+    'por': ('portuguese', 'português', 'portugues', 'brazilian', 'portuguese (br)'),
+    'fre': ('french', 'français', 'francais'),
+    'ger': ('german', 'deutsch'),
+    'ara': ('arabic',),
+    'chi': ('chinese', 'mandarin', 'cantonese'),
+    'kor': ('korean',),
+    'rus': ('russian',),
+    'ita': ('italian',),
+    'dut': ('dutch',),
+    'hin': ('hindi',),
+    'tur': ('turkish',),
+    'pol': ('polish',),
+    'swe': ('swedish',),
+    'nor': ('norwegian',),
+    'dan': ('danish',),
+    'fin': ('finnish',),
+}
+
+_SUB_LABEL_EXACT = {
+    keyword.lower(): code
+    for code, keywords in _SUB_LANG_RULES.items()
+    for keyword in keywords
+}
+
+# Longer keywords first so e.g. "portuguese (br)" wins over "portuguese"
+_SUB_LABEL_KEYWORDS = sorted(
+    ((keyword, code) for keyword, code in _SUB_LABEL_EXACT.items() if len(keyword) >= 3),
+    key=lambda item: len(item[0]),
+    reverse=True,
+)
+
+_SUB_URL_PATTERNS = (
+    re.compile(r'/subtitles/([a-z]{2,3})-\d+\.vtt', re.I),
+    re.compile(r'_sub_([a-z]{2,3})-\d+\.vtt', re.I),
+    re.compile(r'_sub_([a-z]{2,3})\.vtt', re.I),
+)
+
+_ISO_TO_KODI = {
+    'en': 'eng', 'eng': 'eng',
+    'es': 'spa', 'spa': 'spa',
+    'pt': 'por', 'por': 'por',
+    'fr': 'fre', 'fre': 'fre',
+    'de': 'ger', 'ger': 'ger',
+    'ar': 'ara', 'ara': 'ara',
+    'zh': 'chi', 'chi': 'chi',
+    'ja': 'jpn', 'jpn': 'jpn',
+    'ko': 'kor', 'kor': 'kor',
+    'ru': 'rus', 'rus': 'rus',
+    'it': 'ita', 'ita': 'ita',
+    'nl': 'dut', 'dut': 'dut',
+    'hi': 'hin', 'hin': 'hin',
+    'tr': 'tur', 'tur': 'tur',
+    'pl': 'pol', 'pol': 'pol',
+    'sv': 'swe', 'swe': 'swe',
+    'no': 'nor', 'nor': 'nor',
+    'da': 'dan', 'dan': 'dan',
+    'fi': 'fin', 'fin': 'fin',
+}
+
+
+def _code_to_kodi(code):
+    code = (code or '').lower()
+    return _ISO_TO_KODI.get(code, code if len(code) == 3 else 'und')
+
+
+def detect_sub_lang(url, label):
+    """Resolve Kodi language code from MegaPlay URL + label (never guess English)."""
+    url = url or ''
+    for pattern in _SUB_URL_PATTERNS:
+        match = pattern.search(url)
+        if match:
+            return _code_to_kodi(match.group(1))
+
+    key = str(label or '').strip().lower()
+    if not key:
+        return 'und'
+
+    if key in _SUB_LABEL_EXACT:
+        return _SUB_LABEL_EXACT[key]
+
+    for keyword, code in _SUB_LABEL_KEYWORDS:
+        if keyword in key:
+            return code
+
+    return 'und'
+
+
+def normalize_sub_lang(label):
+    return detect_sub_lang('', label)
+
+
+def get_sub(sub_url, sub_lang, headers=None, sub_index=0, display_name=None):
+    if not sub_url:
+        return None
+
+    label = display_name or sub_lang
+    lang = detect_sub_lang(sub_url, label)
+    response = client.get(sub_url, headers=headers)
+
+    if not response:
+        control.log(f"get_sub: request failed for {sub_url}", level='info')
+        return None
 
     # Handle both Response objects and string content
     if hasattr(response, 'text'):
@@ -428,17 +524,23 @@ def get_sub(sub_url, sub_lang):
     else:
         content = str(response)
 
+    if not content or not content.strip():
+        control.log(f"get_sub: empty subtitle body for {sub_url}", level='info')
+        return None
+
+    ext = '.vtt' if sub_url.endswith('.vtt') else '.srt'
+    fname = 'TemporarySubs.{0}.{1}{2}'.format(sub_index, lang, ext)
     subtitle = xbmcvfs.translatePath('special://temp/')
-    fname = f'TemporarySubs.{sub_lang}.srt'
     fpath = os.path.join(subtitle, fname)
-    if sub_url.endswith('.vtt'):
-        fname = fname.replace('.srt', '.vtt')
-        fpath = fpath.replace('.srt', '.vtt')
     fpath = fpath.encode(encoding='ascii', errors='ignore').decode(encoding='ascii')
     fname = fname.encode(encoding='ascii', errors='ignore').decode(encoding='ascii')
     with open(fpath, 'w', encoding='utf-8') as f:
         f.write(content)
-    return f'special://temp/{fname}'
+    return {
+        'path': 'special://temp/{0}'.format(fname),
+        'lang': lang,
+        'name': str(label) if label else lang,
+    }
 
 
 def del_subs():
@@ -590,3 +692,24 @@ def __extract_animekai_mega(url, page_content, referer=None):
 __register_extractor(["https://4spromax.site/e/",
                       "https://megaup.live/e/"],
                      __extract_animekai_mega)
+
+
+def __extract_megaplay(url, page_content, referer=None):
+    try:
+        from resources.lib.ui.megaplay_extractor import extract_megaplay_sources
+        res = extract_megaplay_sources(url, referer or 'https://anikototv.to/')
+        if res and res.get('sources'):
+            srclink = res['sources'][0].get('file', '')
+            if srclink:
+                netloc = urllib.parse.urljoin(url, '/')
+                headers = {'User-Agent': 'iPad',
+                           'Referer': netloc,
+                           'Origin': netloc.rstrip('/')}
+                return srclink + __append_headers(headers)
+    except Exception:
+        pass
+    return
+
+
+__register_extractor(["https://megaplay.buzz/"],
+                     __extract_megaplay)

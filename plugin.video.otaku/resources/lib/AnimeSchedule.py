@@ -265,6 +265,7 @@ class AnimeScheduleCalendar:
                 }
 
             result = list(anime_by_route.values())
+            self._enrich_missing_descriptions(result)
 
             mal_id_count = len([a for a in result if a.get('mal_id')])
             control.log(f"AnimESchedule: Returned {len(result)} anime with {mal_id_count} MAL IDs", "info")
@@ -277,6 +278,86 @@ class AnimeScheduleCalendar:
         except Exception as e:
             control.log(f"Error fetching AnimeSchedule calendar: {str(e)}", "error")
             return []
+
+    @staticmethod
+    def _has_description(description):
+        if not description:
+            return False
+        if not isinstance(description, str):
+            return True
+        normalized = description.strip().lower()
+        if not normalized:
+            return False
+        return normalized not in ('no synopsis', 'no description', 'not available')
+
+    def _enrich_missing_descriptions(self, anime_list):
+        """Populate missing calendar descriptions using AniList first, then Jikan fallback."""
+        if not anime_list:
+            return
+
+        missing_indexes = []
+        by_mal = {}
+
+        for idx, anime in enumerate(anime_list):
+            if self._has_description(anime.get('description')):
+                continue
+            missing_indexes.append(idx)
+
+            mal_id = control.safe_call(int, anime.get('mal_id'))
+            if mal_id:
+                by_mal.setdefault(mal_id, []).append(idx)
+
+        if not missing_indexes:
+            return
+
+        anilist_api = anilist.Anilist()
+        filled_count = 0
+
+        # Pass 1: AniList bulk by MAL IDs
+        if by_mal:
+            synopsis_by_mal = control.safe_call(anilist_api.get_synopsis_by_mal_ids, list(by_mal.keys()), default={}) or {}
+            for mal_id, synopsis in synopsis_by_mal.items():
+                if not self._has_description(synopsis):
+                    continue
+                for idx in by_mal.get(int(mal_id), []):
+                    if not self._has_description(anime_list[idx].get('description')):
+                        anime_list[idx]['description'] = synopsis
+                        filled_count += 1
+
+        # Pass 2: Jikan fallback for MAL IDs still missing
+        fallback_mal_ids = []
+        for idx in missing_indexes:
+            if self._has_description(anime_list[idx].get('description')):
+                continue
+            mal_id = control.safe_call(int, anime_list[idx].get('mal_id'))
+            if mal_id:
+                fallback_mal_ids.append(mal_id)
+
+        fallback_mal_ids = list(dict.fromkeys(fallback_mal_ids))
+        if fallback_mal_ids:
+            from resources.lib.indexers.jikanmoe import JikanAPI
+            jikan_api = JikanAPI()
+            requests = [
+                {
+                    'func': database.get,
+                    'args': (jikan_api.get_anime_synopsis, 24, mal_id),
+                    'kwargs': {}
+                }
+                for mal_id in fallback_mal_ids
+            ]
+            fallback_results = utils.parallel_fetch(requests, max_workers=3)
+            fallback_map = {
+                mal_id: synopsis
+                for mal_id, synopsis in zip(fallback_mal_ids, fallback_results)
+                if self._has_description(synopsis)
+            }
+            for mal_id, synopsis in fallback_map.items():
+                for idx in by_mal.get(mal_id, []):
+                    if not self._has_description(anime_list[idx].get('description')):
+                        anime_list[idx]['description'] = synopsis
+                        filled_count += 1
+
+        control.log(f"AnimESchedule: Synopsis enrichment filled {filled_count} entries", "info")
 
     def _load_cache(self):
         """

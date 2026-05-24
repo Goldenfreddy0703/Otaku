@@ -25,8 +25,9 @@ class SyncDatabase:
     """
 
     # Bump this whenever the metadata schema changes;
-    # a mismatch triggers re_build_database(silent=True).
-    SCHEMA_VERSION = '1.0.11'
+    # a mismatch triggers re_build_database(silent=True) and refreshes
+    # embed host defaults (see check_database_version).
+    SCHEMA_VERSION = '1.0.13'
 
     def __init__(self):
         self.activites = None
@@ -204,6 +205,7 @@ class SyncDatabase:
     def check_database_version(self):
         if not self.activites or self.activites.get('otaku_version') != self.last_meta_update:
             first_time = control.getBool('first_time')
+            # was_returning_user = not first_time
 
             if first_time:
                 control.setInt('showchangelog', 1)
@@ -246,6 +248,25 @@ class SyncDatabase:
             ]
             for key, lw, wh, nu in configs:
                 self._update_menu_config(key, lw, wh, nu)
+
+            from resources.lib.ui.BrowserBase import BrowserBase
+            control.setStringList(
+                'embed.config', list(BrowserBase.EMBED_SERVERS_DEFAULT))
+
+            # if was_returning_user:
+            #     choice = control.yesno_dialog(
+            #         f'{control.ADDON_NAME} - {control.lang(30415)}',
+            #         'This update includes new source options (such as EasyNews) and may '
+            #         'have changed how sort orders work.\n'
+            #         'Would you like to open the setup wizard to review your preferences?',
+            #         'No', 'Yes')
+            #     if choice == 1:
+            #         control.execute(
+            #             'RunPlugin(plugin://plugin.video.otaku/setup_wizard)')
+            #     elif choice == 0:
+            #         control.ok_dialog(
+            #             f'{control.ADDON_NAME} - {control.lang(30415)}',
+            #             'You will need to go to the Tools > Choose Sorting > Choose Preset to set your preferred sorting options.')
 
     # ─── Menu Configuration Helpers ──────────────────────────────────
 

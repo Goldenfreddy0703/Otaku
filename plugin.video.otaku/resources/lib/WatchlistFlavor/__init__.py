@@ -38,6 +38,28 @@ class WatchlistFlavor:
         return None
 
     @staticmethod
+    def get_merged_watchlist_eps_watched(mal_id):
+        """Highest eps_watched among all enabled watchlists with a list entry for this title.
+
+        Used when ``interface.watchlist.data`` is on and ``kodi_meta`` has no local progress yet.
+        """
+        max_eps = None
+        for flavor in WatchlistFlavor.get_enabled_watchlists():
+            try:
+                data = flavor.get_watchlist_anime_entry(mal_id)
+                if not data:
+                    continue
+                ew = data.get('eps_watched')
+                if ew is None or ew == '':
+                    continue
+                ew_int = int(ew)
+                if max_eps is None or ew_int > max_eps:
+                    max_eps = ew_int
+            except Exception as e:
+                control.log(f'get_merged_watchlist_eps_watched ({flavor.flavor_name}): {e}', 'debug')
+        return max_eps
+
+    @staticmethod
     def get_flavor_by_name(name):
         """Get a specific watchlist flavor instance by name."""
         if WatchlistFlavor.__is_flavor_valid(name) and name in control.enabled_watchlists():

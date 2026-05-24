@@ -58,6 +58,10 @@ _cached_mobile_useragent = None
 _cached_mobile_useragent_time = 0
 _USERAGENT_CACHE_TTL = 3600  # 1 hour
 
+# Amortize session/pool cleanup: random 1%/request caused extra work on the hot path.
+_request_count = 0
+_CLEANUP_EVERY_N_REQUESTS = 128
+
 
 def _cleanup_old_sessions():
     """Clean up sessions older than timeout to prevent memory leaks"""
@@ -376,8 +380,9 @@ def request(
         if not url:
             return
 
-        # Clean up old sessions periodically (1 in 20 requests)
-        if random.randint(1, 20) == 1:
+        global _request_count
+        _request_count += 1
+        if _request_count % _CLEANUP_EVERY_N_REQUESTS == 0:
             _cleanup_old_sessions()
 
         # Initialize response to None to avoid UnboundLocalError
@@ -408,7 +413,6 @@ def request(
         ])
 
         if _can_fast:
-            control.log('Can Fast', level='debug')
             # Build minimal headers
             if params is not None:
                 if isinstance(params, dict):
@@ -455,8 +459,7 @@ def request(
                     return (result, status_code, resp_headers, _headers, cookie_str, resp_url)
                 else:
                     return result
-            # If fast path failed (connection error), fall through to urllib path
-            control.log(f'Fast-path failed for {url}, falling back to urllib')
+            pass
 
         handlers = []
 

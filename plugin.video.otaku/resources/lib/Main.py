@@ -14,20 +14,294 @@
 
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+    Large modules: route handlers, compact menu tables, browser lists, playback, tools,
+    and programmatic UI menu registration live in this file for a single import surface.
 """
 
 import pickle
 import json
 import ast
 import sys
+import random
 
 from resources.lib import MetaBrowser
 from resources.lib.ui import control, database, utils
-from resources.lib.ui.router import Route
+from resources.lib.ui.router import Route, multi_route
 from resources.lib.WatchlistIntegration import add_watchlist
 
 BROWSER = MetaBrowser.BROWSER
 plugin_url = control.get_plugin_url(sys.argv[0])
+
+# --- Browser list routes (mal/otaku vs AniList format codes) ------------------
+_MAL_OTAKU_APIS = frozenset(('mal', 'otaku'))
+
+_BROWSER_ROUTE_SUFFIXES = ('tv_show', 'movie', 'tv_short', 'special', 'ova', 'ona', 'music')
+
+_FORMAT_PAIR_BY_SUFFIX = {
+    'tv_show': ('tv', 'TV'),
+    'movie': ('movie', 'MOVIE'),
+    'tv_short': ('tv_special', 'TV_SHORT'),
+    'special': ('special', 'SPECIAL'),
+    'ova': ('ova', 'OVA'),
+    'ona': ('ona', 'ONA'),
+    'music': ('music', 'MUSIC'),
+}
+
+
+def _browser_list_route_paths(prefix):
+    return (prefix,) + tuple('%s_%s' % (prefix, s) for s in _BROWSER_ROUTE_SUFFIXES)
+
+
+def _wildcard_browser_paths(prefix):
+    """Paths like ``marked_as_watched/*``, ``marked_as_watched_tv_show/*``, …"""
+    return tuple('%s/*' % p for p in _browser_list_route_paths(prefix))
+
+
+_GENRES_WILDCARD_PREFIXES = (
+    'genres', 'genres_tv_show', 'genres_movie', 'genres_tv_short',
+    'genres_special', 'genres_ova', 'genres_ona', 'genres_music',
+)
+
+
+def _suffix_route_mapping(route_prefix):
+    return {
+        '%s_%s' % (route_prefix, suf): _FORMAT_PAIR_BY_SUFFIX[suf]
+        for suf in _BROWSER_ROUTE_SUFFIXES
+    }
+
+
+def _resolve_browser_format(route_prefix):
+    base_key = plugin_url.split('?', 1)[0]
+    pair = _suffix_route_mapping(route_prefix).get(base_key)
+    if not pair:
+        return None
+    return pair[0] if control.getStr('browser.api') in _MAL_OTAKU_APIS else pair[1]
+
+
+def _draw_browser_page(browser_method, route_prefix, params):
+    page = int(params.get('page', 1))
+    fmt = _resolve_browser_format(route_prefix)
+    prefix = plugin_url.split('?', 1)[0]
+    method = getattr(BROWSER, browser_method)
+    items = method(page, fmt, prefix)
+    control.draw_items(items, 'tvshows')
+    control.schedule_next_page_prefetch(
+        items,
+        lambda p=page + 1, f=fmt, pr=prefix, m=method: m(p, f, pr))
+
+
+def _draw_genre_page(route_prefix, params):
+    _draw_browser_page('get_genre_' + route_prefix[6:], route_prefix, params)
+
+
+# --- Menu route definitions (compact tables: labels, paths, artwork) ----------
+_CATEGORY_SUFFIX = {
+    'movies': '_movie',
+    'tv_shows': '_tv_show',
+    'tv_shorts': '_tv_short',
+    'specials': '_special',
+    'ovas': '_ova',
+    'onas': '_ona',
+    'music': '_music',
+}
+
+_CATEGORY_ROWS = (
+    (30002, 'airing_last_season', 'airing_anime.png'),
+    (30003, 'airing_this_season', 'airing_anime.png'),
+    (30004, 'airing_next_season', 'airing_anime.png'),
+    (30012, 'trending', 'trending.png'),
+    (30013, 'popular', 'popular.png'),
+    (30014, 'voted', 'voted.png'),
+    (30015, 'favourites', 'favourites.png'),
+    (30016, 'top_100', 'top_100_anime.png'),
+    (30017, 'genres', 'genres_&_tags.png'),
+    (30018, 'search_history', 'search.png'),
+)
+
+
+def _category_format_menu(suffix):
+    rows = []
+    for lid, stem, icon in _CATEGORY_ROWS:
+        rows.append((control.lang(lid), '%s%s' % (stem, suffix), icon, {}))
+    return rows
+
+
+def _stem_menu(stems, suffix, icon):
+    out = []
+    for lid, path_stem in stems:
+        out.append((control.lang(lid), '%s%s' % (path_stem, suffix), icon, {}))
+    return out
+
+
+_TRENDING_STEMS = (
+    (30020, 'trending_last_year'),
+    (30021, 'trending_this_year'),
+    (30022, 'trending_last_season'),
+    (30023, 'trending_this_season'),
+    (30024, 'all_time_trending'),
+)
+
+_POPULAR_STEMS = (
+    (30025, 'popular_last_year'),
+    (30026, 'popular_this_year'),
+    (30027, 'popular_last_season'),
+    (30028, 'popular_this_season'),
+    (30029, 'all_time_popular'),
+)
+
+_VOTED_STEMS = (
+    (30030, 'voted_last_year'),
+    (30031, 'voted_this_year'),
+    (30032, 'voted_last_season'),
+    (30033, 'voted_this_season'),
+    (30034, 'all_time_voted'),
+)
+
+_FAV_STEMS = (
+    (30035, 'favourites_last_year'),
+    (30036, 'favourites_this_year'),
+    (30037, 'favourites_last_season'),
+    (30038, 'favourites_this_season'),
+    (30039, 'all_time_favourites'),
+)
+
+_FORMAT_SUFFIXES = (
+    ('', ''),
+    ('_movie', '_movie'),
+    ('_tv_show', '_tv_show'),
+    ('_tv_short', '_tv_short'),
+    ('_special', '_special'),
+    ('_ova', '_ova'),
+    ('_ona', '_ona'),
+    ('_music', '_music'),
+)
+
+
+def _genre_menu(menu_key, suffix):
+    rows = [(control.lang(30040), '%s//' % menu_key, 'genre_multi.png', {})]
+    for lid, stem, icon in _GENRE_ROWS:
+        rows.append((control.lang(lid), '%s%s' % (stem, suffix), icon, {}))
+    return rows
+
+
+_GENRE_ROWS = (
+    (30041, 'genre_action', 'genre_action.png'),
+    (30042, 'genre_adventure', 'genre_adventure.png'),
+    (30043, 'genre_comedy', 'genre_comedy.png'),
+    (30044, 'genre_drama', 'genre_drama.png'),
+    (30045, 'genre_ecchi', 'genre_ecchi.png'),
+    (30046, 'genre_fantasy', 'genre_fantasy.png'),
+    (30047, 'genre_hentai', 'genre_hentai.png'),
+    (30048, 'genre_horror', 'genre_horror.png'),
+    (30049, 'genre_shoujo', 'genre_shoujo.png'),
+    (30050, 'genre_mecha', 'genre_mecha.png'),
+    (30051, 'genre_music', 'genre_music.png'),
+    (30052, 'genre_mystery', 'genre_mystery.png'),
+    (30053, 'genre_psychological', 'genre_psychological.png'),
+    (30054, 'genre_romance', 'genre_romance.png'),
+    (30055, 'genre_sci_fi', 'genre_sci-fi.png'),
+    (30056, 'genre_slice_of_life', 'genre_slice_of_life.png'),
+    (30057, 'genre_sports', 'genre_sports.png'),
+    (30058, 'genre_supernatural', 'genre_supernatural.png'),
+    (30059, 'genre_thriller', 'genre_thriller.png'),
+)
+
+_GENRE_MENU_KEYS = (
+    ('genres', ''),
+    ('genres_movie', '_movie'),
+    ('genres_tv_show', '_tv_show'),
+    ('genres_tv_short', '_tv_short'),
+    ('genres_special', '_special'),
+    ('genres_ova', '_ova'),
+    ('genres_ona', '_ona'),
+    ('genres_music', '_music'),
+)
+
+
+def _main_menu():
+    return [
+        (control.lang(30001), "airing_calendar", 'airing_anime_calendar.png', {}),
+        (control.lang(30002), "airing_last_season", 'airing_anime.png', {}),
+        (control.lang(30003), "airing_this_season", 'airing_anime.png', {}),
+        (control.lang(30004), "airing_next_season", 'airing_anime.png', {}),
+        (control.lang(30005), "movies", 'movies.png', {}),
+        (control.lang(30006), "tv_shows", 'tv_shows.png', {}),
+        (control.lang(30007), "tv_shorts", 'tv_shorts.png', {}),
+        (control.lang(30008), "specials", 'specials.png', {}),
+        (control.lang(30009), "ovas", 'ovas.png', {}),
+        (control.lang(30010), "onas", 'onas.png', {}),
+        (control.lang(30011), "music", 'music.png', {}),
+        (control.lang(30012), "trending", 'trending.png', {}),
+        (control.lang(30013), "popular", 'popular.png', {}),
+        (control.lang(30014), "voted", 'voted.png', {}),
+        (control.lang(30015), "favourites", 'favourites.png', {}),
+        (control.lang(30016), "top_100", 'top_100_anime.png', {}),
+        (control.lang(30017), "genres", 'genres_&_tags.png', {}),
+        (control.lang(30018), "search", 'search.png', {}),
+        (control.lang(30019), "tools", 'tools.png', {}),
+    ]
+
+
+def _search_menu():
+    kinds = ('anime', 'movie', 'tv_show', 'tv_short', 'special', 'ova', 'ona', 'music')
+    lids = range(30060, 30068)
+    return [(control.lang(lid), 'search_history_%s' % k, 'search.png', {}) for lid, k in zip(lids, kinds)]
+
+
+def _tools_menu():
+    tools = (
+        (30069, 'setup_wizard', 'tools.png'),
+        (30070, 'change_log', 'changelog.png'),
+        (30071, 'settings', 'open_settings_menu.png'),
+        (30072, 'clear_cache', 'clear_cache.png'),
+        (30073, 'clear_search_history', 'clear_search_history.png'),
+        (30074, 'clear_watch_history', 'clear_watch_history.png'),
+        (30075, 'rebuild_database', 'rebuild_database.png'),
+        (30076, 'wipe_addon_data', 'wipe_addon_data.png'),
+        (30077, 'completed_sync', 'sync_completed.png'),
+        (30078, 'download_manager', 'download_manager.png'),
+        (30079, 'sort_select', 'sort_select.png'),
+        (30080, 'clear_selected_fanart', 'wipe_addon_data.png'),
+    )
+    return [(control.lang(lid), path, icon, {}) for lid, path, icon in tools]
+
+
+def _build_menu_registry():
+    reg = {'main': _main_menu, 'search': _search_menu, 'tools': _tools_menu}
+
+    for mk, suf in _CATEGORY_SUFFIX.items():
+        reg[mk] = (lambda s=suf: _category_format_menu(s))
+
+    for key_part, suf in _FORMAT_SUFFIXES:
+        reg['trending%s' % key_part] = (
+            lambda s=suf: _stem_menu(_TRENDING_STEMS, s, 'trending.png')
+        )
+        reg['popular%s' % key_part] = (
+            lambda s=suf: _stem_menu(_POPULAR_STEMS, s, 'popular.png')
+        )
+        reg['voted%s' % key_part] = (
+            lambda s=suf: _stem_menu(_VOTED_STEMS, s, 'voted.png')
+        )
+        reg['favourites%s' % key_part] = (
+            lambda s=suf: _stem_menu(_FAV_STEMS, s, 'favourites.png')
+        )
+
+    for mkey, gsuf in _GENRE_MENU_KEYS:
+        reg[mkey] = (lambda k=mkey, g=gsuf: _genre_menu(k, g))
+
+    return reg
+
+
+_MENU_REGISTRY = None
+
+
+def get_menu_items(menu_type):
+    global _MENU_REGISTRY
+    if _MENU_REGISTRY is None:
+        _MENU_REGISTRY = _build_menu_registry()
+    builder = _MENU_REGISTRY.get(menu_type)
+    return builder() if builder else []
 
 
 def add_next_up(items):
@@ -211,6 +485,39 @@ def save_to_watch_history(mal_id):
         control.log(f"Error saving to watch history: {str(e)}", "error")
 
 
+def draw_anime_reviews_listing(mal_id, page, path, eps_watched):
+    """Build reviews listing via BROWSER (Jikan on mal/otaku, AniList on anilist)."""
+    result = BROWSER.get_reviews_page(str(mal_id), int(page), path, eps_watched)
+    if result is None:
+        control.notify(control.ADDON_NAME, control.lang(30461))
+        control.draw_items([], 'addons')
+        return
+    reviews = result.get('reviews') or []
+    if not reviews:
+        control.notify(control.ADDON_NAME, control.lang(30461))
+        control.draw_items([], 'addons')
+        return
+    control.setGlobalProp('otaku.reviews.cache', json.dumps(reviews))
+    control.setGlobalProp('otaku.reviews.mal_id', str(mal_id))
+    control.setGlobalProp('otaku.reviews.page', str(page))
+    items = result.get('items') or []
+    control.draw_items(items, 'addons')
+    next_p = int(page) + 1
+    control.schedule_next_page_prefetch(
+        items,
+        lambda mid=str(mal_id), p=next_p, pt=path, ew=eps_watched: BROWSER.get_reviews_page(mid, p, pt, ew))
+
+
+def open_anime_statistics(mal_id):
+    data = BROWSER.get_statistics_payload(str(mal_id))
+    if not data:
+        control.notify(control.ADDON_NAME, control.lang(30463))
+        return
+    from resources.lib.windows.stats_window import StatsWindow
+    window = StatsWindow('anime_statistics.xml', control.ADDON_PATH, stats=data, heading='[B]Anime Statistics[/B]')
+    window.run()
+
+
 @Route('animes/*')
 def ANIMES_PAGE(payload, params):
     mal_id, eps_watched = payload.rsplit("/")
@@ -222,7 +529,11 @@ def ANIMES_PAGE(payload, params):
 def FIND_RECOMMENDATIONS(payload, params):
     path, mal_id, eps_watched = payload.rsplit("/")
     page = int(params.get('page', 1))
-    control.draw_items(BROWSER.get_recommendations(mal_id, page), 'tvshows')
+    items = BROWSER.get_recommendations(mal_id, page)
+    control.draw_items(items, 'tvshows')
+    control.schedule_next_page_prefetch(
+        items,
+        lambda mid=mal_id, p=page + 1: BROWSER.get_recommendations(mid, p))
 
 
 @Route('find_relations/*')
@@ -239,76 +550,18 @@ def WATCH_ORDER(payload, params):
 
 @Route('anime_reviews/*')
 def ANIME_REVIEWS(payload, params):
-    from resources.lib.ui import client
-    path, mal_id, eps_watched = payload.rsplit("/")
+    parts = payload.strip('/').split('/')
+    if len(parts) >= 3:
+        path, mal_id, eps_watched = parts[-3], parts[-2], parts[-1]
+    elif len(parts) == 2:
+        path, mal_id = parts
+        eps_watched = '0'
+    else:
+        control.notify(control.ADDON_NAME, control.lang(30461))
+        control.draw_items([], 'addons')
+        return
     page = int(params.get('page', 1))
-
-    # Build query parameters
-    query_params = [f'page={page}']
-    query_params.append('preliminary=true')
-    query_params.append('spoilers=true')
-    query_string = '&'.join(query_params)
-
-    url = f'https://api.jikan.moe/v4/anime/{mal_id}/reviews?{query_string}'
-    response = client.get(url)
-    if not response or not response.ok:
-        control.notify(control.ADDON_NAME, control.lang(30461))
-        control.draw_items([], 'addons')
-        return
-    data = response.json()
-    reviews = data.get('data', [])
-    if not reviews:
-        control.notify(control.ADDON_NAME, control.lang(30461))
-        control.draw_items([], 'addons')
-        return
-
-    # Pagination info
-    pagination = data.get('pagination', {})
-    has_next_page = pagination.get('has_next_page', False)
-
-    # Store reviews in window property for detail view
-    import json as json_mod
-    control.setGlobalProp('otaku.reviews.cache', json_mod.dumps(reviews))
-    control.setGlobalProp('otaku.reviews.mal_id', str(mal_id))
-    control.setGlobalProp('otaku.reviews.page', str(page))
-
-    import xbmcplugin
-    for idx, review in enumerate(reviews):
-        user = review.get('user', {})
-        username = user.get('username', 'Anonymous')
-        score = review.get('score', '?')
-        tags = review.get('tags', [])
-        tag_str = tags[0] if tags else ''
-        date = review.get('date', '')[:10]
-        is_spoiler = review.get('is_spoiler', False)
-        is_preliminary = review.get('is_preliminary', False)
-        spoiler_tag = ' [COLOR red][Spoiler][/COLOR]' if is_spoiler else ''
-        preliminary_tag = ' [COLOR yellow][Preliminary][/COLOR]' if is_preliminary else ''
-        title = f"[COLOR deepskyblue]{username}[/COLOR] - {score}/10 [COLOR orange][{tag_str}][/COLOR]{spoiler_tag}{preliminary_tag}  ({date})"
-        preview = review.get('review', '')[:200].replace('\n', ' ') + '...'
-        info = {
-            'title': title,
-            'plot': preview,
-            'mediatype': 'video',
-        }
-        art = {'poster': user.get('images', {}).get('jpg', {}).get('image_url', control.OTAKU_LOGO3_PATH),
-               'icon': user.get('images', {}).get('jpg', {}).get('image_url', control.OTAKU_LOGO3_PATH)}
-        u = control.addon_url(f'view_review/{mal_id}/{idx}/')
-        liz = control.menuItem(title, offscreen=True)
-        control.set_videotags(liz, info)
-        liz.setArt(art)
-        xbmcplugin.addDirectoryItem(control.HANDLE, u, liz, False)
-
-    # Add Next Page item if more pages exist
-    if has_next_page:
-        next_title = f'[COLOR deepskyblue]>>> {control.lang(30464)} (Page {page + 1}) >>>[/COLOR]'
-        next_url = f'anime_reviews/{path}/{mal_id}/{eps_watched}?page={page + 1}'
-        u = control.addon_url(next_url)
-        liz = control.menuItem(next_title, offscreen=True)
-        liz.setArt({'icon': control.OTAKU_LOGO3_PATH, 'poster': control.OTAKU_LOGO3_PATH})
-        xbmcplugin.addDirectoryItem(control.HANDLE, u, liz, True)
-
-    xbmcplugin.endOfDirectory(control.HANDLE, cacheToDisc=True)
+    draw_anime_reviews_listing(mal_id, page, path, eps_watched)
 
 
 @Route('view_review/*')
@@ -319,16 +572,14 @@ def VIEW_REVIEW(payload, params):
     review_idx = int(parts[1])
     cached = control.getGlobalProp('otaku.reviews.cache')
     if not cached:
-        # Re-fetch if cache expired - include preliminary and spoiler reviews
-        from resources.lib.ui import client
         page = int(control.getGlobalProp('otaku.reviews.page') or 1)
-        url = f'https://api.jikan.moe/v4/anime/{mal_id}/reviews?page={page}&preliminary=true&spoilers=true'
-        response = client.get(url)
-        if not response or not response.ok:
+        reviews = BROWSER.refetch_reviews_page(mal_id, page)
+        if reviews is None:
             control.notify(control.ADDON_NAME, control.lang(30461))
             return
-        data = response.json()
-        reviews = data.get('data', [])
+        if not reviews:
+            control.notify(control.ADDON_NAME, control.lang(30461))
+            return
     else:
         reviews = json_mod.loads(cached)
     if review_idx >= len(reviews):
@@ -337,20 +588,24 @@ def VIEW_REVIEW(payload, params):
     review = reviews[review_idx]
     user = review.get('user', {})
     username = user.get('username', 'Anonymous')
-    score = review.get('score', '?')
+    sraw = review.get('score', '?')
+    if isinstance(sraw, str) and '/' in sraw:
+        score_show = sraw
+    else:
+        score_show = f'{sraw}/10'
     tags = review.get('tags', [])
     tag_str = tags[0] if tags else ''
-    date = review.get('date', '')[:10]
+    date = (review.get('date') or '')[:10]
     is_preliminary = review.get('is_preliminary', False)
     is_spoiler = review.get('is_spoiler', False)
-    reactions = review.get('reactions', {})
+    reactions = review.get('reactions') or {}
     flags = []
     if is_preliminary:
         flags.append('Preliminary')
     if is_spoiler:
         flags.append('Spoiler')
     flag_str = f"  |  [{', '.join(flags)}]" if flags else ''
-    header = f"By: {username}  |  Score: {score}/10  |  {tag_str}  |  {date}{flag_str}"
+    header = f"By: {username}  |  Score: {score_show}  |  {tag_str}  |  {date}{flag_str}"
     reaction_line = f"Reactions - Nice: {reactions.get('nice', 0)} | Love it: {reactions.get('love_it', 0)} | Funny: {reactions.get('funny', 0)} | Informative: {reactions.get('informative', 0)} | Well Written: {reactions.get('well_written', 0)} | Creative: {reactions.get('creative', 0)}"
     separator = '-' * 60
     body = review.get('review', 'No review text available.')
@@ -360,20 +615,15 @@ def VIEW_REVIEW(payload, params):
 
 @Route('anime_statistics/*')
 def ANIME_STATISTICS(payload, params):
-    from resources.lib.ui import client
-    path, mal_id, eps_watched = payload.rsplit("/")
-    url = f'https://api.jikan.moe/v4/anime/{mal_id}/statistics'
-    response = client.get(url)
-    if not response or not response.ok:
+    parts = payload.strip('/').split('/')
+    if len(parts) >= 3:
+        mal_id = parts[-2]
+    elif len(parts) == 2:
+        mal_id = parts[-1]
+    else:
         control.notify(control.ADDON_NAME, control.lang(30463))
         return
-    data = response.json().get('data', {})
-    if not data:
-        control.notify(control.ADDON_NAME, control.lang(30463))
-        return
-    from resources.lib.windows.stats_window import StatsWindow
-    window = StatsWindow('anime_statistics.xml', control.ADDON_PATH, stats=data, heading='[B]Anime Statistics[/B]')
-    window.run()
+    open_anime_statistics(mal_id)
 
 
 @Route('watch_history/')
@@ -416,7 +666,6 @@ def WATCH_HISTORY(payload, params):
                 }
 
                 # Build the base item like MalBrowser does
-                import random
 
                 # Handle fanart (may be a list)
                 fanart = entry.get('fanart', '')
@@ -500,662 +749,128 @@ def AIRING_CALENDAR(payload: str, params: dict):
     control.exit_code()
 
 
-@Route('airing_last_season')
-@Route('airing_last_season_tv_show')
-@Route('airing_last_season_movie')
-@Route('airing_last_season_tv_short')
-@Route('airing_last_season_special')
-@Route('airing_last_season_ova')
-@Route('airing_last_season_ona')
-@Route('airing_last_season_music')
+@multi_route(*_browser_list_route_paths('airing_last_season'))
 def AIRING_LAST_SEASON(payload, params):
-    mapping = {
-        'airing_last_season_tv_show': ('tv', 'TV'),
-        'airing_last_season_movie': ('movie', 'MOVIE'),
-        'airing_last_season_tv_short': ('tv_special', 'TV_SHORT'),
-        'airing_last_season_special': ('special', 'SPECIAL'),
-        'airing_last_season_ova': ('ova', 'OVA'),
-        'airing_last_season_ona': ('ona', 'ONA'),
-        'airing_last_season_music': ('music', 'MUSIC')
-    }
-    page = int(params.get('page', 1))
-    format = None
-    base_key = plugin_url.split('?', 1)[0]
-    if base_key in mapping:
-        format = mapping[base_key][0] if control.getStr('browser.api') in ['mal', 'otaku'] else mapping[base_key][1]
-    prefix = plugin_url.split('?', 1)[0]
-    control.draw_items(BROWSER.get_airing_last_season(page, format, prefix), 'tvshows')
+    _draw_browser_page('get_airing_last_season', 'airing_last_season', params)
 
 
-@Route('airing_this_season')
-@Route('airing_this_season_tv_show')
-@Route('airing_this_season_movie')
-@Route('airing_this_season_tv_short')
-@Route('airing_this_season_special')
-@Route('airing_this_season_ova')
-@Route('airing_this_season_ona')
-@Route('airing_this_season_music')
+@multi_route(*_browser_list_route_paths('airing_this_season'))
 def AIRING_THIS_SEASON(payload, params):
-    mapping = {
-        'airing_this_season_tv_show': ('tv', 'TV'),
-        'airing_this_season_movie': ('movie', 'MOVIE'),
-        'airing_this_season_tv_short': ('tv_special', 'TV_SHORT'),
-        'airing_this_season_special': ('special', 'SPECIAL'),
-        'airing_this_season_ova': ('ova', 'OVA'),
-        'airing_this_season_ona': ('ona', 'ONA'),
-        'airing_this_season_music': ('music', 'MUSIC')
-    }
-    page = int(params.get('page', 1))
-    format = None
-    base_key = plugin_url.split('?', 1)[0]
-    if base_key in mapping:
-        format = mapping[base_key][0] if control.getStr('browser.api') in ['mal', 'otaku'] else mapping[base_key][1]
-    prefix = plugin_url.split('?', 1)[0]
-    control.draw_items(BROWSER.get_airing_this_season(page, format, prefix), 'tvshows')
+    _draw_browser_page('get_airing_this_season', 'airing_this_season', params)
 
 
-@Route('airing_next_season')
-@Route('airing_next_season_tv_show')
-@Route('airing_next_season_movie')
-@Route('airing_next_season_tv_short')
-@Route('airing_next_season_special')
-@Route('airing_next_season_ova')
-@Route('airing_next_season_ona')
-@Route('airing_next_season_music')
+@multi_route(*_browser_list_route_paths('airing_next_season'))
 def AIRING_NEXT_SEASON(payload, params):
-    mapping = {
-        'airing_next_season_tv_show': ('tv', 'TV'),
-        'airing_next_season_movie': ('movie', 'MOVIE'),
-        'airing_next_season_tv_short': ('tv_special', 'TV_SHORT'),
-        'airing_next_season_special': ('special', 'SPECIAL'),
-        'airing_next_season_ova': ('ova', 'OVA'),
-        'airing_next_season_ona': ('ona', 'ONA'),
-        'airing_next_season_music': ('music', 'MUSIC')
-    }
-    page = int(params.get('page', 1))
-    format = None
-    base_key = plugin_url.split('?', 1)[0]
-    if base_key in mapping:
-        format = mapping[base_key][0] if control.getStr('browser.api') in ['mal', 'otaku'] else mapping[base_key][1]
-    prefix = plugin_url.split('?', 1)[0]
-    control.draw_items(BROWSER.get_airing_next_season(page, format, prefix), 'tvshows')
+    _draw_browser_page('get_airing_next_season', 'airing_next_season', params)
 
 
-@Route('trending_last_year')
-@Route('trending_last_year_tv_show')
-@Route('trending_last_year_movie')
-@Route('trending_last_year_tv_short')
-@Route('trending_last_year_special')
-@Route('trending_last_year_ova')
-@Route('trending_last_year_ona')
-@Route('trending_last_year_music')
+@multi_route(*_browser_list_route_paths('trending_last_year'))
 def TRENDING_LAST_YEAR(payload, params):
-    mapping = {
-        'trending_last_year_tv_show': ('tv', 'TV'),
-        'trending_last_year_movie': ('movie', 'MOVIE'),
-        'trending_last_year_tv_short': ('tv_special', 'TV_SHORT'),
-        'trending_last_year_special': ('special', 'SPECIAL'),
-        'trending_last_year_ova': ('ova', 'OVA'),
-        'trending_last_year_ona': ('ona', 'ONA'),
-        'trending_last_year_music': ('music', 'MUSIC')
-    }
-    page = int(params.get('page', 1))
-    format = None
-    base_key = plugin_url.split('?', 1)[0]
-    if base_key in mapping:
-        format = mapping[base_key][0] if control.getStr('browser.api') in ['mal', 'otaku'] else mapping[base_key][1]
-    prefix = plugin_url.split('?', 1)[0]
-    control.draw_items(BROWSER.get_trending_last_year(page, format, prefix), 'tvshows')
+    _draw_browser_page('get_trending_last_year', 'trending_last_year', params)
 
 
-@Route('trending_this_year')
-@Route('trending_this_year_tv_show')
-@Route('trending_this_year_movie')
-@Route('trending_this_year_tv_short')
-@Route('trending_this_year_special')
-@Route('trending_this_year_ova')
-@Route('trending_this_year_ona')
-@Route('trending_this_year_music')
+@multi_route(*_browser_list_route_paths('trending_this_year'))
 def TRENDING_THIS_YEAR(payload, params):
-    mapping = {
-        'trending_this_year_tv_show': ('tv', 'TV'),
-        'trending_this_year_movie': ('movie', 'MOVIE'),
-        'trending_this_year_tv_short': ('tv_special', 'TV_SHORT'),
-        'trending_this_year_special': ('special', 'SPECIAL'),
-        'trending_this_year_ova': ('ova', 'OVA'),
-        'trending_this_year_ona': ('ona', 'ONA'),
-        'trending_this_year_music': ('music', 'MUSIC')
-    }
-    page = int(params.get('page', 1))
-    format = None
-    base_key = plugin_url.split('?', 1)[0]
-    if base_key in mapping:
-        format = mapping[base_key][0] if control.getStr('browser.api') in ['mal', 'otaku'] else mapping[base_key][1]
-    prefix = plugin_url.split('?', 1)[0]
-    control.draw_items(BROWSER.get_trending_this_year(page, format, prefix), 'tvshows')
+    _draw_browser_page('get_trending_this_year', 'trending_this_year', params)
 
 
-@Route('trending_last_season')
-@Route('trending_last_season_tv_show')
-@Route('trending_last_season_movie')
-@Route('trending_last_season_tv_short')
-@Route('trending_last_season_special')
-@Route('trending_last_season_ova')
-@Route('trending_last_season_ona')
-@Route('trending_last_season_music')
+@multi_route(*_browser_list_route_paths('trending_last_season'))
 def TRENDING_LAST_SEASON(payload, params):
-    mapping = {
-        'trending_last_season_tv_show': ('tv', 'TV'),
-        'trending_last_season_movie': ('movie', 'MOVIE'),
-        'trending_last_season_tv_short': ('tv_special', 'TV_SHORT'),
-        'trending_last_season_special': ('special', 'SPECIAL'),
-        'trending_last_season_ova': ('ova', 'OVA'),
-        'trending_last_season_ona': ('ona', 'ONA'),
-        'trending_last_season_music': ('music', 'MUSIC')
-    }
-    page = int(params.get('page', 1))
-    format = None
-    base_key = plugin_url.split('?', 1)[0]
-    if base_key in mapping:
-        format = mapping[base_key][0] if control.getStr('browser.api') in ['mal', 'otaku'] else mapping[base_key][1]
-    prefix = plugin_url.split('?', 1)[0]
-    control.draw_items(BROWSER.get_trending_last_season(page, format, prefix), 'tvshows')
+    _draw_browser_page('get_trending_last_season', 'trending_last_season', params)
 
 
-@Route('trending_this_season')
-@Route('trending_this_season_tv_show')
-@Route('trending_this_season_movie')
-@Route('trending_this_season_tv_short')
-@Route('trending_this_season_special')
-@Route('trending_this_season_ova')
-@Route('trending_this_season_ona')
-@Route('trending_this_season_music')
+@multi_route(*_browser_list_route_paths('trending_this_season'))
 def TRENDING_THIS_SEASON(payload, params):
-    mapping = {
-        'trending_this_season_tv_show': ('tv', 'TV'),
-        'trending_this_season_movie': ('movie', 'MOVIE'),
-        'trending_this_season_tv_short': ('tv_special', 'TV_SHORT'),
-        'trending_this_season_special': ('special', 'SPECIAL'),
-        'trending_this_season_ova': ('ova', 'OVA'),
-        'trending_this_season_ona': ('ona', 'ONA'),
-        'trending_this_season_music': ('music', 'MUSIC')
-    }
-    page = int(params.get('page', 1))
-    format = None
-    base_key = plugin_url.split('?', 1)[0]
-    if base_key in mapping:
-        format = mapping[base_key][0] if control.getStr('browser.api') in ['mal', 'otaku'] else mapping[base_key][1]
-    prefix = plugin_url.split('?', 1)[0]
-    control.draw_items(BROWSER.get_trending_this_season(page, format, prefix), 'tvshows')
+    _draw_browser_page('get_trending_this_season', 'trending_this_season', params)
 
 
-@Route('all_time_trending')
-@Route('all_time_trending_tv_show')
-@Route('all_time_trending_movie')
-@Route('all_time_trending_tv_short')
-@Route('all_time_trending_special')
-@Route('all_time_trending_ova')
-@Route('all_time_trending_ona')
-@Route('all_time_trending_music')
+@multi_route(*_browser_list_route_paths('all_time_trending'))
 def ALL_TIME_TRENDING(payload, params):
-    mapping = {
-        'all_time_trending_tv_show': ('tv', 'TV'),
-        'all_time_trending_movie': ('movie', 'MOVIE'),
-        'all_time_trending_tv_short': ('tv_special', 'TV_SHORT'),
-        'all_time_trending_special': ('special', 'SPECIAL'),
-        'all_time_trending_ova': ('ova', 'OVA'),
-        'all_time_trending_ona': ('ona', 'ONA'),
-        'all_time_trending_music': ('music', 'MUSIC')
-    }
-    page = int(params.get('page', 1))
-    format = None
-    base_key = plugin_url.split('?', 1)[0]
-    if base_key in mapping:
-        format = mapping[base_key][0] if control.getStr('browser.api') in ['mal', 'otaku'] else mapping[base_key][1]
-    prefix = plugin_url.split('?', 1)[0]
-    control.draw_items(BROWSER.get_all_time_trending(page, format, prefix), 'tvshows')
+    _draw_browser_page('get_all_time_trending', 'all_time_trending', params)
 
 
-@Route('popular_last_year')
-@Route('popular_last_year_tv_show')
-@Route('popular_last_year_movie')
-@Route('popular_last_year_tv_short')
-@Route('popular_last_year_special')
-@Route('popular_last_year_ova')
-@Route('popular_last_year_ona')
-@Route('popular_last_year_music')
+@multi_route(*_browser_list_route_paths('popular_last_year'))
 def POPULAR_LAST_YEAR(payload, params):
-    mapping = {
-        'popular_last_year_tv_show': ('tv', 'TV'),
-        'popular_last_year_movie': ('movie', 'MOVIE'),
-        'popular_last_year_tv_short': ('tv_special', 'TV_SHORT'),
-        'popular_last_year_special': ('special', 'SPECIAL'),
-        'popular_last_year_ova': ('ova', 'OVA'),
-        'popular_last_year_ona': ('ona', 'ONA'),
-        'popular_last_year_music': ('music', 'MUSIC')
-    }
-    page = int(params.get('page', 1))
-    format = None
-    base_key = plugin_url.split('?', 1)[0]
-    if base_key in mapping:
-        format = mapping[base_key][0] if control.getStr('browser.api') in ['mal', 'otaku'] else mapping[base_key][1]
-    prefix = plugin_url.split('?', 1)[0]
-    control.draw_items(BROWSER.get_popular_last_year(page, format, prefix), 'tvshows')
+    _draw_browser_page('get_popular_last_year', 'popular_last_year', params)
 
 
-@Route('popular_this_year')
-@Route('popular_this_year_tv_show')
-@Route('popular_this_year_movie')
-@Route('popular_this_year_tv_short')
-@Route('popular_this_year_special')
-@Route('popular_this_year_ova')
-@Route('popular_this_year_ona')
-@Route('popular_this_year_music')
+@multi_route(*_browser_list_route_paths('popular_this_year'))
 def POPULAR_THIS_YEAR(payload, params):
-    mapping = {
-        'popular_this_year_tv_show': ('tv', 'TV'),
-        'popular_this_year_movie': ('movie', 'MOVIE'),
-        'popular_this_year_tv_short': ('tv_special', 'TV_SHORT'),
-        'popular_this_year_special': ('special', 'SPECIAL'),
-        'popular_this_year_ova': ('ova', 'OVA'),
-        'popular_this_year_ona': ('ona', 'ONA'),
-        'popular_this_year_music': ('music', 'MUSIC')
-    }
-    page = int(params.get('page', 1))
-    format = None
-    base_key = plugin_url.split('?', 1)[0]
-    if base_key in mapping:
-        format = mapping[base_key][0] if control.getStr('browser.api') in ['mal', 'otaku'] else mapping[base_key][1]
-    prefix = plugin_url.split('?', 1)[0]
-    control.draw_items(BROWSER.get_popular_this_year(page, format, prefix), 'tvshows')
+    _draw_browser_page('get_popular_this_year', 'popular_this_year', params)
 
 
-@Route('popular_last_season')
-@Route('popular_last_season_tv_show')
-@Route('popular_last_season_movie')
-@Route('popular_last_season_tv_short')
-@Route('popular_last_season_special')
-@Route('popular_last_season_ova')
-@Route('popular_last_season_ona')
-@Route('popular_last_season_music')
+@multi_route(*_browser_list_route_paths('popular_last_season'))
 def POPULAR_LAST_SEASON(payload, params):
-    mapping = {
-        'popular_last_season_tv_show': ('tv', 'TV'),
-        'popular_last_season_movie': ('movie', 'MOVIE'),
-        'popular_last_season_tv_short': ('tv_special', 'TV_SHORT'),
-        'popular_last_season_special': ('special', 'SPECIAL'),
-        'popular_last_season_ova': ('ova', 'OVA'),
-        'popular_last_season_ona': ('ona', 'ONA'),
-        'popular_last_season_music': ('music', 'MUSIC')
-    }
-    page = int(params.get('page', 1))
-    format = None
-    base_key = plugin_url.split('?', 1)[0]
-    if base_key in mapping:
-        format = mapping[base_key][0] if control.getStr('browser.api') in ['mal', 'otaku'] else mapping[base_key][1]
-    prefix = plugin_url.split('?', 1)[0]
-    control.draw_items(BROWSER.get_popular_last_season(page, format, prefix), 'tvshows')
+    _draw_browser_page('get_popular_last_season', 'popular_last_season', params)
 
 
-@Route('popular_this_season')
-@Route('popular_this_season_tv_show')
-@Route('popular_this_season_movie')
-@Route('popular_this_season_tv_short')
-@Route('popular_this_season_special')
-@Route('popular_this_season_ova')
-@Route('popular_this_season_ona')
-@Route('popular_this_season_music')
+@multi_route(*_browser_list_route_paths('popular_this_season'))
 def POPULAR_THIS_SEASON(payload, params):
-    mapping = {
-        'popular_this_season_tv_show': ('tv', 'TV'),
-        'popular_this_season_movie': ('movie', 'MOVIE'),
-        'popular_this_season_tv_short': ('tv_special', 'TV_SHORT'),
-        'popular_this_season_special': ('special', 'SPECIAL'),
-        'popular_this_season_ova': ('ova', 'OVA'),
-        'popular_this_season_ona': ('ona', 'ONA'),
-        'popular_this_season_music': ('music', 'MUSIC')
-    }
-    page = int(params.get('page', 1))
-    format = None
-    base_key = plugin_url.split('?', 1)[0]
-    if base_key in mapping:
-        format = mapping[base_key][0] if control.getStr('browser.api') in ['mal', 'otaku'] else mapping[base_key][1]
-    prefix = plugin_url.split('?', 1)[0]
-    control.draw_items(BROWSER.get_popular_this_season(page, format, prefix), 'tvshows')
+    _draw_browser_page('get_popular_this_season', 'popular_this_season', params)
 
 
-@Route('all_time_popular')
-@Route('all_time_popular_tv_show')
-@Route('all_time_popular_movie')
-@Route('all_time_popular_tv_short')
-@Route('all_time_popular_special')
-@Route('all_time_popular_ova')
-@Route('all_time_popular_ona')
-@Route('all_time_popular_music')
+@multi_route(*_browser_list_route_paths('all_time_popular'))
 def ALL_TIME_POPULAR(payload, params):
-    mapping = {
-        'all_time_popular_tv_show': ('tv', 'TV'),
-        'all_time_popular_movie': ('movie', 'MOVIE'),
-        'all_time_popular_tv_short': ('tv_special', 'TV_SHORT'),
-        'all_time_popular_special': ('special', 'SPECIAL'),
-        'all_time_popular_ova': ('ova', 'OVA'),
-        'all_time_popular_ona': ('ona', 'ONA'),
-        'all_time_popular_music': ('music', 'MUSIC')
-    }
-    page = int(params.get('page', 1))
-    format = None
-    base_key = plugin_url.split('?', 1)[0]
-    if base_key in mapping:
-        format = mapping[base_key][0] if control.getStr('browser.api') in ['mal', 'otaku'] else mapping[base_key][1]
-    prefix = plugin_url.split('?', 1)[0]
-    control.draw_items(BROWSER.get_all_time_popular(page, format, prefix), 'tvshows')
+    _draw_browser_page('get_all_time_popular', 'all_time_popular', params)
 
 
-@Route('voted_last_year')
-@Route('voted_last_year_tv_show')
-@Route('voted_last_year_movie')
-@Route('voted_last_year_tv_short')
-@Route('voted_last_year_special')
-@Route('voted_last_year_ova')
-@Route('voted_last_year_ona')
-@Route('voted_last_year_music')
+@multi_route(*_browser_list_route_paths('voted_last_year'))
 def VOTED_LAST_YEAR(payload, params):
-    mapping = {
-        'voted_last_year_tv_show': ('tv', 'TV'),
-        'voted_last_year_movie': ('movie', 'MOVIE'),
-        'voted_last_year_tv_short': ('tv_special', 'TV_SHORT'),
-        'voted_last_year_special': ('special', 'SPECIAL'),
-        'voted_last_year_ova': ('ova', 'OVA'),
-        'voted_last_year_ona': ('ona', 'ONA'),
-        'voted_last_year_music': ('music', 'MUSIC')
-    }
-    page = int(params.get('page', 1))
-    format = None
-    base_key = plugin_url.split('?', 1)[0]
-    if base_key in mapping:
-        format = mapping[base_key][0] if control.getStr('browser.api') in ['mal', 'otaku'] else mapping[base_key][1]
-    prefix = plugin_url.split('?', 1)[0]
-    control.draw_items(BROWSER.get_voted_last_year(page, format, prefix), 'tvshows')
+    _draw_browser_page('get_voted_last_year', 'voted_last_year', params)
 
 
-@Route('voted_this_year')
-@Route('voted_this_year_tv_show')
-@Route('voted_this_year_movie')
-@Route('voted_this_year_tv_short')
-@Route('voted_this_year_special')
-@Route('voted_this_year_ova')
-@Route('voted_this_year_ona')
-@Route('voted_this_year_music')
+@multi_route(*_browser_list_route_paths('voted_this_year'))
 def VOTED_THIS_YEAR(payload, params):
-    mapping = {
-        'voted_this_year_tv_show': ('tv', 'TV'),
-        'voted_this_year_movie': ('movie', 'MOVIE'),
-        'voted_this_year_tv_short': ('tv_special', 'TV_SHORT'),
-        'voted_this_year_special': ('special', 'SPECIAL'),
-        'voted_this_year_ova': ('ova', 'OVA'),
-        'voted_this_year_ona': ('ona', 'ONA'),
-        'voted_this_year_music': ('music', 'MUSIC')
-    }
-    page = int(params.get('page', 1))
-    format = None
-    base_key = plugin_url.split('?', 1)[0]
-    if base_key in mapping:
-        format = mapping[base_key][0] if control.getStr('browser.api') in ['mal', 'otaku'] else mapping[base_key][1]
-    prefix = plugin_url.split('?', 1)[0]
-    control.draw_items(BROWSER.get_voted_this_year(page, format, prefix), 'tvshows')
+    _draw_browser_page('get_voted_this_year', 'voted_this_year', params)
 
 
-@Route('voted_last_season')
-@Route('voted_last_season_tv_show')
-@Route('voted_last_season_movie')
-@Route('voted_last_season_tv_short')
-@Route('voted_last_season_special')
-@Route('voted_last_season_ova')
-@Route('voted_last_season_ona')
-@Route('voted_last_season_music')
+@multi_route(*_browser_list_route_paths('voted_last_season'))
 def VOTED_LAST_SEASON(payload, params):
-    mapping = {
-        'voted_last_season_tv_show': ('tv', 'TV'),
-        'voted_last_season_movie': ('movie', 'MOVIE'),
-        'voted_last_season_tv_short': ('tv_special', 'TV_SHORT'),
-        'voted_last_season_special': ('special', 'SPECIAL'),
-        'voted_last_season_ova': ('ova', 'OVA'),
-        'voted_last_season_ona': ('ona', 'ONA'),
-        'voted_last_season_music': ('music', 'MUSIC')
-    }
-    page = int(params.get('page', 1))
-    format = None
-    base_key = plugin_url.split('?', 1)[0]
-    if base_key in mapping:
-        format = mapping[base_key][0] if control.getStr('browser.api') in ['mal', 'otaku'] else mapping[base_key][1]
-    prefix = plugin_url.split('?', 1)[0]
-    control.draw_items(BROWSER.get_voted_last_season(page, format, prefix), 'tvshows')
+    _draw_browser_page('get_voted_last_season', 'voted_last_season', params)
 
 
-@Route('voted_this_season')
-@Route('voted_this_season_tv_show')
-@Route('voted_this_season_movie')
-@Route('voted_this_season_tv_short')
-@Route('voted_this_season_special')
-@Route('voted_this_season_ova')
-@Route('voted_this_season_ona')
-@Route('voted_this_season_music')
+@multi_route(*_browser_list_route_paths('voted_this_season'))
 def VOTED_THIS_SEASON(payload, params):
-    mapping = {
-        'voted_this_season_tv_show': ('tv', 'TV'),
-        'voted_this_season_movie': ('movie', 'MOVIE'),
-        'voted_this_season_tv_short': ('tv_special', 'TV_SHORT'),
-        'voted_this_season_special': ('special', 'SPECIAL'),
-        'voted_this_season_ova': ('ova', 'OVA'),
-        'voted_this_season_ona': ('ona', 'ONA'),
-        'voted_this_season_music': ('music', 'MUSIC')
-    }
-    page = int(params.get('page', 1))
-    format = None
-    base_key = plugin_url.split('?', 1)[0]
-    if base_key in mapping:
-        format = mapping[base_key][0] if control.getStr('browser.api') in ['mal', 'otaku'] else mapping[base_key][1]
-    prefix = plugin_url.split('?', 1)[0]
-    control.draw_items(BROWSER.get_voted_this_season(page, format, prefix), 'tvshows')
+    _draw_browser_page('get_voted_this_season', 'voted_this_season', params)
 
 
-@Route('all_time_voted')
-@Route('all_time_voted_tv_show')
-@Route('all_time_voted_movie')
-@Route('all_time_voted_tv_short')
-@Route('all_time_voted_special')
-@Route('all_time_voted_ova')
-@Route('all_time_voted_ona')
-@Route('all_time_voted_music')
+@multi_route(*_browser_list_route_paths('all_time_voted'))
 def ALL_TIME_VOTED(payload, params):
-    mapping = {
-        'all_time_voted_tv_show': ('tv', 'TV'),
-        'all_time_voted_movie': ('movie', 'MOVIE'),
-        'all_time_voted_tv_short': ('tv_special', 'TV_SHORT'),
-        'all_time_voted_special': ('special', 'SPECIAL'),
-        'all_time_voted_ova': ('ova', 'OVA'),
-        'all_time_voted_ona': ('ona', 'ONA'),
-        'all_time_voted_music': ('music', 'MUSIC')
-    }
-    page = int(params.get('page', 1))
-    format = None
-    base_key = plugin_url.split('?', 1)[0]
-    if base_key in mapping:
-        format = mapping[base_key][0] if control.getStr('browser.api') in ['mal', 'otaku'] else mapping[base_key][1]
-    prefix = plugin_url.split('?', 1)[0]
-    control.draw_items(BROWSER.get_all_time_voted(page, format, prefix), 'tvshows')
+    _draw_browser_page('get_all_time_voted', 'all_time_voted', params)
 
 
-@Route('favourites_last_year')
-@Route('favourites_last_year_tv_show')
-@Route('favourites_last_year_movie')
-@Route('favourites_last_year_tv_short')
-@Route('favourites_last_year_special')
-@Route('favourites_last_year_ova')
-@Route('favourites_last_year_ona')
-@Route('favourites_last_year_music')
+@multi_route(*_browser_list_route_paths('favourites_last_year'))
 def FAVOURITES_LAST_YEAR(payload, params):
-    mapping = {
-        'favourites_last_year_tv_show': ('tv', 'TV'),
-        'favourites_last_year_movie': ('movie', 'MOVIE'),
-        'favourites_last_year_tv_short': ('tv_special', 'TV_SHORT'),
-        'favourites_last_year_special': ('special', 'SPECIAL'),
-        'favourites_last_year_ova': ('ova', 'OVA'),
-        'favourites_last_year_ona': ('ona', 'ONA'),
-        'favourites_last_year_music': ('music', 'MUSIC')
-    }
-    page = int(params.get('page', 1))
-    format = None
-    base_key = plugin_url.split('?', 1)[0]
-    if base_key in mapping:
-        format = mapping[base_key][0] if control.getStr('browser.api') in ['mal', 'otaku'] else mapping[base_key][1]
-    prefix = plugin_url.split('?', 1)[0]
-    control.draw_items(BROWSER.get_favourites_last_year(page, format, prefix), 'tvshows')
+    _draw_browser_page('get_favourites_last_year', 'favourites_last_year', params)
 
 
-@Route('favourites_this_year')
-@Route('favourites_this_year_tv_show')
-@Route('favourites_this_year_movie')
-@Route('favourites_this_year_tv_short')
-@Route('favourites_this_year_special')
-@Route('favourites_this_year_ova')
-@Route('favourites_this_year_ona')
-@Route('favourites_this_year_music')
+@multi_route(*_browser_list_route_paths('favourites_this_year'))
 def FAVOURITES_THIS_YEAR(payload, params):
-    mapping = {
-        'favourites_this_year_tv_show': ('tv', 'TV'),
-        'favourites_this_year_movie': ('movie', 'MOVIE'),
-        'favourites_this_year_tv_short': ('tv_special', 'TV_SHORT'),
-        'favourites_this_year_special': ('special', 'SPECIAL'),
-        'favourites_this_year_ova': ('ova', 'OVA'),
-        'favourites_this_year_ona': ('ona', 'ONA'),
-        'favourites_this_year_music': ('music', 'MUSIC')
-    }
-    page = int(params.get('page', 1))
-    format = None
-    base_key = plugin_url.split('?', 1)[0]
-    if base_key in mapping:
-        format = mapping[base_key][0] if control.getStr('browser.api') in ['mal', 'otaku'] else mapping[base_key][1]
-    prefix = plugin_url.split('?', 1)[0]
-    control.draw_items(BROWSER.get_favourites_this_year(page, format, prefix), 'tvshows')
+    _draw_browser_page('get_favourites_this_year', 'favourites_this_year', params)
 
 
-@Route('favourites_last_season')
-@Route('favourites_last_season_tv_show')
-@Route('favourites_last_season_movie')
-@Route('favourites_last_season_tv_short')
-@Route('favourites_last_season_special')
-@Route('favourites_last_season_ova')
-@Route('favourites_last_season_ona')
-@Route('favourites_last_season_music')
+@multi_route(*_browser_list_route_paths('favourites_last_season'))
 def FAVOURITES_LAST_SEASON(payload, params):
-    mapping = {
-        'favourites_last_season_tv_show': ('tv', 'TV'),
-        'favourites_last_season_movie': ('movie', 'MOVIE'),
-        'favourites_last_season_tv_short': ('tv_special', 'TV_SHORT'),
-        'favourites_last_season_special': ('special', 'SPECIAL'),
-        'favourites_last_season_ova': ('ova', 'OVA'),
-        'favourites_last_season_ona': ('ona', 'ONA'),
-        'favourites_last_season_music': ('music', 'MUSIC')
-    }
-    page = int(params.get('page', 1))
-    format = None
-    base_key = plugin_url.split('?', 1)[0]
-    if base_key in mapping:
-        format = mapping[base_key][0] if control.getStr('browser.api') in ['mal', 'otaku'] else mapping[base_key][1]
-    prefix = plugin_url.split('?', 1)[0]
-    control.draw_items(BROWSER.get_favourites_last_season(page, format, prefix), 'tvshows')
+    _draw_browser_page('get_favourites_last_season', 'favourites_last_season', params)
 
 
-@Route('favourites_this_season')
-@Route('favourites_this_season_tv_show')
-@Route('favourites_this_season_movie')
-@Route('favourites_this_season_tv_short')
-@Route('favourites_this_season_special')
-@Route('favourites_this_season_ova')
-@Route('favourites_this_season_ona')
-@Route('favourites_this_season_music')
+@multi_route(*_browser_list_route_paths('favourites_this_season'))
 def FAVOURITES_THIS_SEASON(payload, params):
-    mapping = {
-        'favourites_this_season_tv_show': ('tv', 'TV'),
-        'favourites_this_season_movie': ('movie', 'MOVIE'),
-        'favourites_this_season_tv_short': ('tv_special', 'TV_SHORT'),
-        'favourites_this_season_special': ('special', 'SPECIAL'),
-        'favourites_this_season_ova': ('ova', 'OVA'),
-        'favourites_this_season_ona': ('ona', 'ONA'),
-        'favourites_this_season_music': ('music', 'MUSIC')
-    }
-    page = int(params.get('page', 1))
-    format = None
-    base_key = plugin_url.split('?', 1)[0]
-    if base_key in mapping:
-        format = mapping[base_key][0] if control.getStr('browser.api') in ['mal', 'otaku'] else mapping[base_key][1]
-    prefix = plugin_url.split('?', 1)[0]
-    control.draw_items(BROWSER.get_favourites_this_season(page, format, prefix), 'tvshows')
+    _draw_browser_page('get_favourites_this_season', 'favourites_this_season', params)
 
 
-@Route('all_time_favourites')
-@Route('all_time_favourites_tv_show')
-@Route('all_time_favourites_movie')
-@Route('all_time_favourites_tv_short')
-@Route('all_time_favourites_special')
-@Route('all_time_favourites_ova')
-@Route('all_time_favourites_ona')
-@Route('all_time_favourites_music')
+@multi_route(*_browser_list_route_paths('all_time_favourites'))
 def ALL_TIME_FAVOURITES(payload, params):
-    mapping = {
-        'all_time_favourites_tv_show': ('tv', 'TV'),
-        'all_time_favourites_movie': ('movie', 'MOVIE'),
-        'all_time_favourites_tv_short': ('tv_special', 'TV_SHORT'),
-        'all_time_favourites_special': ('special', 'SPECIAL'),
-        'all_time_favourites_ova': ('ova', 'OVA'),
-        'all_time_favourites_ona': ('ona', 'ONA'),
-        'all_time_favourites_music': ('music', 'MUSIC')
-    }
-    page = int(params.get('page', 1))
-    format = None
-    base_key = plugin_url.split('?', 1)[0]
-    if base_key in mapping:
-        format = mapping[base_key][0] if control.getStr('browser.api') in ['mal', 'otaku'] else mapping[base_key][1]
-    prefix = plugin_url.split('?', 1)[0]
-    control.draw_items(BROWSER.get_all_time_favourites(page, format, prefix), 'tvshows')
+    _draw_browser_page('get_all_time_favourites', 'all_time_favourites', params)
 
 
-@Route('top_100')
-@Route('top_100_tv_show')
-@Route('top_100_movie')
-@Route('top_100_tv_short')
-@Route('top_100_special')
-@Route('top_100_ova')
-@Route('top_100_ona')
-@Route('top_100_music')
+@multi_route(*_browser_list_route_paths('top_100'))
 def TOP_100(payload, params):
-    mapping = {
-        'top_100_tv_show': ('tv', 'TV'),
-        'top_100_movie': ('movie', 'MOVIE'),
-        'top_100_tv_short': ('tv_special', 'TV_SHORT'),
-        'top_100_special': ('special', 'SPECIAL'),
-        'top_100_ova': ('ova', 'OVA'),
-        'top_100_ona': ('ona', 'ONA'),
-        'top_100_music': ('music', 'MUSIC')
-    }
-    page = int(params.get('page', 1))
-    format = None
-    base_key = plugin_url.split('?', 1)[0]
-    if base_key in mapping:
-        format = mapping[base_key][0] if control.getStr('browser.api') in ['mal', 'otaku'] else mapping[base_key][1]
-    prefix = plugin_url.split('?', 1)[0]
-    control.draw_items(BROWSER.get_top_100(page, format, prefix), 'tvshows')
+    _draw_browser_page('get_top_100', 'top_100', params)
 
 
-@Route('genres/*')
-@Route('genres_tv_show/*')
-@Route('genres_movie/*')
-@Route('genres_tv_short/*')
-@Route('genres_special/*')
-@Route('genres_ova/*')
-@Route('genres_ona/*')
-@Route('genres_music/*')
+
+@multi_route(*[p + '/*' for p in _GENRES_WILDCARD_PREFIXES])
 def GENRES(payload, params):
     mapping = {
         'genres_tv_show//': ('tv', 'TV'),
@@ -1171,12 +886,20 @@ def GENRES(payload, params):
     format = None
     base_key = plugin_url.split('/', 1)[0] + '//'
     if base_key in mapping:
-        format = mapping[base_key][0] if control.getStr('browser.api') in ['mal', 'otaku'] else mapping[base_key][1]
+        format = mapping[base_key][0] if control.getStr('browser.api') in _MAL_OTAKU_APIS else mapping[base_key][1]
     if genres or tags:
         prefix = plugin_url.split('/', 1)[0]
-        control.draw_items(BROWSER.genres_payload(genres, tags, page, format, prefix), 'tvshows')
+        items = BROWSER.genres_payload(genres, tags, page, format, prefix)
+        control.draw_items(items, 'tvshows')
+        control.schedule_next_page_prefetch(
+            items,
+            lambda g=genres, t=tags, p=page + 1, fmt=format, pr=prefix: BROWSER.genres_payload(g, t, p, fmt, pr))
     else:
-        control.draw_items(BROWSER.get_genres(page, format), 'tvshows')
+        items = BROWSER.get_genres(page, format)
+        control.draw_items(items, 'tvshows')
+        control.schedule_next_page_prefetch(
+            items,
+            lambda p=page + 1, fmt=format: BROWSER.get_genres(p, fmt))
 
 
 @Route('update_genre_settings')
@@ -1198,570 +921,145 @@ def UPDATE_GENRE_SETTINGS(payload, params):
         json.dump(settings, f)
 
 
-@Route('genre_action')
-@Route('genre_action_tv_show')
-@Route('genre_action_movie')
-@Route('genre_action_tv_short')
-@Route('genre_action_special')
-@Route('genre_action_ova')
-@Route('genre_action_ona')
-@Route('genre_action_music')
+@multi_route(*_browser_list_route_paths('genre_action'))
 def GENRE_ACTION(payload, params):
-    mapping = {
-        'genre_action_tv_show': ('tv', 'TV'),
-        'genre_action_movie': ('movie', 'MOVIE'),
-        'genre_action_tv_short': ('tv_special', 'TV_SHORT'),
-        'genre_action_special': ('special', 'SPECIAL'),
-        'genre_action_ova': ('ova', 'OVA'),
-        'genre_action_ona': ('ona', 'ONA'),
-        'genre_action_music': ('music', 'MUSIC')
-    }
-    page = int(params.get('page', 1))
-    format = None
-    base_key = plugin_url.split('?', 1)[0]
-    if base_key in mapping:
-        format = mapping[base_key][0] if control.getStr('browser.api') in ['mal', 'otaku'] else mapping[base_key][1]
-    prefix = plugin_url.split('?', 1)[0]
-    control.draw_items(BROWSER.get_genre_action(page, format, prefix), 'tvshows')
+    _draw_genre_page('genre_action', params)
 
 
-@Route('genre_adventure')
-@Route('genre_adventure_tv_show')
-@Route('genre_adventure_movie')
-@Route('genre_adventure_tv_short')
-@Route('genre_adventure_special')
-@Route('genre_adventure_ova')
-@Route('genre_adventure_ona')
-@Route('genre_adventure_music')
+@multi_route(*_browser_list_route_paths('genre_adventure'))
 def GENRE_ADVENTURE(payload, params):
-    mapping = {
-        'genre_adventure_tv_show': ('tv', 'TV'),
-        'genre_adventure_movie': ('movie', 'MOVIE'),
-        'genre_adventure_tv_short': ('tv_special', 'TV_SHORT'),
-        'genre_adventure_special': ('special', 'SPECIAL'),
-        'genre_adventure_ova': ('ova', 'OVA'),
-        'genre_adventure_ona': ('ona', 'ONA'),
-        'genre_adventure_music': ('music', 'MUSIC')
-    }
-    page = int(params.get('page', 1))
-    format = None
-    base_key = plugin_url.split('?', 1)[0]
-    if base_key in mapping:
-        format = mapping[base_key][0] if control.getStr('browser.api') in ['mal', 'otaku'] else mapping[base_key][1]
-    prefix = plugin_url.split('?', 1)[0]
-    control.draw_items(BROWSER.get_genre_adventure(page, format, prefix), 'tvshows')
+    _draw_genre_page('genre_adventure', params)
 
 
-@Route('genre_comedy')
-@Route('genre_comedy_tv_show')
-@Route('genre_comedy_movie')
-@Route('genre_comedy_tv_short')
-@Route('genre_comedy_special')
-@Route('genre_comedy_ova')
-@Route('genre_comedy_ona')
-@Route('genre_comedy_music')
+@multi_route(*_browser_list_route_paths('genre_comedy'))
 def GENRE_COMEDY(payload, params):
-    mapping = {
-        'genre_comedy_tv_show': ('tv', 'TV'),
-        'genre_comedy_movie': ('movie', 'MOVIE'),
-        'genre_comedy_tv_short': ('tv_special', 'TV_SHORT'),
-        'genre_comedy_special': ('special', 'SPECIAL'),
-        'genre_comedy_ova': ('ova', 'OVA'),
-        'genre_comedy_ona': ('ona', 'ONA'),
-        'genre_comedy_music': ('music', 'MUSIC')
-    }
-    page = int(params.get('page', 1))
-    format = None
-    base_key = plugin_url.split('?', 1)[0]
-    if base_key in mapping:
-        format = mapping[base_key][0] if control.getStr('browser.api') in ['mal', 'otaku'] else mapping[base_key][1]
-    prefix = plugin_url.split('?', 1)[0]
-    control.draw_items(BROWSER.get_genre_comedy(page, format, prefix), 'tvshows')
+    _draw_genre_page('genre_comedy', params)
 
 
-@Route('genre_drama')
-@Route('genre_drama_tv_show')
-@Route('genre_drama_movie')
-@Route('genre_drama_tv_short')
-@Route('genre_drama_special')
-@Route('genre_drama_ova')
-@Route('genre_drama_ona')
-@Route('genre_drama_music')
+@multi_route(*_browser_list_route_paths('genre_drama'))
 def GENRE_DRAMA(payload, params):
-    mapping = {
-        'genre_drama_tv_show': ('tv', 'TV'),
-        'genre_drama_movie': ('movie', 'MOVIE'),
-        'genre_drama_tv_short': ('tv_special', 'TV_SHORT'),
-        'genre_drama_special': ('special', 'SPECIAL'),
-        'genre_drama_ova': ('ova', 'OVA'),
-        'genre_drama_ona': ('ona', 'ONA'),
-        'genre_drama_music': ('music', 'MUSIC')
-    }
-    page = int(params.get('page', 1))
-    format = None
-    base_key = plugin_url.split('?', 1)[0]
-    if base_key in mapping:
-        format = mapping[base_key][0] if control.getStr('browser.api') in ['mal', 'otaku'] else mapping[base_key][1]
-    prefix = plugin_url.split('?', 1)[0]
-    control.draw_items(BROWSER.get_genre_drama(page, format, prefix), 'tvshows')
+    _draw_genre_page('genre_drama', params)
 
 
-@Route('genre_ecchi')
-@Route('genre_ecchi_tv_show')
-@Route('genre_ecchi_movie')
-@Route('genre_ecchi_tv_short')
-@Route('genre_ecchi_special')
-@Route('genre_ecchi_ova')
-@Route('genre_ecchi_ona')
-@Route('genre_ecchi_music')
+@multi_route(*_browser_list_route_paths('genre_ecchi'))
 def GENRE_ECCHI(payload, params):
-    mapping = {
-        'genre_ecchi_tv_show': ('tv', 'TV'),
-        'genre_ecchi_movie': ('movie', 'MOVIE'),
-        'genre_ecchi_tv_short': ('tv_special', 'TV_SHORT'),
-        'genre_ecchi_special': ('special', 'SPECIAL'),
-        'genre_ecchi_ova': ('ova', 'OVA'),
-        'genre_ecchi_ona': ('ona', 'ONA'),
-        'genre_ecchi_music': ('music', 'MUSIC')
-    }
-    page = int(params.get('page', 1))
-    format = None
-    base_key = plugin_url.split('?', 1)[0]
-    if base_key in mapping:
-        format = mapping[base_key][0] if control.getStr('browser.api') in ['mal', 'otaku'] else mapping[base_key][1]
-    prefix = plugin_url.split('?', 1)[0]
-    control.draw_items(BROWSER.get_genre_ecchi(page, format, prefix), 'tvshows')
+    _draw_genre_page('genre_ecchi', params)
 
 
-@Route('genre_fantasy')
-@Route('genre_fantasy_tv_show')
-@Route('genre_fantasy_movie')
-@Route('genre_fantasy_tv_short')
-@Route('genre_fantasy_special')
-@Route('genre_fantasy_ova')
-@Route('genre_fantasy_ona')
-@Route('genre_fantasy_music')
+@multi_route(*_browser_list_route_paths('genre_fantasy'))
 def GENRE_FANTASY(payload, params):
-    mapping = {
-        'genre_fantasy_tv_show': ('tv', 'TV'),
-        'genre_fantasy_movie': ('movie', 'MOVIE'),
-        'genre_fantasy_tv_short': ('tv_special', 'TV_SHORT'),
-        'genre_fantasy_special': ('special', 'SPECIAL'),
-        'genre_fantasy_ova': ('ova', 'OVA'),
-        'genre_fantasy_ona': ('ona', 'ONA'),
-        'genre_fantasy_music': ('music', 'MUSIC')
-    }
-    page = int(params.get('page', 1))
-    format = None
-    base_key = plugin_url.split('?', 1)[0]
-    if base_key in mapping:
-        format = mapping[base_key][0] if control.getStr('browser.api') in ['mal', 'otaku'] else mapping[base_key][1]
-    prefix = plugin_url.split('?', 1)[0]
-    control.draw_items(BROWSER.get_genre_fantasy(page, format, prefix), 'tvshows')
+    _draw_genre_page('genre_fantasy', params)
 
 
-@Route('genre_hentai')
-@Route('genre_hentai_tv_show')
-@Route('genre_hentai_movie')
-@Route('genre_hentai_tv_short')
-@Route('genre_hentai_special')
-@Route('genre_hentai_ova')
-@Route('genre_hentai_ona')
-@Route('genre_hentai_music')
+@multi_route(*_browser_list_route_paths('genre_hentai'))
 def GENRE_HENTAI(payload, params):
-    mapping = {
-        'genre_hentai_tv_show': ('tv', 'TV'),
-        'genre_hentai_movie': ('movie', 'MOVIE'),
-        'genre_hentai_tv_short': ('tv_special', 'TV_SHORT'),
-        'genre_hentai_special': ('special', 'SPECIAL'),
-        'genre_hentai_ova': ('ova', 'OVA'),
-        'genre_hentai_ona': ('ona', 'ONA'),
-        'genre_hentai_music': ('music', 'MUSIC')
-    }
-    page = int(params.get('page', 1))
-    format = None
-    base_key = plugin_url.split('?', 1)[0]
-    if base_key in mapping:
-        format = mapping[base_key][0] if control.getStr('browser.api') in ['mal', 'otaku'] else mapping[base_key][1]
-    prefix = plugin_url.split('?', 1)[0]
-    control.draw_items(BROWSER.get_genre_hentai(page, format, prefix), 'tvshows')
+    _draw_genre_page('genre_hentai', params)
 
 
-@Route('genre_horror')
-@Route('genre_horror_tv_show')
-@Route('genre_horror_movie')
-@Route('genre_horror_tv_short')
-@Route('genre_horror_special')
-@Route('genre_horror_ova')
-@Route('genre_horror_ona')
-@Route('genre_horror_music')
+@multi_route(*_browser_list_route_paths('genre_horror'))
 def GENRE_HORROR(payload, params):
-    mapping = {
-        'genre_horror_tv_show': ('tv', 'TV'),
-        'genre_horror_movie': ('movie', 'MOVIE'),
-        'genre_horror_tv_short': ('tv_special', 'TV_SHORT'),
-        'genre_horror_special': ('special', 'SPECIAL'),
-        'genre_horror_ova': ('ova', 'OVA'),
-        'genre_horror_ona': ('ona', 'ONA'),
-        'genre_horror_music': ('music', 'MUSIC')
-    }
-    page = int(params.get('page', 1))
-    format = None
-    base_key = plugin_url.split('?', 1)[0]
-    if base_key in mapping:
-        format = mapping[base_key][0] if control.getStr('browser.api') in ['mal', 'otaku'] else mapping[base_key][1]
-    prefix = plugin_url.split('?', 1)[0]
-    control.draw_items(BROWSER.get_genre_horror(page, format, prefix), 'tvshows')
+    _draw_genre_page('genre_horror', params)
 
 
-@Route('genre_shoujo')
-@Route('genre_shoujo_tv_show')
-@Route('genre_shoujo_movie')
-@Route('genre_shoujo_tv_short')
-@Route('genre_shoujo_special')
-@Route('genre_shoujo_ova')
-@Route('genre_shoujo_ona')
-@Route('genre_shoujo_music')
+@multi_route(*_browser_list_route_paths('genre_shoujo'))
 def GENRE_SHOUJO(payload, params):
-    mapping = {
-        'genre_shoujo_tv_show': ('tv', 'TV'),
-        'genre_shoujo_movie': ('movie', 'MOVIE'),
-        'genre_shoujo_tv_short': ('tv_special', 'TV_SHORT'),
-        'genre_shoujo_special': ('special', 'SPECIAL'),
-        'genre_shoujo_ova': ('ova', 'OVA'),
-        'genre_shoujo_ona': ('ona', 'ONA'),
-        'genre_shoujo_music': ('music', 'MUSIC')
-    }
-    page = int(params.get('page', 1))
-    format = None
-    base_key = plugin_url.split('?', 1)[0]
-    if base_key in mapping:
-        format = mapping[base_key][0] if control.getStr('browser.api') in ['mal', 'otaku'] else mapping[base_key][1]
-    prefix = plugin_url.split('?', 1)[0]
-    control.draw_items(BROWSER.get_genre_shoujo(page, format, prefix), 'tvshows')
+    _draw_genre_page('genre_shoujo', params)
 
 
-@Route('genre_mecha')
-@Route('genre_mecha_tv_show')
-@Route('genre_mecha_movie')
-@Route('genre_mecha_tv_short')
-@Route('genre_mecha_special')
-@Route('genre_mecha_ova')
-@Route('genre_mecha_ona')
-@Route('genre_mecha_music')
+@multi_route(*_browser_list_route_paths('genre_mecha'))
 def GENRE_MECHA(payload, params):
-    mapping = {
-        'genre_mecha_tv_show': ('tv', 'TV'),
-        'genre_mecha_movie': ('movie', 'MOVIE'),
-        'genre_mecha_tv_short': ('tv_special', 'TV_SHORT'),
-        'genre_mecha_special': ('special', 'SPECIAL'),
-        'genre_mecha_ova': ('ova', 'OVA'),
-        'genre_mecha_ona': ('ona', 'ONA'),
-        'genre_mecha_music': ('music', 'MUSIC')
-    }
-    page = int(params.get('page', 1))
-    format = None
-    base_key = plugin_url.split('?', 1)[0]
-    if base_key in mapping:
-        format = mapping[base_key][0] if control.getStr('browser.api') in ['mal', 'otaku'] else mapping[base_key][1]
-    prefix = plugin_url.split('?', 1)[0]
-    control.draw_items(BROWSER.get_genre_mecha(page, format, prefix), 'tvshows')
+    _draw_genre_page('genre_mecha', params)
 
 
-@Route('genre_music')
-@Route('genre_music_tv_show')
-@Route('genre_music_movie')
-@Route('genre_music_tv_short')
-@Route('genre_music_special')
-@Route('genre_music_ova')
-@Route('genre_music_ona')
-@Route('genre_music_music')
+@multi_route(*_browser_list_route_paths('genre_music'))
 def GENRE_MUSIC(payload, params):
-    mapping = {
-        'genre_music_tv_show': ('tv', 'TV'),
-        'genre_music_movie': ('movie', 'MOVIE'),
-        'genre_music_tv_short': ('tv_special', 'TV_SHORT'),
-        'genre_music_special': ('special', 'SPECIAL'),
-        'genre_music_ova': ('ova', 'OVA'),
-        'genre_music_ona': ('ona', 'ONA'),
-        'genre_music_music': ('music', 'MUSIC')
-    }
-    page = int(params.get('page', 1))
-    format = None
-    base_key = plugin_url.split('?', 1)[0]
-    if base_key in mapping:
-        format = mapping[base_key][0] if control.getStr('browser.api') in ['mal', 'otaku'] else mapping[base_key][1]
-    prefix = plugin_url.split('?', 1)[0]
-    control.draw_items(BROWSER.get_genre_music(page, format, prefix), 'tvshows')
+    _draw_genre_page('genre_music', params)
 
 
-@Route('genre_mystery')
-@Route('genre_mystery_tv_show')
-@Route('genre_mystery_movie')
-@Route('genre_mystery_tv_short')
-@Route('genre_mystery_special')
-@Route('genre_mystery_ova')
-@Route('genre_mystery_ona')
-@Route('genre_mystery_music')
+@multi_route(*_browser_list_route_paths('genre_mystery'))
 def GENRE_MYSTERY(payload, params):
-    mapping = {
-        'genre_mystery_tv_show': ('tv', 'TV'),
-        'genre_mystery_movie': ('movie', 'MOVIE'),
-        'genre_mystery_tv_short': ('tv_special', 'TV_SHORT'),
-        'genre_mystery_special': ('special', 'SPECIAL'),
-        'genre_mystery_ova': ('ova', 'OVA'),
-        'genre_mystery_ona': ('ona', 'ONA'),
-        'genre_mystery_music': ('music', 'MUSIC')
-    }
-    page = int(params.get('page', 1))
-    format = None
-    base_key = plugin_url.split('?', 1)[0]
-    if base_key in mapping:
-        format = mapping[base_key][0] if control.getStr('browser.api') in ['mal', 'otaku'] else mapping[base_key][1]
-    prefix = plugin_url.split('?', 1)[0]
-    control.draw_items(BROWSER.get_genre_mystery(page, format, prefix), 'tvshows')
+    _draw_genre_page('genre_mystery', params)
 
 
-@Route('genre_psychological')
-@Route('genre_psychological_tv_show')
-@Route('genre_psychological_movie')
-@Route('genre_psychological_tv_short')
-@Route('genre_psychological_special')
-@Route('genre_psychological_ova')
-@Route('genre_psychological_ona')
-@Route('genre_psychological_music')
+@multi_route(*_browser_list_route_paths('genre_psychological'))
 def GENRE_PSYCHOLOGICAL(payload, params):
-    mapping = {
-        'genre_psychological_tv_show': ('tv', 'TV'),
-        'genre_psychological_movie': ('movie', 'MOVIE'),
-        'genre_psychological_tv_short': ('tv_special', 'TV_SHORT'),
-        'genre_psychological_special': ('special', 'SPECIAL'),
-        'genre_psychological_ova': ('ova', 'OVA'),
-        'genre_psychological_ona': ('ona', 'ONA'),
-        'genre_psychological_music': ('music', 'MUSIC')
-    }
-    page = int(params.get('page', 1))
-    format = None
-    base_key = plugin_url.split('?', 1)[0]
-    if base_key in mapping:
-        format = mapping[base_key][0] if control.getStr('browser.api') in ['mal', 'otaku'] else mapping[base_key][1]
-    prefix = plugin_url.split('?', 1)[0]
-    control.draw_items(BROWSER.get_genre_psychological(page, format, prefix), 'tvshows')
+    _draw_genre_page('genre_psychological', params)
 
 
-@Route('genre_romance')
-@Route('genre_romance_tv_show')
-@Route('genre_romance_movie')
-@Route('genre_romance_tv_short')
-@Route('genre_romance_special')
-@Route('genre_romance_ova')
-@Route('genre_romance_ona')
-@Route('genre_romance_music')
+@multi_route(*_browser_list_route_paths('genre_romance'))
 def GENRE_ROMANCE(payload, params):
-    mapping = {
-        'genre_romance_tv_show': ('tv', 'TV'),
-        'genre_romance_movie': ('movie', 'MOVIE'),
-        'genre_romance_tv_short': ('tv_special', 'TV_SHORT'),
-        'genre_romance_special': ('special', 'SPECIAL'),
-        'genre_romance_ova': ('ova', 'OVA'),
-        'genre_romance_ona': ('ona', 'ONA'),
-        'genre_romance_music': ('music', 'MUSIC')
-    }
-    page = int(params.get('page', 1))
-    format = None
-    base_key = plugin_url.split('?', 1)[0]
-    if base_key in mapping:
-        format = mapping[base_key][0] if control.getStr('browser.api') in ['mal', 'otaku'] else mapping[base_key][1]
-    prefix = plugin_url.split('?', 1)[0]
-    control.draw_items(BROWSER.get_genre_romance(page, format, prefix), 'tvshows')
+    _draw_genre_page('genre_romance', params)
 
 
-@Route('genre_sci_fi')
-@Route('genre_sci_fi_tv_show')
-@Route('genre_sci_fi_movie')
-@Route('genre_sci_fi_tv_short')
-@Route('genre_sci_fi_special')
-@Route('genre_sci_fi_ova')
-@Route('genre_sci_fi_ona')
-@Route('genre_sci_fi_music')
+@multi_route(*_browser_list_route_paths('genre_sci_fi'))
 def GENRE_SCI_FI(payload, params):
-    mapping = {
-        'genre_sci_fi_tv_show': ('tv', 'TV'),
-        'genre_sci_fi_movie': ('movie', 'MOVIE'),
-        'genre_sci_fi_tv_short': ('tv_special', 'TV_SHORT'),
-        'genre_sci_fi_special': ('special', 'SPECIAL'),
-        'genre_sci_fi_ova': ('ova', 'OVA'),
-        'genre_sci_fi_ona': ('ona', 'ONA'),
-        'genre_sci_fi_music': ('music', 'MUSIC')
-    }
-    page = int(params.get('page', 1))
-    format = None
-    base_key = plugin_url.split('?', 1)[0]
-    if base_key in mapping:
-        format = mapping[base_key][0] if control.getStr('browser.api') in ['mal', 'otaku'] else mapping[base_key][1]
-    prefix = plugin_url.split('?', 1)[0]
-    control.draw_items(BROWSER.get_genre_sci_fi(page, format, prefix), 'tvshows')
+    _draw_genre_page('genre_sci_fi', params)
 
 
-@Route('genre_slice_of_life')
-@Route('genre_slice_of_life_tv_show')
-@Route('genre_slice_of_life_movie')
-@Route('genre_slice_of_life_tv_short')
-@Route('genre_slice_of_life_special')
-@Route('genre_slice_of_life_ova')
-@Route('genre_slice_of_life_ona')
-@Route('genre_slice_of_life_music')
+@multi_route(*_browser_list_route_paths('genre_slice_of_life'))
 def GENRE_SLICE_OF_LIFE(payload, params):
-    mapping = {
-        'genre_slice_of_life_tv_show': ('tv', 'TV'),
-        'genre_slice_of_life_movie': ('movie', 'MOVIE'),
-        'genre_slice_of_life_tv_short': ('tv_special', 'TV_SHORT'),
-        'genre_slice_of_life_special': ('special', 'SPECIAL'),
-        'genre_slice_of_life_ova': ('ova', 'OVA'),
-        'genre_slice_of_life_ona': ('ona', 'ONA'),
-        'genre_slice_of_life_music': ('music', 'MUSIC')
-    }
-    page = int(params.get('page', 1))
-    format = None
-    base_key = plugin_url.split('?', 1)[0]
-    if base_key in mapping:
-        format = mapping[base_key][0] if control.getStr('browser.api') in ['mal', 'otaku'] else mapping[base_key][1]
-    prefix = plugin_url.split('?', 1)[0]
-    control.draw_items(BROWSER.get_genre_slice_of_life(page, format, prefix), 'tvshows')
+    _draw_genre_page('genre_slice_of_life', params)
 
 
-@Route('genre_sports')
-@Route('genre_sports_tv_show')
-@Route('genre_sports_movie')
-@Route('genre_sports_tv_short')
-@Route('genre_sports_special')
-@Route('genre_sports_ova')
-@Route('genre_sports_ona')
-@Route('genre_sports_music')
+@multi_route(*_browser_list_route_paths('genre_sports'))
 def GENRE_SPORTS(payload, params):
-    mapping = {
-        'genre_sports_tv_show': ('tv', 'TV'),
-        'genre_sports_movie': ('movie', 'MOVIE'),
-        'genre_sports_tv_short': ('tv_special', 'TV_SHORT'),
-        'genre_sports_special': ('special', 'SPECIAL'),
-        'genre_sports_ova': ('ova', 'OVA'),
-        'genre_sports_ona': ('ona', 'ONA'),
-        'genre_sports_music': ('music', 'MUSIC')
-    }
-    page = int(params.get('page', 1))
-    format = None
-    base_key = plugin_url.split('?', 1)[0]
-    if base_key in mapping:
-        format = mapping[base_key][0] if control.getStr('browser.api') in ['mal', 'otaku'] else mapping[base_key][1]
-    prefix = plugin_url.split('?', 1)[0]
-    control.draw_items(BROWSER.get_genre_sports(page, format, prefix), 'tvshows')
+    _draw_genre_page('genre_sports', params)
 
 
-@Route('genre_supernatural')
-@Route('genre_supernatural_tv_show')
-@Route('genre_supernatural_movie')
-@Route('genre_supernatural_tv_short')
-@Route('genre_supernatural_special')
-@Route('genre_supernatural_ova')
-@Route('genre_supernatural_ona')
-@Route('genre_supernatural_music')
+@multi_route(*_browser_list_route_paths('genre_supernatural'))
 def GENRE_SUPERNATURAL(payload, params):
-    mapping = {
-        'genre_supernatural_tv_show': ('tv', 'TV'),
-        'genre_supernatural_movie': ('movie', 'MOVIE'),
-        'genre_supernatural_tv_short': ('tv_special', 'TV_SHORT'),
-        'genre_supernatural_special': ('special', 'SPECIAL'),
-        'genre_supernatural_ova': ('ova', 'OVA'),
-        'genre_supernatural_ona': ('ona', 'ONA'),
-        'genre_supernatural_music': ('music', 'MUSIC')
-    }
-    page = int(params.get('page', 1))
-    format = None
-    base_key = plugin_url.split('?', 1)[0]
-    if base_key in mapping:
-        format = mapping[base_key][0] if control.getStr('browser.api') in ['mal', 'otaku'] else mapping[base_key][1]
-    prefix = plugin_url.split('?', 1)[0]
-    control.draw_items(BROWSER.get_genre_supernatural(page, format, prefix), 'tvshows')
+    _draw_genre_page('genre_supernatural', params)
 
 
-@Route('genre_thriller')
-@Route('genre_thriller_tv_show')
-@Route('genre_thriller_movie')
-@Route('genre_thriller_tv_short')
-@Route('genre_thriller_special')
-@Route('genre_thriller_ova')
-@Route('genre_thriller_ona')
-@Route('genre_thriller_music')
+@multi_route(*_browser_list_route_paths('genre_thriller'))
 def GENRE_THRILLER(payload, params):
-    mapping = {
-        'genre_thriller_tv_show': ('tv', 'TV'),
-        'genre_thriller_movie': ('movie', 'MOVIE'),
-        'genre_thriller_tv_short': ('tv_special', 'TV_SHORT'),
-        'genre_thriller_special': ('special', 'SPECIAL'),
-        'genre_thriller_ova': ('ova', 'OVA'),
-        'genre_thriller_ona': ('ona', 'ONA'),
-        'genre_thriller_music': ('music', 'MUSIC')
-    }
-    page = int(params.get('page', 1))
-    format = None
-    base_key = plugin_url.split('?', 1)[0]
-    if base_key in mapping:
-        format = mapping[base_key][0] if control.getStr('browser.api') in ['mal', 'otaku'] else mapping[base_key][1]
-    prefix = plugin_url.split('?', 1)[0]
-    control.draw_items(BROWSER.get_genre_thriller(page, format, prefix), 'tvshows')
+    _draw_genre_page('genre_thriller', params)
+
+
+
+# search_<api>/ URL prefix, internal type id, (mal_pair, anilist_pair)
+_SEARCH_ROUTE_META = (
+    ('search_anime/', 'anime', ('', '')),
+    ('search_tv_show/', 'tv_show', ('tv', 'TV')),
+    ('search_movie/', 'movie', ('movie', 'MOVIE')),
+    ('search_tv_short/', 'tv_short', ('tv_special', 'TV_SHORT')),
+    ('search_special/', 'special', ('special', 'SPECIAL')),
+    ('search_ova/', 'ova', ('ova', 'OVA')),
+    ('search_ona/', 'ona', ('ona', 'ONA')),
+    ('search_music/', 'music', ('music', 'MUSIC')),
+)
 
 
 def get_search_config():
-    search_types = [
-        'search_anime/', 'search_tv_show/', 'search_movie/',
-        'search_tv_short/', 'search_special/', 'search_ova/',
-        'search_ona/', 'search_music/'
-    ]
-
-    types = {
-        'search_anime/': 'anime',
-        'search_tv_show/': 'tv_show',
-        'search_movie/': 'movie',
-        'search_tv_short/': 'tv_short',
-        'search_special/': 'special',
-        'search_ova/': 'ova',
-        'search_ona/': 'ona',
-        'search_music/': 'music'
-    }
-
-    mappings = {
-        'search_anime/': ('', ''),
-        'search_tv_show/': ('tv', 'TV'),
-        'search_movie/': ('movie', 'MOVIE'),
-        'search_tv_short/': ('tv_special', 'TV_SHORT'),
-        'search_special/': ('special', 'SPECIAL'),
-        'search_ova/': ('ova', 'OVA'),
-        'search_ona/': ('ona', 'ONA'),
-        'search_music/': ('music', 'MUSIC')
-    }
-
-    formats = {
-        'search_history_anime': 'anime',
-        'search_history_tv_show': 'tv_show',
-        'search_history_movie': 'movie',
-        'search_history_tv_short': 'tv_short',
-        'search_history_special': 'special',
-        'search_history_ova': 'ova',
-        'search_history_ona': 'ona',
-        'search_history_music': 'music'
-    }
-
+    search_types = [row[0] for row in _SEARCH_ROUTE_META]
+    types = {row[0]: row[1] for row in _SEARCH_ROUTE_META}
+    mappings = {row[0]: row[2] for row in _SEARCH_ROUTE_META}
+    formats = {'search_history_%s' % row[1]: row[1] for row in _SEARCH_ROUTE_META}
     return search_types, types, mappings, formats
 
 
-@Route('search_history_anime')
-@Route('search_history_tv_show')
-@Route('search_history_movie')
-@Route('search_history_tv_short')
-@Route('search_history_special')
-@Route('search_history_ova')
-@Route('search_history_ona')
-@Route('search_history_music')
+_SEARCH_HISTORY_ROUTE_NAMES = tuple('search_history_%s' % row[1] for row in _SEARCH_ROUTE_META)
+# Kodi router wildcard routes: ``search_anime/*`` matches URLs under ``search_anime/…``
+_SEARCH_WILDCARD_ROUTES = tuple(row[0][:-1] + '/*' for row in _SEARCH_ROUTE_META)
+
+_CLEAR_SEARCH_HISTORY_ROUTES = (
+    'clear_search_history',
+    'clear_search_history_anime',
+    'clear_search_history_movie',
+    'clear_search_history_tv_show',
+    'clear_search_history_tv_short',
+    'clear_search_history_special',
+    'clear_search_history_ova',
+    'clear_search_history_ona',
+    'clear_search_history_music',
+)
+_CLEAR_SEARCH_HISTORY_MAP = {'clear_search_history': 'all'}
+_CLEAR_SEARCH_HISTORY_MAP.update(
+    {'clear_search_history_%s' % row[1]: row[1] for row in _SEARCH_ROUTE_META}
+)
+
+
+@multi_route(*_SEARCH_HISTORY_ROUTE_NAMES)
 def SEARCH_HISTORY(payload, params):
     _, _, _, formats = get_search_config()
 
@@ -1820,14 +1118,7 @@ def EDIT_SEARCH_ITEM(payload, params):
     control.exit_code()
 
 
-@Route('search_anime/*')
-@Route('search_tv_show/*')
-@Route('search_movie/*')
-@Route('search_tv_short/*')
-@Route('search_special/*')
-@Route('search_ova/*')
-@Route('search_ona/*')
-@Route('search_music/*')
+@multi_route(*_SEARCH_WILDCARD_ROUTES)
 def SEARCH(payload, params):
     from urllib.parse import unquote
     _, types, mappings, _ = get_search_config()
@@ -1842,7 +1133,7 @@ def SEARCH(payload, params):
 
     for key in mappings:
         if plugin_url.startswith(key):
-            format = mappings[key][0] if control.getStr('browser.api') in ['mal', 'otaku'] else mappings[key][1]
+            format = mappings[key][0] if control.getStr('browser.api') in _MAL_OTAKU_APIS else mappings[key][1]
             break
 
     query = unquote(payload) if payload else payload
@@ -1854,7 +1145,11 @@ def SEARCH(payload, params):
         if control.getInt('searchhistory') == 0:
             database.addSearchHistory(query, type)
     prefix = plugin_url.split('/', 1)[0]
-    control.draw_items(BROWSER.get_search(query, page, format, prefix), 'tvshows')
+    items = BROWSER.get_search(query, page, format, prefix)
+    control.draw_items(items, 'tvshows')
+    control.schedule_next_page_prefetch(
+        items,
+        lambda q=query, p=page + 1, fmt=format, pr=prefix: BROWSER.get_search(q, p, fmt, pr))
 
 
 @Route('play/*')
@@ -2255,14 +1550,7 @@ def find_episode_by_title(mal_ids, episode_titles):
     return None  # No match found
 
 
-@Route('marked_as_watched/*')
-@Route('marked_as_watched_tv_show/*')
-@Route('marked_as_watched_movie/*')
-@Route('marked_as_watched_tv_short/*')
-@Route('marked_as_watched_special/*')
-@Route('marked_as_watched_ova/*')
-@Route('marked_as_watched_ona/*')
-@Route('marked_as_watched_music/*')
+@multi_route(*_wildcard_browser_paths('marked_as_watched'))
 def MARKED_AS_WATCHED(payload, params):
     from resources.lib.WatchlistIntegration import watchlist_update_episode
     import service
@@ -2328,6 +1616,9 @@ def AUTH(payload, params):
     elif payload == 'easydebrid':
         from resources.lib.debrid.easydebrid import EasyDebrid
         EasyDebrid().auth()
+    elif payload == 'easynews':
+        from resources.lib.debrid.easynews import Easynews
+        Easynews().auth()
 
 
 @Route('refresh/*')
@@ -2380,576 +1671,33 @@ def FANART(payload: str, params: dict):
     control.ok_dialog(control.ADDON_NAME, f"Fanart Set to {fanart_display[int(select)]}")
 
 
-def get_menu_items(menu_type):
-    items = {
-        'main': [
-            (control.lang(30001), "airing_calendar", 'airing_anime_calendar.png', {}),
-            (control.lang(30002), "airing_last_season", 'airing_anime.png', {}),
-            (control.lang(30003), "airing_this_season", 'airing_anime.png', {}),
-            (control.lang(30004), "airing_next_season", 'airing_anime.png', {}),
-            (control.lang(30005), "movies", 'movies.png', {}),
-            (control.lang(30006), "tv_shows", 'tv_shows.png', {}),
-            (control.lang(30007), "tv_shorts", 'tv_shorts.png', {}),
-            (control.lang(30008), "specials", 'specials.png', {}),
-            (control.lang(30009), "ovas", 'ovas.png', {}),
-            (control.lang(30010), "onas", 'onas.png', {}),
-            (control.lang(30011), "music", 'music.png', {}),
-            (control.lang(30012), "trending", 'trending.png', {}),
-            (control.lang(30013), "popular", 'popular.png', {}),
-            (control.lang(30014), "voted", 'voted.png', {}),
-            (control.lang(30015), "favourites", 'favourites.png', {}),
-            (control.lang(30016), "top_100", 'top_100_anime.png', {}),
-            (control.lang(30017), "genres", 'genres_&_tags.png', {}),
-            (control.lang(30018), "search", 'search.png', {}),
-            (control.lang(30019), "tools", 'tools.png', {}),
-        ],
-        'movies': [
-            (control.lang(30002), "airing_last_season_movie", 'airing_anime.png', {}),
-            (control.lang(30003), "airing_this_season_movie", 'airing_anime.png', {}),
-            (control.lang(30004), "airing_next_season_movie", 'airing_anime.png', {}),
-            (control.lang(30012), "trending_movie", 'trending.png', {}),
-            (control.lang(30013), "popular_movie", 'popular.png', {}),
-            (control.lang(30014), "voted_movie", 'voted.png', {}),
-            (control.lang(30015), "favourites_movie", 'favourites.png', {}),
-            (control.lang(30016), "top_100_movie", 'top_100_anime.png', {}),
-            (control.lang(30017), "genres_movie", 'genres_&_tags.png', {}),
-            (control.lang(30018), "search_history_movie", 'search.png', {}),
-        ],
-        'tv_shows': [
-            (control.lang(30002), "airing_last_season_tv_show", 'airing_anime.png', {}),
-            (control.lang(30003), "airing_this_season_tv_show", 'airing_anime.png', {}),
-            (control.lang(30004), "airing_next_season_tv_show", 'airing_anime.png', {}),
-            (control.lang(30012), "trending_tv_show", 'trending.png', {}),
-            (control.lang(30013), "popular_tv_show", 'popular.png', {}),
-            (control.lang(30014), "voted_tv_show", 'voted.png', {}),
-            (control.lang(30015), "favourites_tv_show", 'favourites.png', {}),
-            (control.lang(30016), "top_100_tv_show", 'top_100_anime.png', {}),
-            (control.lang(30017), "genres_tv_show", 'genres_&_tags.png', {}),
-            (control.lang(30018), "search_history_tv_show", 'search.png', {}),
-        ],
-        'tv_shorts': [
-            (control.lang(30002), "airing_last_season_tv_short", 'airing_anime.png', {}),
-            (control.lang(30003), "airing_this_season_tv_short", 'airing_anime.png', {}),
-            (control.lang(30004), "airing_next_season_tv_short", 'airing_anime.png', {}),
-            (control.lang(30012), "trending_tv_short", 'trending.png', {}),
-            (control.lang(30013), "popular_tv_short", 'popular.png', {}),
-            (control.lang(30014), "voted_tv_short", 'voted.png', {}),
-            (control.lang(30015), "favourites_tv_short", 'favourites.png', {}),
-            (control.lang(30016), "top_100_tv_short", 'top_100_anime.png', {}),
-            (control.lang(30017), "genres_tv_short", 'genres_&_tags.png', {}),
-            (control.lang(30018), "search_history_tv_short", 'search.png', {}),
-        ],
-        'specials': [
-            (control.lang(30002), "airing_last_season_special", 'airing_anime.png', {}),
-            (control.lang(30003), "airing_this_season_special", 'airing_anime.png', {}),
-            (control.lang(30004), "airing_next_season_special", 'airing_anime.png', {}),
-            (control.lang(30012), "trending_special", 'trending.png', {}),
-            (control.lang(30013), "popular_special", 'popular.png', {}),
-            (control.lang(30014), "voted_special", 'voted.png', {}),
-            (control.lang(30015), "favourites_special", 'favourites.png', {}),
-            (control.lang(30016), "top_100_special", 'top_100_anime.png', {}),
-            (control.lang(30017), "genres_special", 'genres_&_tags.png', {}),
-            (control.lang(30018), "search_history_special", 'search.png', {}),
-        ],
-        'ovas': [
-            (control.lang(30002), "airing_last_season_ova", 'airing_anime.png', {}),
-            (control.lang(30003), "airing_this_season_ova", 'airing_anime.png', {}),
-            (control.lang(30004), "airing_next_season_ova", 'airing_anime.png', {}),
-            (control.lang(30012), "trending_ova", 'trending.png', {}),
-            (control.lang(30013), "popular_ova", 'popular.png', {}),
-            (control.lang(30014), "voted_ova", 'voted.png', {}),
-            (control.lang(30015), "favourites_ova", 'favourites.png', {}),
-            (control.lang(30016), "top_100_ova", 'top_100_anime.png', {}),
-            (control.lang(30017), "genres_ova", 'genres_&_tags.png', {}),
-            (control.lang(30018), "search_history_ova", 'search.png', {}),
-        ],
-        'onas': [
-            (control.lang(30002), "airing_last_season_ona", 'airing_anime.png', {}),
-            (control.lang(30003), "airing_this_season_ona", 'airing_anime.png', {}),
-            (control.lang(30004), "airing_next_season_ona", 'airing_anime.png', {}),
-            (control.lang(30012), "trending_ona", 'trending.png', {}),
-            (control.lang(30013), "popular_ona", 'popular.png', {}),
-            (control.lang(30014), "voted_ona", 'voted.png', {}),
-            (control.lang(30015), "favourites_ona", 'favourites.png', {}),
-            (control.lang(30016), "top_100_ona", 'top_100_anime.png', {}),
-            (control.lang(30017), "genres_ona", 'genres_&_tags.png', {}),
-            (control.lang(30018), "search_history_ona", 'search.png', {}),
-        ],
-        'music': [
-            (control.lang(30002), "airing_last_season_music", 'airing_anime.png', {}),
-            (control.lang(30003), "airing_this_season_music", 'airing_anime.png', {}),
-            (control.lang(30004), "airing_next_season_music", 'airing_anime.png', {}),
-            (control.lang(30012), "trending_music", 'trending.png', {}),
-            (control.lang(30013), "popular_music", 'popular.png', {}),
-            (control.lang(30014), "voted_music", 'voted.png', {}),
-            (control.lang(30015), "favourites_music", 'favourites.png', {}),
-            (control.lang(30016), "top_100_music", 'top_100_anime.png', {}),
-            (control.lang(30017), "genres_music", 'genres_&_tags.png', {}),
-            (control.lang(30018), "search_history_music", 'search.png', {}),
-        ],
-        'trending': [
-            (control.lang(30020), "trending_last_year", 'trending.png', {}),
-            (control.lang(30021), "trending_this_year", 'trending.png', {}),
-            (control.lang(30022), "trending_last_season", 'trending.png', {}),
-            (control.lang(30023), "trending_this_season", 'trending.png', {}),
-            (control.lang(30024), "all_time_trending", 'trending.png', {}),
-        ],
-        'trending_movie': [
-            (control.lang(30020), "trending_last_year_movie", 'trending.png', {}),
-            (control.lang(30021), "trending_this_year_movie", 'trending.png', {}),
-            (control.lang(30022), "trending_last_season_movie", 'trending.png', {}),
-            (control.lang(30023), "trending_this_season_movie", 'trending.png', {}),
-            (control.lang(30024), "all_time_trending_movie", 'trending.png', {}),
-        ],
-        'trending_tv_show': [
-            (control.lang(30020), "trending_last_year_tv_show", 'trending.png', {}),
-            (control.lang(30021), "trending_this_year_tv_show", 'trending.png', {}),
-            (control.lang(30022), "trending_last_season_tv_show", 'trending.png', {}),
-            (control.lang(30023), "trending_this_season_tv_show", 'trending.png', {}),
-            (control.lang(30024), "all_time_trending_tv_show", 'trending.png', {}),
-        ],
-        'trending_tv_short': [
-            (control.lang(30020), "trending_last_year_tv_short", 'trending.png', {}),
-            (control.lang(30021), "trending_this_year_tv_short", 'trending.png', {}),
-            (control.lang(30022), "trending_last_season_tv_short", 'trending.png', {}),
-            (control.lang(30023), "trending_this_season_tv_short", 'trending.png', {}),
-            (control.lang(30024), "all_time_trending_tv_short", 'trending.png', {}),
-        ],
-        'trending_special': [
-            (control.lang(30020), "trending_last_year_special", 'trending.png', {}),
-            (control.lang(30021), "trending_this_year_special", 'trending.png', {}),
-            (control.lang(30022), "trending_last_season_special", 'trending.png', {}),
-            (control.lang(30023), "trending_this_season_special", 'trending.png', {}),
-            (control.lang(30024), "all_time_trending_special", 'trending.png', {}),
-        ],
-        'trending_ova': [
-            (control.lang(30020), "trending_last_year_ova", 'trending.png', {}),
-            (control.lang(30021), "trending_this_year_ova", 'trending.png', {}),
-            (control.lang(30022), "trending_last_season_ova", 'trending.png', {}),
-            (control.lang(30023), "trending_this_season_ova", 'trending.png', {}),
-            (control.lang(30024), "all_time_trending_ova", 'trending.png', {}),
-        ],
-        'trending_ona': [
-            (control.lang(30020), "trending_last_year_ona", 'trending.png', {}),
-            (control.lang(30021), "trending_this_year_ona", 'trending.png', {}),
-            (control.lang(30022), "trending_last_season_ona", 'trending.png', {}),
-            (control.lang(30023), "trending_this_season_ona", 'trending.png', {}),
-            (control.lang(30024), "all_time_trending_ona", 'trending.png', {}),
-        ],
-        'trending_music': [
-            (control.lang(30020), "trending_last_year_music", 'trending.png', {}),
-            (control.lang(30021), "trending_this_year_music", 'trending.png', {}),
-            (control.lang(30022), "trending_last_season_music", 'trending.png', {}),
-            (control.lang(30023), "trending_this_season_music", 'trending.png', {}),
-            (control.lang(30024), "all_time_trending_music", 'trending.png', {}),
-        ],
-        'popular': [
-            (control.lang(30025), "popular_last_year", 'popular.png', {}),
-            (control.lang(30026), "popular_this_year", 'popular.png', {}),
-            (control.lang(30027), "popular_last_season", 'popular.png', {}),
-            (control.lang(30028), "popular_this_season", 'popular.png', {}),
-            (control.lang(30029), "all_time_popular", 'popular.png', {}),
-        ],
-        'popular_movie': [
-            (control.lang(30025), "popular_last_year_movie", 'popular.png', {}),
-            (control.lang(30026), "popular_this_year_movie", 'popular.png', {}),
-            (control.lang(30027), "popular_last_season_movie", 'popular.png', {}),
-            (control.lang(30028), "popular_this_season_movie", 'popular.png', {}),
-            (control.lang(30029), "all_time_popular_movie", 'popular.png', {}),
-        ],
-        'popular_tv_show': [
-            (control.lang(30025), "popular_last_year_tv_show", 'popular.png', {}),
-            (control.lang(30026), "popular_this_year_tv_show", 'popular.png', {}),
-            (control.lang(30027), "popular_last_season_tv_show", 'popular.png', {}),
-            (control.lang(30028), "popular_this_season_tv_show", 'popular.png', {}),
-            (control.lang(30029), "all_time_popular_tv_show", 'popular.png', {}),
-        ],
-        'popular_tv_short': [
-            (control.lang(30025), "popular_last_year_tv_short", 'popular.png', {}),
-            (control.lang(30026), "popular_this_year_tv_short", 'popular.png', {}),
-            (control.lang(30027), "popular_last_season_tv_short", 'popular.png', {}),
-            (control.lang(30028), "popular_this_season_tv_short", 'popular.png', {}),
-            (control.lang(30029), "all_time_popular_tv_short", 'popular.png', {}),
-        ],
-        'popular_special': [
-            (control.lang(30025), "popular_last_year_special", 'popular.png', {}),
-            (control.lang(30026), "popular_this_year_special", 'popular.png', {}),
-            (control.lang(30027), "popular_last_season_special", 'popular.png', {}),
-            (control.lang(30028), "popular_this_season_special", 'popular.png', {}),
-            (control.lang(30029), "all_time_popular_special", 'popular.png', {}),
-        ],
-        'popular_ova': [
-            (control.lang(30025), "popular_last_year_ova", 'popular.png', {}),
-            (control.lang(30026), "popular_this_year_ova", 'popular.png', {}),
-            (control.lang(30027), "popular_last_season_ova", 'popular.png', {}),
-            (control.lang(30028), "popular_this_season_ova", 'popular.png', {}),
-            (control.lang(30029), "all_time_popular_ova", 'popular.png', {}),
-        ],
-        'popular_ona': [
-            (control.lang(30025), "popular_last_year_ona", 'popular.png', {}),
-            (control.lang(30026), "popular_this_year_ona", 'popular.png', {}),
-            (control.lang(30027), "popular_last_season_ona", 'popular.png', {}),
-            (control.lang(30028), "popular_this_season_ona", 'popular.png', {}),
-            (control.lang(30029), "all_time_popular_ona", 'popular.png', {}),
-        ],
-        'popular_music': [
-            (control.lang(30025), "popular_last_year_music", 'popular.png', {}),
-            (control.lang(30026), "popular_this_year_music", 'popular.png', {}),
-            (control.lang(30027), "popular_last_season_music", 'popular.png', {}),
-            (control.lang(30028), "popular_this_season_music", 'popular.png', {}),
-            (control.lang(30029), "all_time_popular_music", 'popular.png', {}),
-        ],
-        'voted': [
-            (control.lang(30030), "voted_last_year", 'voted.png', {}),
-            (control.lang(30031), "voted_this_year", 'voted.png', {}),
-            (control.lang(30032), "voted_last_season", 'voted.png', {}),
-            (control.lang(30033), "voted_this_season", 'voted.png', {}),
-            (control.lang(30034), "all_time_voted", 'voted.png', {}),
-        ],
-        'voted_movie': [
-            (control.lang(30030), "voted_last_year_movie", 'voted.png', {}),
-            (control.lang(30031), "voted_this_year_movie", 'voted.png', {}),
-            (control.lang(30032), "voted_last_season_movie", 'voted.png', {}),
-            (control.lang(30033), "voted_this_season_movie", 'voted.png', {}),
-            (control.lang(30034), "all_time_voted_movie", 'voted.png', {}),
-        ],
-        'voted_tv_show': [
-            (control.lang(30030), "voted_last_year_tv_show", 'voted.png', {}),
-            (control.lang(30031), "voted_this_year_tv_show", 'voted.png', {}),
-            (control.lang(30032), "voted_last_season_tv_show", 'voted.png', {}),
-            (control.lang(30033), "voted_this_season_tv_show", 'voted.png', {}),
-            (control.lang(30034), "all_time_voted_tv_show", 'voted.png', {}),
-        ],
-        'voted_tv_short': [
-            (control.lang(30030), "voted_last_year_tv_short", 'voted.png', {}),
-            (control.lang(30031), "voted_this_year_tv_short", 'voted.png', {}),
-            (control.lang(30032), "voted_last_season_tv_short", 'voted.png', {}),
-            (control.lang(30033), "voted_this_season_tv_short", 'voted.png', {}),
-            (control.lang(30034), "all_time_voted_tv_short", 'voted.png', {}),
-        ],
-        'voted_special': [
-            (control.lang(30030), "voted_last_year_special", 'voted.png', {}),
-            (control.lang(30031), "voted_this_year_special", 'voted.png', {}),
-            (control.lang(30032), "voted_last_season_special", 'voted.png', {}),
-            (control.lang(30033), "voted_this_season_special", 'voted.png', {}),
-            (control.lang(30034), "all_time_voted_special", 'voted.png', {}),
-        ],
-        'voted_ova': [
-            (control.lang(30030), "voted_last_year_ova", 'voted.png', {}),
-            (control.lang(30031), "voted_this_year_ova", 'voted.png', {}),
-            (control.lang(30032), "voted_last_season_ova", 'voted.png', {}),
-            (control.lang(30033), "voted_this_season_ova", 'voted.png', {}),
-            (control.lang(30034), "all_time_voted_ova", 'voted.png', {}),
-        ],
-        'voted_ona': [
-            (control.lang(30030), "voted_last_year_ona", 'voted.png', {}),
-            (control.lang(30031), "voted_this_year_ona", 'voted.png', {}),
-            (control.lang(30032), "voted_last_season_ona", 'voted.png', {}),
-            (control.lang(30033), "voted_this_season_ona", 'voted.png', {}),
-            (control.lang(30034), "all_time_voted_ona", 'voted.png', {}),
-        ],
-        'voted_music': [
-            (control.lang(30030), "voted_last_year_music", 'voted.png', {}),
-            (control.lang(30031), "voted_this_year_music", 'voted.png', {}),
-            (control.lang(30032), "voted_last_season_music", 'voted.png', {}),
-            (control.lang(30033), "voted_this_season_music", 'voted.png', {}),
-            (control.lang(30034), "all_time_voted_music", 'voted.png', {}),
-        ],
-        'favourites': [
-            (control.lang(30035), "favourites_last_year", 'favourites.png', {}),
-            (control.lang(30036), "favourites_this_year", 'favourites.png', {}),
-            (control.lang(30037), "favourites_last_season", 'favourites.png', {}),
-            (control.lang(30038), "favourites_this_season", 'favourites.png', {}),
-            (control.lang(30039), "all_time_favourites", 'favourites.png', {}),
-        ],
-        'favourites_movie': [
-            (control.lang(30035), "favourites_last_year_movie", 'favourites.png', {}),
-            (control.lang(30036), "favourites_this_year_movie", 'favourites.png', {}),
-            (control.lang(30037), "favourites_last_season_movie", 'favourites.png', {}),
-            (control.lang(30038), "favourites_this_season_movie", 'favourites.png', {}),
-            (control.lang(30039), "all_time_favourites_movie", 'favourites.png', {}),
-        ],
-        'favourites_tv_show': [
-            (control.lang(30035), "favourites_last_year_tv_show", 'favourites.png', {}),
-            (control.lang(30036), "favourites_this_year_tv_show", 'favourites.png', {}),
-            (control.lang(30037), "favourites_last_season_tv_show", 'favourites.png', {}),
-            (control.lang(30038), "favourites_this_season_tv_show", 'favourites.png', {}),
-            (control.lang(30039), "all_time_favourites_tv_show", 'favourites.png', {}),
-        ],
-        'favourites_tv_short': [
-            (control.lang(30035), "favourites_last_year_tv_short", 'favourites.png', {}),
-            (control.lang(30036), "favourites_this_year_tv_short", 'favourites.png', {}),
-            (control.lang(30037), "favourites_last_season_tv_short", 'favourites.png', {}),
-            (control.lang(30038), "favourites_this_season_tv_short", 'favourites.png', {}),
-            (control.lang(30039), "all_time_favourites_tv_short", 'favourites.png', {}),
-        ],
-        'favourites_special': [
-            (control.lang(30035), "favourites_last_year_special", 'favourites.png', {}),
-            (control.lang(30036), "favourites_this_year_special", 'favourites.png', {}),
-            (control.lang(30037), "favourites_last_season_special", 'favourites.png', {}),
-            (control.lang(30038), "favourites_this_season_special", 'favourites.png', {}),
-            (control.lang(30039), "all_time_favourites_special", 'favourites.png', {}),
-        ],
-        'favourites_ova': [
-            (control.lang(30035), "favourites_last_year_ova", 'favourites.png', {}),
-            (control.lang(30036), "favourites_this_year_ova", 'favourites.png', {}),
-            (control.lang(30037), "favourites_last_season_ova", 'favourites.png', {}),
-            (control.lang(30038), "favourites_this_season_ova", 'favourites.png', {}),
-            (control.lang(30039), "all_time_favourites_ova", 'favourites.png', {}),
-        ],
-        'favourites_ona': [
-            (control.lang(30035), "favourites_last_year_ona", 'favourites.png', {}),
-            (control.lang(30036), "favourites_this_year_ona", 'favourites.png', {}),
-            (control.lang(30037), "favourites_last_season_ona", 'favourites.png', {}),
-            (control.lang(30038), "favourites_this_season_ona", 'favourites.png', {}),
-            (control.lang(30039), "all_time_favourites_ona", 'favourites.png', {}),
-        ],
-        'favourites_music': [
-            (control.lang(30035), "favourites_last_year_music", 'favourites.png', {}),
-            (control.lang(30036), "favourites_this_year_music", 'favourites.png', {}),
-            (control.lang(30037), "favourites_last_season_music", 'favourites.png', {}),
-            (control.lang(30038), "favourites_this_season_music", 'favourites.png', {}),
-            (control.lang(30039), "all_time_favourites_music", 'favourites.png', {}),
-        ],
-        'genres': [
-            (control.lang(30040), "genres//", 'genre_multi.png', {}),
-            (control.lang(30041), "genre_action", 'genre_action.png', {}),
-            (control.lang(30042), "genre_adventure", 'genre_adventure.png', {}),
-            (control.lang(30043), "genre_comedy", 'genre_comedy.png', {}),
-            (control.lang(30044), "genre_drama", 'genre_drama.png', {}),
-            (control.lang(30045), "genre_ecchi", 'genre_ecchi.png', {}),
-            (control.lang(30046), "genre_fantasy", 'genre_fantasy.png', {}),
-            (control.lang(30047), "genre_hentai", 'genre_hentai.png', {}),
-            (control.lang(30048), "genre_horror", 'genre_horror.png', {}),
-            (control.lang(30049), "genre_shoujo", 'genre_shoujo.png', {}),
-            (control.lang(30050), "genre_mecha", 'genre_mecha.png', {}),
-            (control.lang(30051), "genre_music", 'genre_music.png', {}),
-            (control.lang(30052), "genre_mystery", 'genre_mystery.png', {}),
-            (control.lang(30053), "genre_psychological", 'genre_psychological.png', {}),
-            (control.lang(30054), "genre_romance", 'genre_romance.png', {}),
-            (control.lang(30055), "genre_sci_fi", 'genre_sci-fi.png', {}),
-            (control.lang(30056), "genre_slice_of_life", 'genre_slice_of_life.png', {}),
-            (control.lang(30057), "genre_sports", 'genre_sports.png', {}),
-            (control.lang(30058), "genre_supernatural", 'genre_supernatural.png', {}),
-            (control.lang(30059), "genre_thriller", 'genre_thriller.png', {}),
-        ],
-        'genres_movie': [
-            (control.lang(30040), "genres_movie//", 'genre_multi.png', {}),
-            (control.lang(30041), "genre_action_movie", 'genre_action.png', {}),
-            (control.lang(30042), "genre_adventure_movie", 'genre_adventure.png', {}),
-            (control.lang(30043), "genre_comedy_movie", 'genre_comedy.png', {}),
-            (control.lang(30044), "genre_drama_movie", 'genre_drama.png', {}),
-            (control.lang(30045), "genre_ecchi_movie", 'genre_ecchi.png', {}),
-            (control.lang(30046), "genre_fantasy_movie", 'genre_fantasy.png', {}),
-            (control.lang(30047), "genre_hentai_movie", 'genre_hentai.png', {}),
-            (control.lang(30048), "genre_horror_movie", 'genre_horror.png', {}),
-            (control.lang(30049), "genre_shoujo_movie", 'genre_shoujo.png', {}),
-            (control.lang(30050), "genre_mecha_movie", 'genre_mecha.png', {}),
-            (control.lang(30051), "genre_music_movie", 'genre_music.png', {}),
-            (control.lang(30052), "genre_mystery_movie", 'genre_mystery.png', {}),
-            (control.lang(30053), "genre_psychological_movie", 'genre_psychological.png', {}),
-            (control.lang(30054), "genre_romance_movie", 'genre_romance.png', {}),
-            (control.lang(30055), "genre_sci_fi_movie", 'genre_sci-fi.png', {}),
-            (control.lang(30056), "genre_slice_of_life_movie", 'genre_slice_of_life.png', {}),
-            (control.lang(30057), "genre_sports_movie", 'genre_sports.png', {}),
-            (control.lang(30058), "genre_supernatural_movie", 'genre_supernatural.png', {}),
-            (control.lang(30059), "genre_thriller_movie", 'genre_thriller.png', {}),
-        ],
-        'genres_tv_show': [
-            (control.lang(30040), "genres_tv_show//", 'genre_multi.png', {}),
-            (control.lang(30041), "genre_action_tv_show", 'genre_action.png', {}),
-            (control.lang(30042), "genre_adventure_tv_show", 'genre_adventure.png', {}),
-            (control.lang(30043), "genre_comedy_tv_show", 'genre_comedy.png', {}),
-            (control.lang(30044), "genre_drama_tv_show", 'genre_drama.png', {}),
-            (control.lang(30045), "genre_ecchi_tv_show", 'genre_ecchi.png', {}),
-            (control.lang(30046), "genre_fantasy_tv_show", 'genre_fantasy.png', {}),
-            (control.lang(30047), "genre_hentai_tv_show", 'genre_hentai.png', {}),
-            (control.lang(30048), "genre_horror_tv_show", 'genre_horror.png', {}),
-            (control.lang(30049), "genre_shoujo_tv_show", 'genre_shoujo.png', {}),
-            (control.lang(30050), "genre_mecha_tv_show", 'genre_mecha.png', {}),
-            (control.lang(30051), "genre_music_tv_show", 'genre_music.png', {}),
-            (control.lang(30052), "genre_mystery_tv_show", 'genre_mystery.png', {}),
-            (control.lang(30053), "genre_psychological_tv_show", 'genre_psychological.png', {}),
-            (control.lang(30054), "genre_romance_tv_show", 'genre_romance.png', {}),
-            (control.lang(30055), "genre_sci_fi_tv_show", 'genre_sci-fi.png', {}),
-            (control.lang(30056), "genre_slice_of_life_tv_show", 'genre_slice_of_life.png', {}),
-            (control.lang(30057), "genre_sports_tv_show", 'genre_sports.png', {}),
-            (control.lang(30058), "genre_supernatural_tv_show", 'genre_supernatural.png', {}),
-            (control.lang(30059), "genre_thriller_tv_show", 'genre_thriller.png', {}),
-        ],
-        'genres_tv_short': [
-            (control.lang(30040), "genres_tv_short//", 'genre_multi.png', {}),
-            (control.lang(30041), "genre_action_tv_short", 'genre_action.png', {}),
-            (control.lang(30042), "genre_adventure_tv_short", 'genre_adventure.png', {}),
-            (control.lang(30043), "genre_comedy_tv_short", 'genre_comedy.png', {}),
-            (control.lang(30044), "genre_drama_tv_short", 'genre_drama.png', {}),
-            (control.lang(30045), "genre_ecchi_tv_short", 'genre_ecchi.png', {}),
-            (control.lang(30046), "genre_fantasy_tv_short", 'genre_fantasy.png', {}),
-            (control.lang(30047), "genre_hentai_tv_short", 'genre_hentai.png', {}),
-            (control.lang(30048), "genre_horror_tv_short", 'genre_horror.png', {}),
-            (control.lang(30049), "genre_shoujo_tv_short", 'genre_shoujo.png', {}),
-            (control.lang(30050), "genre_mecha_tv_short", 'genre_mecha.png', {}),
-            (control.lang(30051), "genre_music_tv_short", 'genre_music.png', {}),
-            (control.lang(30052), "genre_mystery_tv_short", 'genre_mystery.png', {}),
-            (control.lang(30053), "genre_psychological_tv_short", 'genre_psychological.png', {}),
-            (control.lang(30054), "genre_romance_tv_short", 'genre_romance.png', {}),
-            (control.lang(30055), "genre_sci_fi_tv_short", 'genre_sci-fi.png', {}),
-            (control.lang(30056), "genre_slice_of_life_tv_short", 'genre_slice_of_life.png', {}),
-            (control.lang(30057), "genre_sports_tv_short", 'genre_sports.png', {}),
-            (control.lang(30058), "genre_supernatural_tv_short", 'genre_supernatural.png', {}),
-            (control.lang(30059), "genre_thriller_tv_short", 'genre_thriller.png', {}),
-        ],
-        'genres_special': [
-            (control.lang(30040), "genres_special//", 'genre_multi.png', {}),
-            (control.lang(30041), "genre_action_special", 'genre_action.png', {}),
-            (control.lang(30042), "genre_adventure_special", 'genre_adventure.png', {}),
-            (control.lang(30043), "genre_comedy_special", 'genre_comedy.png', {}),
-            (control.lang(30044), "genre_drama_special", 'genre_drama.png', {}),
-            (control.lang(30045), "genre_ecchi_special", 'genre_ecchi.png', {}),
-            (control.lang(30046), "genre_fantasy_special", 'genre_fantasy.png', {}),
-            (control.lang(30047), "genre_hentai_special", 'genre_hentai.png', {}),
-            (control.lang(30048), "genre_horror_special", 'genre_horror.png', {}),
-            (control.lang(30049), "genre_shoujo_special", 'genre_shoujo.png', {}),
-            (control.lang(30050), "genre_mecha_special", 'genre_mecha.png', {}),
-            (control.lang(30051), "genre_music_special", 'genre_music.png', {}),
-            (control.lang(30052), "genre_mystery_special", 'genre_mystery.png', {}),
-            (control.lang(30053), "genre_psychological_special", 'genre_psychological.png', {}),
-            (control.lang(30054), "genre_romance_special", 'genre_romance.png', {}),
-            (control.lang(30055), "genre_sci_fi_special", 'genre_sci-fi.png', {}),
-            (control.lang(30056), "genre_slice_of_life_special", 'genre_slice_of_life.png', {}),
-            (control.lang(30057), "genre_sports_special", 'genre_sports.png', {}),
-            (control.lang(30058), "genre_supernatural_special", 'genre_supernatural.png', {}),
-            (control.lang(30059), "genre_thriller_special", 'genre_thriller.png', {}),
-        ],
-        'genres_ova': [
-            (control.lang(30040), "genres_ova//", 'genre_multi.png', {}),
-            (control.lang(30041), "genre_action_ova", 'genre_action.png', {}),
-            (control.lang(30042), "genre_adventure_ova", 'genre_adventure.png', {}),
-            (control.lang(30043), "genre_comedy_ova", 'genre_comedy.png', {}),
-            (control.lang(30044), "genre_drama_ova", 'genre_drama.png', {}),
-            (control.lang(30045), "genre_ecchi_ova", 'genre_ecchi.png', {}),
-            (control.lang(30046), "genre_fantasy_ova", 'genre_fantasy.png', {}),
-            (control.lang(30047), "genre_hentai_ova", 'genre_hentai.png', {}),
-            (control.lang(30048), "genre_horror_ova", 'genre_horror.png', {}),
-            (control.lang(30049), "genre_shoujo_ova", 'genre_shoujo.png', {}),
-            (control.lang(30050), "genre_mecha_ova", 'genre_mecha.png', {}),
-            (control.lang(30051), "genre_music_ova", 'genre_music.png', {}),
-            (control.lang(30052), "genre_mystery_ova", 'genre_mystery.png', {}),
-            (control.lang(30053), "genre_psychological_ova", 'genre_psychological.png', {}),
-            (control.lang(30054), "genre_romance_ova", 'genre_romance.png', {}),
-            (control.lang(30055), "genre_sci_fi_ova", 'genre_sci-fi.png', {}),
-            (control.lang(30056), "genre_slice_of_life_ova", 'genre_slice_of_life.png', {}),
-            (control.lang(30057), "genre_sports_ova", 'genre_sports.png', {}),
-            (control.lang(30058), "genre_supernatural_ova", 'genre_supernatural.png', {}),
-            (control.lang(30059), "genre_thriller_ova", 'genre_thriller.png', {}),
-        ],
-        'genres_ona': [
-            (control.lang(30040), "genres_ona//", 'genre_multi.png', {}),
-            (control.lang(30041), "genre_action_ona", 'genre_action.png', {}),
-            (control.lang(30042), "genre_adventure_ona", 'genre_adventure.png', {}),
-            (control.lang(30043), "genre_comedy_ona", 'genre_comedy.png', {}),
-            (control.lang(30044), "genre_drama_ona", 'genre_drama.png', {}),
-            (control.lang(30045), "genre_ecchi_ona", 'genre_ecchi.png', {}),
-            (control.lang(30046), "genre_fantasy_ona", 'genre_fantasy.png', {}),
-            (control.lang(30047), "genre_hentai_ona", 'genre_hentai.png', {}),
-            (control.lang(30048), "genre_horror_ona", 'genre_horror.png', {}),
-            (control.lang(30049), "genre_shoujo_ona", 'genre_shoujo.png', {}),
-            (control.lang(30050), "genre_mecha_ona", 'genre_mecha.png', {}),
-            (control.lang(30051), "genre_music_ona", 'genre_music.png', {}),
-            (control.lang(30052), "genre_mystery_ona", 'genre_mystery.png', {}),
-            (control.lang(30053), "genre_psychological_ona", 'genre_psychological.png', {}),
-            (control.lang(30054), "genre_romance_ona", 'genre_romance.png', {}),
-            (control.lang(30055), "genre_sci_fi_ona", 'genre_sci-fi.png', {}),
-            (control.lang(30056), "genre_slice_of_life_ona", 'genre_slice_of_life.png', {}),
-            (control.lang(30057), "genre_sports_ona", 'genre_sports.png', {}),
-            (control.lang(30058), "genre_supernatural_ona", 'genre_supernatural.png', {}),
-            (control.lang(30059), "genre_thriller_ona", 'genre_thriller.png', {}),
-        ],
-        'genres_music': [
-            (control.lang(30040), "genres_music//", 'genre_multi.png', {}),
-            (control.lang(30041), "genre_action_music", 'genre_action.png', {}),
-            (control.lang(30042), "genre_adventure_music", 'genre_adventure.png', {}),
-            (control.lang(30043), "genre_comedy_music", 'genre_comedy.png', {}),
-            (control.lang(30044), "genre_drama_music", 'genre_drama.png', {}),
-            (control.lang(30045), "genre_ecchi_music", 'genre_ecchi.png', {}),
-            (control.lang(30046), "genre_fantasy_music", 'genre_fantasy.png', {}),
-            (control.lang(30047), "genre_hentai_music", 'genre_hentai.png', {}),
-            (control.lang(30048), "genre_horror_music", 'genre_horror.png', {}),
-            (control.lang(30049), "genre_shoujo_music", 'genre_shoujo.png', {}),
-            (control.lang(30050), "genre_mecha_music", 'genre_mecha.png', {}),
-            (control.lang(30051), "genre_music_music", 'genre_music.png', {}),
-            (control.lang(30052), "genre_mystery_music", 'genre_mystery.png', {}),
-            (control.lang(30053), "genre_psychological_music", 'genre_psychological.png', {}),
-            (control.lang(30054), "genre_romance_music", 'genre_romance.png', {}),
-            (control.lang(30055), "genre_sci_fi_music", 'genre_sci-fi.png', {}),
-            (control.lang(30056), "genre_slice_of_life_music", 'genre_slice_of_life.png', {}),
-            (control.lang(30057), "genre_sports_music", 'genre_sports.png', {}),
-            (control.lang(30058), "genre_supernatural_music", 'genre_supernatural.png', {}),
-            (control.lang(30059), "genre_thriller_music", 'genre_thriller.png', {}),
-        ],
-        'search': [
-            (control.lang(30060), "search_history_anime", 'search.png', {}),
-            (control.lang(30061), "search_history_movie", 'search.png', {}),
-            (control.lang(30062), "search_history_tv_show", 'search.png', {}),
-            (control.lang(30063), "search_history_tv_short", 'search.png', {}),
-            (control.lang(30064), "search_history_special", 'search.png', {}),
-            (control.lang(30065), "search_history_ova", 'search.png', {}),
-            (control.lang(30066), "search_history_ona", 'search.png', {}),
-            (control.lang(30067), "search_history_music", 'search.png', {}),
-        ],
-        'tools': [
-            (control.lang(30069), "setup_wizard", 'tools.png', {}),
-            (control.lang(30070), "change_log", 'changelog.png', {}),
-            (control.lang(30071), "settings", 'open_settings_menu.png', {}),
-            (control.lang(30072), "clear_cache", 'clear_cache.png', {}),
-            (control.lang(30073), "clear_search_history", 'clear_search_history.png', {}),
-            (control.lang(30074), "clear_watch_history", 'clear_watch_history.png', {}),
-            (control.lang(30075), "rebuild_database", 'rebuild_database.png', {}),
-            (control.lang(30076), "wipe_addon_data", 'wipe_addon_data.png', {}),
-            (control.lang(30077), "completed_sync", 'sync_completed.png', {}),
-            (control.lang(30078), 'download_manager', 'download_manager.png', {}),
-            (control.lang(30079), 'sort_select', 'sort_select.png', {}),
-            (control.lang(30080), 'clear_selected_fanart', 'wipe_addon_data.png', {}),
-        ],
-    }
-    return items.get(menu_type, [])
-
-
-@Route('')
-def LIST_MENU(payload, params):
-    # Check if menu needs refreshing due to recent playback
+def _maybe_refresh_main_menu(log_msg):
     if control.getGlobalProp('otaku.menu.needs_refresh') == 'true':
         control.clearGlobalProp('otaku.menu.needs_refresh')
-        control.log('Menu refresh flag detected - rebuilding menu items')
+        control.log(log_msg)
 
-    MENU_ITEMS = get_menu_items('main')
 
-    enabled_menu_items = []
-    enabled_menu_items = add_watchlist(enabled_menu_items)
-
-    # Retrieve the list from your settings list control
-    enabled_ids = control.getStringList('menu.mainmenu.config')
-
-    if "last_watched" in enabled_ids:
-        enabled_menu_items = add_last_watched(enabled_menu_items)
-
-    if "watch_history" in enabled_ids:
-        enabled_menu_items = add_watch_history(enabled_menu_items)
-
-    if "next_up" in enabled_ids:
-        enabled_menu_items = add_next_up(enabled_menu_items)
-
-    for item in MENU_ITEMS:
+def _collect_category_menu_items(menu_items_key, settings_key, extra_key_suffix):
+    enabled_items = []
+    enabled_items = add_watchlist(enabled_items)
+    enabled_ids = control.getStringList(settings_key)
+    if "last_watched%s" % extra_key_suffix in enabled_ids:
+        enabled_items = add_last_watched(enabled_items)
+    if "watch_history%s" % extra_key_suffix in enabled_ids:
+        enabled_items = add_watch_history(enabled_items)
+    if "next_up%s" % extra_key_suffix in enabled_ids:
+        enabled_items = add_next_up(enabled_items)
+    for item in get_menu_items(menu_items_key):
         if item[1] in enabled_ids:
-            enabled_menu_items.append(item)
+            enabled_items.append(item)
+    return enabled_items
 
-    # Process items, handling special last_watched items
-    processed_items = []
-    for item in enabled_menu_items:
+
+def _finalize_menu_list_items(menu_items):
+    processed = []
+    for item in menu_items:
         if len(item) == 6 and item[0] == 'LAST_WATCHED_ITEM':
-            # This is a last_watched item - use utils.parse_view
             _, name, url, image, info, kodi_meta = item
-
             base = {
                 'name': name,
                 'url': url,
@@ -2959,9 +1707,6 @@ def LIST_MENU(payload, params):
                 'banner': image,
                 'info': info
             }
-
-            # Add artwork
-            import random
             if kodi_meta.get('thumb'):
                 thumb = kodi_meta['thumb']
                 base['landscape'] = random.choice(thumb) if isinstance(thumb, list) else thumb
@@ -2971,1204 +1716,114 @@ def LIST_MENU(payload, params):
             if kodi_meta.get('clearlogo'):
                 clearlogo = kodi_meta['clearlogo']
                 base['clearlogo'] = random.choice(clearlogo) if isinstance(clearlogo, list) else clearlogo
-
-            # Determine if it's a movie or TV show
             episodes = kodi_meta.get('episodes', 0)
             if episodes == 1:
-                processed_items.append(utils.parse_view(base, False, True, False))  # Movie
+                processed.append(utils.parse_view(base, False, True, False))
             else:
-                processed_items.append(utils.parse_view(base, True, False, False))   # TV Show
+                processed.append(utils.parse_view(base, True, False, False))
         else:
-            # Regular menu item
             name, url, image, info = item
-            processed_items.append(utils.allocate_item(name, url, True, False, [], image, info))
+            processed.append(utils.allocate_item(name, url, True, False, [], image, info))
+    return processed
 
+
+def _draw_category_main_menu(menu_items_key, settings_key, extra_key_suffix, refresh_log_msg):
+    _maybe_refresh_main_menu(refresh_log_msg)
+    enabled = _collect_category_menu_items(menu_items_key, settings_key, extra_key_suffix)
+    processed = _finalize_menu_list_items(enabled)
     view_type = 'addons' if control.getBool('interface.content_type') else ''
-    control.draw_items(processed_items, view_type)
+    control.draw_items(processed, view_type)
 
 
-@Route('movies')
-def MOVIES_MENU(payload, params):
-    # Check if menu needs refreshing due to recent playback
-    if control.getGlobalProp('otaku.menu.needs_refresh') == 'true':
-        control.clearGlobalProp('otaku.menu.needs_refresh')
-        control.log('Movie menu refresh flag detected - rebuilding menu items')
-
-    MOVIES_ITEMS = get_menu_items('movies')
-
-    enabled_movies_items = []
-    enabled_movies_items = add_watchlist(enabled_movies_items)
-
-    # Retrieve the list from your settings list control
-    enabled_ids = control.getStringList('movie.mainmenu.config')
-
-    if "last_watched_movie" in enabled_ids:
-        enabled_movies_items = add_last_watched(enabled_movies_items)
-
-    if "watch_history_movie" in enabled_ids:
-        enabled_movies_items = add_watch_history(enabled_movies_items)
-
-    if "next_up_movie" in enabled_ids:
-        enabled_movies_items = add_next_up(enabled_movies_items)
-
-    for item in MOVIES_ITEMS:
-        if item[1] in enabled_ids:
-            enabled_movies_items.append(item)
-
-    # Process items, handling special last_watched items
-    processed_items = []
-    for item in enabled_movies_items:
-        if len(item) == 6 and item[0] == 'LAST_WATCHED_ITEM':
-            # This is a last_watched item - use utils.parse_view
-            _, name, url, image, info, kodi_meta = item
-
-            base = {
-                'name': name,
-                'url': url,
-                'image': image,
-                'poster': image,
-                'fanart': kodi_meta.get('fanart', ''),
-                'banner': image,
-                'info': info
-            }
-
-            # Add artwork
-            import random
-            if kodi_meta.get('thumb'):
-                thumb = kodi_meta['thumb']
-                base['landscape'] = random.choice(thumb) if isinstance(thumb, list) else thumb
-            if kodi_meta.get('clearart'):
-                clearart = kodi_meta['clearart']
-                base['clearart'] = random.choice(clearart) if isinstance(clearart, list) else clearart
-            if kodi_meta.get('clearlogo'):
-                clearlogo = kodi_meta['clearlogo']
-                base['clearlogo'] = random.choice(clearlogo) if isinstance(clearlogo, list) else clearlogo
-
-            # Determine if it's a movie or TV show
-            episodes = kodi_meta.get('episodes', 0)
-            if episodes == 1:
-                processed_items.append(utils.parse_view(base, False, True, False))  # Movie
-            else:
-                processed_items.append(utils.parse_view(base, True, False, False))   # TV Show
-        else:
-            # Regular menu item
-            name, url, image, info = item
-            processed_items.append(utils.allocate_item(name, url, True, False, [], image, info))
-
+def _draw_filtered_submenu(menu_items_key, settings_key):
+    items = get_menu_items(menu_items_key)
+    enabled_ids = control.getStringList(settings_key)
+    enabled = [item for item in items if item[1] in enabled_ids]
     view_type = 'addons' if control.getBool('interface.content_type') else ''
-    control.draw_items(processed_items, view_type)
-
-
-@Route('tv_shows')
-def TV_SHOWS_MENU(payload, params):
-    # Check if menu needs refreshing due to recent playback
-    if control.getGlobalProp('otaku.menu.needs_refresh') == 'true':
-        control.clearGlobalProp('otaku.menu.needs_refresh')
-        control.log('TV shows menu refresh flag detected - rebuilding menu items')
-
-    TV_SHOWS_ITEMS = get_menu_items('tv_shows')
-
-    enabled_tv_show_items = []
-    enabled_tv_show_items = add_watchlist(enabled_tv_show_items)
-
-    # Retrieve the list from your settings list control
-    enabled_ids = control.getStringList('tv_show.mainmenu.config')
-
-    if "last_watched_tv_show" in enabled_ids:
-        enabled_tv_show_items = add_last_watched(enabled_tv_show_items)
-
-    if "watch_history_tv_show" in enabled_ids:
-        enabled_tv_show_items = add_watch_history(enabled_tv_show_items)
-
-    if "next_up_tv_show" in enabled_ids:
-        enabled_tv_show_items = add_next_up(enabled_tv_show_items)
-
-    for item in TV_SHOWS_ITEMS:
-        if item[1] in enabled_ids:
-            enabled_tv_show_items.append(item)
-
-    # Process items, handling special last_watched items
-    processed_items = []
-    for item in enabled_tv_show_items:
-        if len(item) == 6 and item[0] == 'LAST_WATCHED_ITEM':
-            # This is a last_watched item - use utils.parse_view
-            _, name, url, image, info, kodi_meta = item
-
-            base = {
-                'name': name,
-                'url': url,
-                'image': image,
-                'poster': image,
-                'fanart': kodi_meta.get('fanart', ''),
-                'banner': image,
-                'info': info
-            }
-
-            # Add artwork
-            import random
-            if kodi_meta.get('thumb'):
-                thumb = kodi_meta['thumb']
-                base['landscape'] = random.choice(thumb) if isinstance(thumb, list) else thumb
-            if kodi_meta.get('clearart'):
-                clearart = kodi_meta['clearart']
-                base['clearart'] = random.choice(clearart) if isinstance(clearart, list) else clearart
-            if kodi_meta.get('clearlogo'):
-                clearlogo = kodi_meta['clearlogo']
-                base['clearlogo'] = random.choice(clearlogo) if isinstance(clearlogo, list) else clearlogo
-
-            # Determine if it's a movie or TV show
-            episodes = kodi_meta.get('episodes', 0)
-            if episodes == 1:
-                processed_items.append(utils.parse_view(base, False, True, False))  # Movie
-            else:
-                processed_items.append(utils.parse_view(base, True, False, False))   # TV Show
-        else:
-            # Regular menu item
-            name, url, image, info = item
-            processed_items.append(utils.allocate_item(name, url, True, False, [], image, info))
-
-    view_type = 'addons' if control.getBool('interface.content_type') else ''
-    control.draw_items(processed_items, view_type)
-
-
-@Route('tv_shorts')
-def TV_SHORTS_MENU(payload, params):
-    # Check if menu needs refreshing due to recent playback
-    if control.getGlobalProp('otaku.menu.needs_refresh') == 'true':
-        control.clearGlobalProp('otaku.menu.needs_refresh')
-        control.log('TV shorts menu refresh flag detected - rebuilding menu items')
-
-    TV_SHORTS_ITEMS = get_menu_items('tv_shorts')
-
-    enabled_tv_short_items = []
-    enabled_tv_short_items = add_watchlist(enabled_tv_short_items)
-
-    # Retrieve the list from your settings list control
-    enabled_ids = control.getStringList('tv_short.mainmenu.config')
-
-    if "last_watched_tv_short" in enabled_ids:
-        enabled_tv_short_items = add_last_watched(enabled_tv_short_items)
-
-    if "watch_history_tv_short" in enabled_ids:
-        enabled_tv_short_items = add_watch_history(enabled_tv_short_items)
-
-    if "next_up_tv_short" in enabled_ids:
-        enabled_tv_short_items = add_next_up(enabled_tv_short_items)
-
-    for item in TV_SHORTS_ITEMS:
-        if item[1] in enabled_ids:
-            enabled_tv_short_items.append(item)
-
-    # Process items, handling special last_watched items
-    processed_items = []
-    for item in enabled_tv_short_items:
-        if len(item) == 6 and item[0] == 'LAST_WATCHED_ITEM':
-            # This is a last_watched item - use utils.parse_view
-            _, name, url, image, info, kodi_meta = item
-
-            base = {
-                'name': name,
-                'url': url,
-                'image': image,
-                'poster': image,
-                'fanart': kodi_meta.get('fanart', ''),
-                'banner': image,
-                'info': info
-            }
-
-            # Add artwork
-            import random
-            if kodi_meta.get('thumb'):
-                thumb = kodi_meta['thumb']
-                base['landscape'] = random.choice(thumb) if isinstance(thumb, list) else thumb
-            if kodi_meta.get('clearart'):
-                clearart = kodi_meta['clearart']
-                base['clearart'] = random.choice(clearart) if isinstance(clearart, list) else clearart
-            if kodi_meta.get('clearlogo'):
-                clearlogo = kodi_meta['clearlogo']
-                base['clearlogo'] = random.choice(clearlogo) if isinstance(clearlogo, list) else clearlogo
-
-            # Determine if it's a movie or TV show
-            episodes = kodi_meta.get('episodes', 0)
-            if episodes == 1:
-                processed_items.append(utils.parse_view(base, False, True, False))  # Movie
-            else:
-                processed_items.append(utils.parse_view(base, True, False, False))   # TV Show
-        else:
-            # Regular menu item
-            name, url, image, info = item
-            processed_items.append(utils.allocate_item(name, url, True, False, [], image, info))
-
-    view_type = 'addons' if control.getBool('interface.content_type') else ''
-    control.draw_items(processed_items, view_type)
-
-
-@Route('specials')
-def SPECIALS_MENU(payload, params):
-    # Check if menu needs refreshing due to recent playback
-    if control.getGlobalProp('otaku.menu.needs_refresh') == 'true':
-        control.clearGlobalProp('otaku.menu.needs_refresh')
-        control.log('Specials menu refresh flag detected - rebuilding menu items')
-
-    SPECIALS_ITEMS = get_menu_items('specials')
-
-    enabled_special_items = []
-    enabled_special_items = add_watchlist(enabled_special_items)
-
-    # Retrieve the list from your settings list control
-    enabled_ids = control.getStringList('special.mainmenu.config')
-
-    if "last_watched_special" in enabled_ids:
-        enabled_special_items = add_last_watched(enabled_special_items)
-
-    if "watch_history_special" in enabled_ids:
-        enabled_special_items = add_watch_history(enabled_special_items)
-
-    if "next_up_special" in enabled_ids:
-        enabled_special_items = add_next_up(enabled_special_items)
-
-    for item in SPECIALS_ITEMS:
-        if item[1] in enabled_ids:
-            enabled_special_items.append(item)
-
-    # Process items, handling special last_watched items
-    processed_items = []
-    for item in enabled_special_items:
-        if len(item) == 6 and item[0] == 'LAST_WATCHED_ITEM':
-            # This is a last_watched item - use utils.parse_view
-            _, name, url, image, info, kodi_meta = item
-
-            base = {
-                'name': name,
-                'url': url,
-                'image': image,
-                'poster': image,
-                'fanart': kodi_meta.get('fanart', ''),
-                'banner': image,
-                'info': info
-            }
-
-            # Add artwork
-            import random
-            if kodi_meta.get('thumb'):
-                thumb = kodi_meta['thumb']
-                base['landscape'] = random.choice(thumb) if isinstance(thumb, list) else thumb
-            if kodi_meta.get('clearart'):
-                clearart = kodi_meta['clearart']
-                base['clearart'] = random.choice(clearart) if isinstance(clearart, list) else clearart
-            if kodi_meta.get('clearlogo'):
-                clearlogo = kodi_meta['clearlogo']
-                base['clearlogo'] = random.choice(clearlogo) if isinstance(clearlogo, list) else clearlogo
-
-            # Determine if it's a movie or TV show
-            episodes = kodi_meta.get('episodes', 0)
-            if episodes == 1:
-                processed_items.append(utils.parse_view(base, False, True, False))  # Movie
-            else:
-                processed_items.append(utils.parse_view(base, True, False, False))   # TV Show
-        else:
-            # Regular menu item
-            name, url, image, info = item
-            processed_items.append(utils.allocate_item(name, url, True, False, [], image, info))
-
-    view_type = 'addons' if control.getBool('interface.content_type') else ''
-    control.draw_items(processed_items, view_type)
-
-
-@Route('ovas')
-def OVAS_MENU(payload, params):
-    # Check if menu needs refreshing due to recent playback
-    if control.getGlobalProp('otaku.menu.needs_refresh') == 'true':
-        control.clearGlobalProp('otaku.menu.needs_refresh')
-        control.log('OVAs menu refresh flag detected - rebuilding menu items')
-
-    OVAS_ITEMS = get_menu_items('ovas')
-
-    enabled_ova_items = []
-    enabled_ova_items = add_watchlist(enabled_ova_items)
-
-    # Retrieve the list from your settings list control
-    enabled_ids = control.getStringList('ova.mainmenu.config')
-
-    if "last_watched_ova" in enabled_ids:
-        enabled_ova_items = add_last_watched(enabled_ova_items)
-
-    if "watch_history_ova" in enabled_ids:
-        enabled_ova_items = add_watch_history(enabled_ova_items)
-
-    if "next_up_ova" in enabled_ids:
-        enabled_ova_items = add_next_up(enabled_ova_items)
-
-    for item in OVAS_ITEMS:
-        if item[1] in enabled_ids:
-            enabled_ova_items.append(item)
-
-    # Process items, handling special last_watched items
-    processed_items = []
-    for item in enabled_ova_items:
-        if len(item) == 6 and item[0] == 'LAST_WATCHED_ITEM':
-            # This is a last_watched item - use utils.parse_view
-            _, name, url, image, info, kodi_meta = item
-
-            base = {
-                'name': name,
-                'url': url,
-                'image': image,
-                'poster': image,
-                'fanart': kodi_meta.get('fanart', ''),
-                'banner': image,
-                'info': info
-            }
-
-            # Add artwork
-            import random
-            if kodi_meta.get('thumb'):
-                thumb = kodi_meta['thumb']
-                base['landscape'] = random.choice(thumb) if isinstance(thumb, list) else thumb
-            if kodi_meta.get('clearart'):
-                clearart = kodi_meta['clearart']
-                base['clearart'] = random.choice(clearart) if isinstance(clearart, list) else clearart
-            if kodi_meta.get('clearlogo'):
-                clearlogo = kodi_meta['clearlogo']
-                base['clearlogo'] = random.choice(clearlogo) if isinstance(clearlogo, list) else clearlogo
-
-            # Determine if it's a movie or TV show
-            episodes = kodi_meta.get('episodes', 0)
-            if episodes == 1:
-                processed_items.append(utils.parse_view(base, False, True, False))  # Movie
-            else:
-                processed_items.append(utils.parse_view(base, True, False, False))   # TV Show
-        else:
-            # Regular menu item
-            name, url, image, info = item
-            processed_items.append(utils.allocate_item(name, url, True, False, [], image, info))
-
-    view_type = 'addons' if control.getBool('interface.content_type') else ''
-    control.draw_items(processed_items, view_type)
-
-
-@Route('onas')
-def ONAS_MENU(payload, params):
-    # Check if menu needs refreshing due to recent playback
-    if control.getGlobalProp('otaku.menu.needs_refresh') == 'true':
-        control.clearGlobalProp('otaku.menu.needs_refresh')
-        control.log('ONAs menu refresh flag detected - rebuilding menu items')
-
-    ONAS_ITEMS = get_menu_items('onas')
-
-    enabled_ona_items = []
-    enabled_ona_items = add_watchlist(enabled_ona_items)
-
-    # Retrieve the list from your settings list control
-    enabled_ids = control.getStringList('ona.mainmenu.config')
-
-    if "last_watched_ona" in enabled_ids:
-        enabled_ona_items = add_last_watched(enabled_ona_items)
-
-    if "watch_history_ona" in enabled_ids:
-        enabled_ona_items = add_watch_history(enabled_ona_items)
-
-    if "next_up_ona" in enabled_ids:
-        enabled_ona_items = add_next_up(enabled_ona_items)
-
-    for item in ONAS_ITEMS:
-        if item[1] in enabled_ids:
-            enabled_ona_items.append(item)
-
-    # Process items, handling special last_watched items
-    processed_items = []
-    for item in enabled_ona_items:
-        if len(item) == 6 and item[0] == 'LAST_WATCHED_ITEM':
-            # This is a last_watched item - use utils.parse_view
-            _, name, url, image, info, kodi_meta = item
-
-            base = {
-                'name': name,
-                'url': url,
-                'image': image,
-                'poster': image,
-                'fanart': kodi_meta.get('fanart', ''),
-                'banner': image,
-                'info': info
-            }
-
-            # Add artwork
-            import random
-            if kodi_meta.get('thumb'):
-                thumb = kodi_meta['thumb']
-                base['landscape'] = random.choice(thumb) if isinstance(thumb, list) else thumb
-            if kodi_meta.get('clearart'):
-                clearart = kodi_meta['clearart']
-                base['clearart'] = random.choice(clearart) if isinstance(clearart, list) else clearart
-            if kodi_meta.get('clearlogo'):
-                clearlogo = kodi_meta['clearlogo']
-                base['clearlogo'] = random.choice(clearlogo) if isinstance(clearlogo, list) else clearlogo
-
-            # Determine if it's a movie or TV show
-            episodes = kodi_meta.get('episodes', 0)
-            if episodes == 1:
-                processed_items.append(utils.parse_view(base, False, True, False))  # Movie
-            else:
-                processed_items.append(utils.parse_view(base, True, False, False))   # TV Show
-        else:
-            # Regular menu item
-            name, url, image, info = item
-            processed_items.append(utils.allocate_item(name, url, True, False, [], image, info))
-
-    view_type = 'addons' if control.getBool('interface.content_type') else ''
-    control.draw_items(processed_items, view_type)
-
-
-@Route('music')
-def MUSIC_MENU(payload, params):
-    # Check if menu needs refreshing due to recent playback
-    if control.getGlobalProp('otaku.menu.needs_refresh') == 'true':
-        control.clearGlobalProp('otaku.menu.needs_refresh')
-        control.log('Music menu refresh flag detected - rebuilding menu items')
-
-    MUSIC_ITEMS = get_menu_items('music')
-
-    enabled_music_items = []
-    enabled_music_items = add_watchlist(enabled_music_items)
-
-    # Retrieve the list from your settings list control
-    enabled_ids = control.getStringList('music.mainmenu.config')
-
-    if "last_watched_music" in enabled_ids:
-        enabled_music_items = add_last_watched(enabled_music_items)
-
-    if "watch_history_music" in enabled_ids:
-        enabled_music_items = add_watch_history(enabled_music_items)
-
-    if "next_up_music" in enabled_ids:
-        enabled_music_items = add_next_up(enabled_music_items)
-
-    for item in MUSIC_ITEMS:
-        if item[1] in enabled_ids:
-            enabled_music_items.append(item)
-
-    # Process items, handling special last_watched items
-    processed_items = []
-    for item in enabled_music_items:
-        if len(item) == 6 and item[0] == 'LAST_WATCHED_ITEM':
-            # This is a last_watched item - use utils.parse_view
-            _, name, url, image, info, kodi_meta = item
-
-            base = {
-                'name': name,
-                'url': url,
-                'image': image,
-                'poster': image,
-                'fanart': kodi_meta.get('fanart', ''),
-                'banner': image,
-                'info': info
-            }
-
-            # Add artwork
-            import random
-            if kodi_meta.get('thumb'):
-                thumb = kodi_meta['thumb']
-                base['landscape'] = random.choice(thumb) if isinstance(thumb, list) else thumb
-            if kodi_meta.get('clearart'):
-                clearart = kodi_meta['clearart']
-                base['clearart'] = random.choice(clearart) if isinstance(clearart, list) else clearart
-            if kodi_meta.get('clearlogo'):
-                clearlogo = kodi_meta['clearlogo']
-                base['clearlogo'] = random.choice(clearlogo) if isinstance(clearlogo, list) else clearlogo
-
-            # Determine if it's a movie or TV show
-            episodes = kodi_meta.get('episodes', 0)
-            if episodes == 1:
-                processed_items.append(utils.parse_view(base, False, True, False))  # Movie
-            else:
-                processed_items.append(utils.parse_view(base, True, False, False))   # TV Show
-        else:
-            # Regular menu item
-            name, url, image, info = item
-            processed_items.append(utils.allocate_item(name, url, True, False, [], image, info))
-
-    view_type = 'addons' if control.getBool('interface.content_type') else ''
-    control.draw_items(processed_items, view_type)
-
-
-@Route('trending')
-def TRENDING_MENU(payload, params):
-    TRENDING_ITEMS = get_menu_items('trending')
-
-    enabled_trending_items = []
-
-    # Retrieve the list from your settings list control
-    enabled_ids = control.getStringList('menu.submenu.config')
-
-    for item in TRENDING_ITEMS:
-        if item[1] in enabled_ids:
-            enabled_trending_items.append(item)
-
-    view_type = 'addons' if control.getBool('interface.content_type') else ''
-    control.draw_items([utils.allocate_item(name, url, True, False, [], image, info) for name, url, image, info in enabled_trending_items], view_type)
-
-
-@Route('trending_movie')
-def TRENDING_MOVIE_MENU(payload, params):
-    TRENDING_MOVIE_ITEMS = get_menu_items('trending_movie')
-
-    enabled_trending_movie_items = []
-
-    # Retrieve the list from your settings list control
-    enabled_ids = control.getStringList('movie.submenu.config')
-
-    for item in TRENDING_MOVIE_ITEMS:
-        if item[1] in enabled_ids:
-            enabled_trending_movie_items.append(item)
-
-    view_type = 'addons' if control.getBool('interface.content_type') else ''
-    control.draw_items([utils.allocate_item(name, url, True, False, [], image, info) for name, url, image, info in enabled_trending_movie_items], view_type)
-
-
-@Route('trending_tv_show')
-def TRENDING_TV_SHOW_MENU(payload, params):
-    TRENDING_TV_SHOW_ITEMS = get_menu_items('trending_tv_show')
-
-    enabled_trending_tv_show_items = []
-
-    # Retrieve the list from your settings list control
-    enabled_ids = control.getStringList('tv_show.submenu.config')
-
-    for item in TRENDING_TV_SHOW_ITEMS:
-        if item[1] in enabled_ids:
-            enabled_trending_tv_show_items.append(item)
-
-    view_type = 'addons' if control.getBool('interface.content_type') else ''
-    control.draw_items([utils.allocate_item(name, url, True, False, [], image, info) for name, url, image, info in enabled_trending_tv_show_items], view_type)
-
-
-@Route('trending_tv_short')
-def TRENDING_TV_SHORT_MENU(payload, params):
-    TRENDING_TV_SHORT_ITEMS = get_menu_items('trending_tv_short')
-
-    enabled_trending_tv_short_items = []
-
-    # Retrieve the list from your settings list control
-    enabled_ids = control.getStringList('tv_short.submenu.config')
-
-    for item in TRENDING_TV_SHORT_ITEMS:
-        if item[1] in enabled_ids:
-            enabled_trending_tv_short_items.append(item)
-
-    view_type = 'addons' if control.getBool('interface.content_type') else ''
-    control.draw_items([utils.allocate_item(name, url, True, False, [], image, info) for name, url, image, info in enabled_trending_tv_short_items], view_type)
-
-
-@Route('trending_special')
-def TRENDING_SPECIAL_MENU(payload, params):
-    TRENDING_SPECIAL_ITEMS = get_menu_items('trending_special')
-
-    enabled_trending_special_items = []
-
-    # Retrieve the list from your settings list control
-    enabled_ids = control.getStringList('special.submenu.config')
-
-    for item in TRENDING_SPECIAL_ITEMS:
-        if item[1] in enabled_ids:
-            enabled_trending_special_items.append(item)
-
-    view_type = 'addons' if control.getBool('interface.content_type') else ''
-    control.draw_items([utils.allocate_item(name, url, True, False, [], image, info) for name, url, image, info in enabled_trending_special_items], view_type)
-
-
-@Route('trending_ova')
-def TRENDING_OVA_MENU(payload, params):
-    TRENDING_OVA_ITEMS = get_menu_items('trending_ova')
-
-    enabled_trending_ova_items = []
-
-    # Retrieve the list from your settings list control
-    enabled_ids = control.getStringList('ova.submenu.config')
-
-    for item in TRENDING_OVA_ITEMS:
-        if item[1] in enabled_ids:
-            enabled_trending_ova_items.append(item)
-
-    view_type = 'addons' if control.getBool('interface.content_type') else ''
-    control.draw_items([utils.allocate_item(name, url, True, False, [], image, info) for name, url, image, info in enabled_trending_ova_items], view_type)
-
-
-@Route('trending_ona')
-def TRENDING_ONA_MENU(payload, params):
-    TRENDING_ONA_ITEMS = get_menu_items('trending_ona')
-
-    enabled_trending_ona_items = []
-
-    # Retrieve the list from your settings list control
-    enabled_ids = control.getStringList('ona.submenu.config')
-
-    for item in TRENDING_ONA_ITEMS:
-        if item[1] in enabled_ids:
-            enabled_trending_ona_items.append(item)
-
-    view_type = 'addons' if control.getBool('interface.content_type') else ''
-    control.draw_items([utils.allocate_item(name, url, True, False, [], image, info) for name, url, image, info in enabled_trending_ona_items], view_type)
-
-
-@Route('trending_music')
-def TRENDING_MUSIC_MENU(payload, params):
-    TRENDING_MUSIC_ITEMS = get_menu_items('trending_music')
-
-    enabled_trending_music_items = []
-
-    # Retrieve the list from your settings list control
-    enabled_ids = control.getStringList('music.submenu.config')
-
-    for item in TRENDING_MUSIC_ITEMS:
-        if item[1] in enabled_ids:
-            enabled_trending_music_items.append(item)
-
-    view_type = 'addons' if control.getBool('interface.content_type') else ''
-    control.draw_items([utils.allocate_item(name, url, True, False, [], image, info) for name, url, image, info in enabled_trending_music_items], view_type)
-
-
-@Route('popular')
-def POPULAR_MENU(payload, params):
-    POPULAR_ITEMS = get_menu_items('popular')
-
-    enabled_popular_items = []
-
-    # Retrieve the list from your settings list control
-    enabled_ids = control.getStringList('menu.submenu.config')
-
-    for item in POPULAR_ITEMS:
-        if item[1] in enabled_ids:
-            enabled_popular_items.append(item)
-
-    view_type = 'addons' if control.getBool('interface.content_type') else ''
-    control.draw_items([utils.allocate_item(name, url, True, False, [], image, info) for name, url, image, info in enabled_popular_items], view_type)
-
-
-@Route('popular_movie')
-def POPULAR_MOVIE_MENU(payload, params):
-    POPULAR_MOVIE_ITEMS = get_menu_items('popular_movie')
-
-    enabled_popular_movie_items = []
-
-    # Retrieve the list from your settings list control
-    enabled_ids = control.getStringList('movie.submenu.config')
-
-    for item in POPULAR_MOVIE_ITEMS:
-        if item[1] in enabled_ids:
-            enabled_popular_movie_items.append(item)
-
-    view_type = 'addons' if control.getBool('interface.content_type') else ''
-    control.draw_items([utils.allocate_item(name, url, True, False, [], image, info) for name, url, image, info in enabled_popular_movie_items], view_type)
-
-
-@Route('popular_tv_show')
-def POPULAR_TV_SHOW_MENU(payload, params):
-    POPULAR_TV_SHOW_ITEMS = get_menu_items('popular_tv_show')
-
-    enabled_popular_tv_show_items = []
-
-    # Retrieve the list from your settings list control
-    enabled_ids = control.getStringList('tv_show.submenu.config')
-
-    for item in POPULAR_TV_SHOW_ITEMS:
-        if item[1] in enabled_ids:
-            enabled_popular_tv_show_items.append(item)
-
-    view_type = 'addons' if control.getBool('interface.content_type') else ''
-    control.draw_items([utils.allocate_item(name, url, True, False, [], image, info) for name, url, image, info in enabled_popular_tv_show_items], view_type)
-
-
-@Route('popular_tv_short')
-def POPULAR_TV_SHORT_MENU(payload, params):
-    POPULAR_TV_SHORT_ITEMS = get_menu_items('popular_tv_short')
-
-    enabled_popular_tv_short_items = []
-
-    # Retrieve the list from your settings list control
-    enabled_ids = control.getStringList('tv_short.submenu.config')
-
-    for item in POPULAR_TV_SHORT_ITEMS:
-        if item[1] in enabled_ids:
-            enabled_popular_tv_short_items.append(item)
-
-    view_type = 'addons' if control.getBool('interface.content_type') else ''
-    control.draw_items([utils.allocate_item(name, url, True, False, [], image, info) for name, url, image, info in enabled_popular_tv_short_items], view_type)
-
-
-@Route('popular_special')
-def POPULAR_SPECIAL_MENU(payload, params):
-    POPULAR_SPECIAL_ITEMS = get_menu_items('popular_special')
-
-    enabled_popular_special_items = []
-
-    # Retrieve the list from your settings list control
-    enabled_ids = control.getStringList('special.submenu.config')
-
-    for item in POPULAR_SPECIAL_ITEMS:
-        if item[1] in enabled_ids:
-            enabled_popular_special_items.append(item)
-
-    view_type = 'addons' if control.getBool('interface.content_type') else ''
-    control.draw_items([utils.allocate_item(name, url, True, False, [], image, info) for name, url, image, info in enabled_popular_special_items], view_type)
-
-
-@Route('popular_ova')
-def POPULAR_OVA_MENU(payload, params):
-    POPULAR_OVA_ITEMS = get_menu_items('popular_ova')
-
-    enabled_popular_ova_items = []
-
-    # Retrieve the list from your settings list control
-    enabled_ids = control.getStringList('ova.submenu.config')
-
-    for item in POPULAR_OVA_ITEMS:
-        if item[1] in enabled_ids:
-            enabled_popular_ova_items.append(item)
-
-    view_type = 'addons' if control.getBool('interface.content_type') else ''
-    control.draw_items([utils.allocate_item(name, url, True, False, [], image, info) for name, url, image, info in enabled_popular_ova_items], view_type)
-
-
-@Route('popular_ona')
-def POPULAR_ONA_MENU(payload, params):
-    POPULAR_ONA_ITEMS = get_menu_items('popular_ona')
-
-    enabled_popular_ona_items = []
-
-    # Retrieve the list from your settings list control
-    enabled_ids = control.getStringList('ona.submenu.config')
-
-    for item in POPULAR_ONA_ITEMS:
-        if item[1] in enabled_ids:
-            enabled_popular_ona_items.append(item)
-
-    view_type = 'addons' if control.getBool('interface.content_type') else ''
-    control.draw_items([utils.allocate_item(name, url, True, False, [], image, info) for name, url, image, info in enabled_popular_ona_items], view_type)
-
-
-@Route('popular_music')
-def POPULAR_MUSIC_MENU(payload, params):
-    POPULAR_MUSIC_ITEMS = get_menu_items('popular_music')
-
-    enabled_popular_music_items = []
-
-    # Retrieve the list from your settings list control
-    enabled_ids = control.getStringList('music.submenu.config')
-
-    for item in POPULAR_MUSIC_ITEMS:
-        if item[1] in enabled_ids:
-            enabled_popular_music_items.append(item)
-
-    view_type = 'addons' if control.getBool('interface.content_type') else ''
-    control.draw_items([utils.allocate_item(name, url, True, False, [], image, info) for name, url, image, info in enabled_popular_music_items], view_type)
-
-
-@Route('voted')
-def VOTED_MENU(payload, params):
-    VOTED_ITEMS = get_menu_items('voted')
-
-    enabled_voted_items = []
-
-    # Retrieve the list from your settings list control
-    enabled_ids = control.getStringList('menu.submenu.config')
-
-    for item in VOTED_ITEMS:
-        if item[1] in enabled_ids:
-            enabled_voted_items.append(item)
-
-    view_type = 'addons' if control.getBool('interface.content_type') else ''
-    control.draw_items([utils.allocate_item(name, url, True, False, [], image, info) for name, url, image, info in enabled_voted_items], view_type)
-
-
-@Route('voted_movie')
-def VOTED_MOVIE_MENU(payload, params):
-    VOTED_MOVIE_ITEMS = get_menu_items('voted_movie')
-
-    enabled_voted_movie_items = []
-
-    # Retrieve the list from your settings list control
-    enabled_ids = control.getStringList('movie.submenu.config')
-
-    for item in VOTED_MOVIE_ITEMS:
-        if item[1] in enabled_ids:
-            enabled_voted_movie_items.append(item)
-
-    view_type = 'addons' if control.getBool('interface.content_type') else ''
-    control.draw_items([utils.allocate_item(name, url, True, False, [], image, info) for name, url, image, info in enabled_voted_movie_items], view_type)
-
-
-@Route('voted_tv_show')
-def VOTED_TV_SHOW_MENU(payload, params):
-    VOTED_TV_SHOW_ITEMS = get_menu_items('voted_tv_show')
-
-    enabled_voted_tv_show_items = []
-
-    # Retrieve the list from your settings list control
-    enabled_ids = control.getStringList('tv_show.submenu.config')
-
-    for item in VOTED_TV_SHOW_ITEMS:
-        if item[1] in enabled_ids:
-            enabled_voted_tv_show_items.append(item)
-
-    view_type = 'addons' if control.getBool('interface.content_type') else ''
-    control.draw_items([utils.allocate_item(name, url, True, False, [], image, info) for name, url, image, info in enabled_voted_tv_show_items], view_type)
-
-
-@Route('voted_tv_short')
-def VOTED_TV_SHORT_MENU(payload, params):
-    VOTED_TV_SHORT_ITEMS = get_menu_items('voted_tv_short')
-
-    enabled_voted_tv_short_items = []
-
-    # Retrieve the list from your settings list control
-    enabled_ids = control.getStringList('tv_short.submenu.config')
-
-    for item in VOTED_TV_SHORT_ITEMS:
-        if item[1] in enabled_ids:
-            enabled_voted_tv_short_items.append(item)
-
-    view_type = 'addons' if control.getBool('interface.content_type') else ''
-    control.draw_items([utils.allocate_item(name, url, True, False, [], image, info) for name, url, image, info in enabled_voted_tv_short_items], view_type)
-
-
-@Route('voted_special')
-def VOTED_SPECIAL_MENU(payload, params):
-    VOTED_SPECIAL_ITEMS = get_menu_items('voted_special')
-
-    enabled_voted_special_items = []
-
-    # Retrieve the list from your settings list control
-    enabled_ids = control.getStringList('special.submenu.config')
-
-    for item in VOTED_SPECIAL_ITEMS:
-        if item[1] in enabled_ids:
-            enabled_voted_special_items.append(item)
-
-    view_type = 'addons' if control.getBool('interface.content_type') else ''
-    control.draw_items([utils.allocate_item(name, url, True, False, [], image, info) for name, url, image, info in enabled_voted_special_items], view_type)
-
-
-@Route('voted_ova')
-def VOTED_OVA_MENU(payload, params):
-    VOTED_OVA_ITEMS = get_menu_items('voted_ova')
-
-    enabled_voted_ova_items = []
-
-    # Retrieve the list from your settings list control
-    enabled_ids = control.getStringList('ova.submenu.config')
-
-    for item in VOTED_OVA_ITEMS:
-        if item[1] in enabled_ids:
-            enabled_voted_ova_items.append(item)
-
-    view_type = 'addons' if control.getBool('interface.content_type') else ''
-    control.draw_items([utils.allocate_item(name, url, True, False, [], image, info) for name, url, image, info in enabled_voted_ova_items], view_type)
-
-
-@Route('voted_ona')
-def VOTED_ONA_MENU(payload, params):
-    VOTED_ONA_ITEMS = get_menu_items('voted_ona')
-
-    enabled_voted_ona_items = []
-
-    # Retrieve the list from your settings list control
-    enabled_ids = control.getStringList('ona.submenu.config')
-
-    for item in VOTED_ONA_ITEMS:
-        if item[1] in enabled_ids:
-            enabled_voted_ona_items.append(item)
-
-    view_type = 'addons' if control.getBool('interface.content_type') else ''
-    control.draw_items([utils.allocate_item(name, url, True, False, [], image, info) for name, url, image, info in enabled_voted_ona_items], view_type)
-
-
-@Route('voted_music')
-def VOTED_MUSIC_MENU(payload, params):
-    VOTED_MUSIC_ITEMS = get_menu_items('voted_music')
-
-    enabled_voted_music_items = []
-
-    # Retrieve the list from your settings list control
-    enabled_ids = control.getStringList('music.submenu.config')
-
-    for item in VOTED_MUSIC_ITEMS:
-        if item[1] in enabled_ids:
-            enabled_voted_music_items.append(item)
-
-    view_type = 'addons' if control.getBool('interface.content_type') else ''
-    control.draw_items([utils.allocate_item(name, url, True, False, [], image, info) for name, url, image, info in enabled_voted_music_items], view_type)
-
-
-@Route('favourites')
-def FAVOURITES_MENU(payload, params):
-    FAVOURITES_ITEMS = get_menu_items('favourites')
-
-    enabled_favourites_items = []
-
-    # Retrieve the list from your settings list control
-    enabled_ids = control.getStringList('menu.submenu.config')
-
-    for item in FAVOURITES_ITEMS:
-        if item[1] in enabled_ids:
-            enabled_favourites_items.append(item)
-
-    view_type = 'addons' if control.getBool('interface.content_type') else ''
-    control.draw_items([utils.allocate_item(name, url, True, False, [], image, info) for name, url, image, info in enabled_favourites_items], view_type)
-
-
-@Route('favourites_movie')
-def FAVOURITES_MOVIE_MENU(payload, params):
-    FAVOURITES_MOVIE_ITEMS = get_menu_items('favourites_movie')
-
-    enabled_favourites_movie_items = []
-
-    # Retrieve the list from your settings list control
-    enabled_ids = control.getStringList('movie.submenu.config')
-
-    for item in FAVOURITES_MOVIE_ITEMS:
-        if item[1] in enabled_ids:
-            enabled_favourites_movie_items.append(item)
-
-    view_type = 'addons' if control.getBool('interface.content_type') else ''
-    control.draw_items([utils.allocate_item(name, url, True, False, [], image, info) for name, url, image, info in enabled_favourites_movie_items], view_type)
-
-
-@Route('favourites_tv_show')
-def FAVOURITES_TV_SHOW_MENU(payload, params):
-    FAVOURITES_TV_SHOW_ITEMS = get_menu_items('favourites_tv_show')
-
-    enabled_favourites_tv_show_items = []
-
-    # Retrieve the list from your settings list control
-    enabled_ids = control.getStringList('tv_show.submenu.config')
-
-    for item in FAVOURITES_TV_SHOW_ITEMS:
-        if item[1] in enabled_ids:
-            enabled_favourites_tv_show_items.append(item)
-
-    view_type = 'addons' if control.getBool('interface.content_type') else ''
-    control.draw_items([utils.allocate_item(name, url, True, False, [], image, info) for name, url, image, info in enabled_favourites_tv_show_items], view_type)
-
-
-@Route('favourites_tv_short')
-def FAVOURITES_TV_SHORT_MENU(payload, params):
-    FAVOURITES_TV_SHORT_ITEMS = get_menu_items('favourites_tv_short')
-
-    enabled_favourites_tv_short_items = []
-
-    # Retrieve the list from your settings list control
-    enabled_ids = control.getStringList('tv_short.submenu.config')
-
-    for item in FAVOURITES_TV_SHORT_ITEMS:
-        if item[1] in enabled_ids:
-            enabled_favourites_tv_short_items.append(item)
-
-    view_type = 'addons' if control.getBool('interface.content_type') else ''
-    control.draw_items([utils.allocate_item(name, url, True, False, [], image, info) for name, url, image, info in enabled_favourites_tv_short_items], view_type)
-
-
-@Route('favourites_special')
-def FAVOURITES_SPECIAL_MENU(payload, params):
-    FAVOURITES_SPECIAL_ITEMS = get_menu_items('favourites_special')
-
-    enabled_favourites_special_items = []
-
-    # Retrieve the list from your settings list control
-    enabled_ids = control.getStringList('special.submenu.config')
-
-    for item in FAVOURITES_SPECIAL_ITEMS:
-        if item[1] in enabled_ids:
-            enabled_favourites_special_items.append(item)
-
-    view_type = 'addons' if control.getBool('interface.content_type') else ''
-    control.draw_items([utils.allocate_item(name, url, True, False, [], image, info) for name, url, image, info in enabled_favourites_special_items], view_type)
-
-
-@Route('favourites_ova')
-def FAVOURITES_OVA_MENU(payload, params):
-    FAVOURITES_OVA_ITEMS = get_menu_items('favourites_ova')
-
-    enabled_favourites_ova_items = []
-
-    # Retrieve the list from your settings list control
-    enabled_ids = control.getStringList('ova.submenu.config')
-
-    for item in FAVOURITES_OVA_ITEMS:
-        if item[1] in enabled_ids:
-            enabled_favourites_ova_items.append(item)
-
-    view_type = 'addons' if control.getBool('interface.content_type') else ''
-    control.draw_items([utils.allocate_item(name, url, True, False, [], image, info) for name, url, image, info in enabled_favourites_ova_items], view_type)
-
-
-@Route('favourites_ona')
-def FAVOURITES_ONA_MENU(payload, params):
-    FAVOURITES_ONA_ITEMS = get_menu_items('favourites_ona')
-
-    enabled_favourites_ona_items = []
-
-    # Retrieve the list from your settings list control
-    enabled_ids = control.getStringList('ona.submenu.config')
-
-    for item in FAVOURITES_ONA_ITEMS:
-        if item[1] in enabled_ids:
-            enabled_favourites_ona_items.append(item)
-
-    view_type = 'addons' if control.getBool('interface.content_type') else ''
-    control.draw_items([utils.allocate_item(name, url, True, False, [], image, info) for name, url, image, info in enabled_favourites_ona_items], view_type)
-
-
-@Route('favourites_music')
-def FAVOURITES_MUSIC_MENU(payload, params):
-    FAVOURITES_MUSIC_ITEMS = get_menu_items('favourites_music')
-
-    enabled_favourites_music_items = []
-
-    # Retrieve the list from your settings list control
-    enabled_ids = control.getStringList('music.submenu.config')
-
-    for item in FAVOURITES_MUSIC_ITEMS:
-        if item[1] in enabled_ids:
-            enabled_favourites_music_items.append(item)
-
-    view_type = 'addons' if control.getBool('interface.content_type') else ''
-    control.draw_items([utils.allocate_item(name, url, True, False, [], image, info) for name, url, image, info in enabled_favourites_music_items], view_type)
-
-
-@Route('genres')
-def GENRES_MENU(payload, params):
-    GENRES_ITEMS = get_menu_items('genres')
-
-    enabled_genres_items = []
-
-    # Retrieve the list from your settings list control
-    enabled_ids = control.getStringList('menu.genres.config')
-
-    for item in GENRES_ITEMS:
-        if item[1] in enabled_ids:
-            enabled_genres_items.append(item)
-
-    view_type = 'addons' if control.getBool('interface.content_type') else ''
-    control.draw_items([utils.allocate_item(name, url, True, False, [], image, info) for name, url, image, info in enabled_genres_items], view_type)
-
-
-@Route('genres_movie')
-def GENRE_MOVIE_MENU(payload, params):
-    GENRE_MOVIE_ITEMS = get_menu_items('genres_movie')
-
-    enabled_genre_movie_items = []
-
-    # Retrieve the list from your settings list control
-    enabled_ids = control.getStringList('movie.genres.config')
-
-    for item in GENRE_MOVIE_ITEMS:
-        if item[1] in enabled_ids:
-            enabled_genre_movie_items.append(item)
-
-    view_type = 'addons' if control.getBool('interface.content_type') else ''
-    control.draw_items([utils.allocate_item(name, url, True, False, [], image, info) for name, url, image, info in enabled_genre_movie_items], view_type)
-
-
-@Route('genres_tv_show')
-def GENRE_TV_SHOW_MENU(payload, params):
-    GENRE_TV_SHOW_ITEMS = get_menu_items('genres_tv_show')
-
-    enabled_genre_tv_show_items = []
-
-    # Retrieve the list from your settings list control
-    enabled_ids = control.getStringList('tv_show.genres.config')
-
-    for item in GENRE_TV_SHOW_ITEMS:
-        if item[1] in enabled_ids:
-            enabled_genre_tv_show_items.append(item)
-
-    view_type = 'addons' if control.getBool('interface.content_type') else ''
-    control.draw_items([utils.allocate_item(name, url, True, False, [], image, info) for name, url, image, info in enabled_genre_tv_show_items], view_type)
-
-
-@Route('genres_tv_short')
-def GENRE_TV_SHORT_MENU(payload, params):
-    GENRE_TV_SHORT_ITEMS = get_menu_items('genres_tv_short')
-
-    enabled_genre_tv_short_items = []
-
-    # Retrieve the list from your settings list control
-    enabled_ids = control.getStringList('tv_short.genres.config')
-
-    for item in GENRE_TV_SHORT_ITEMS:
-        if item[1] in enabled_ids:
-            enabled_genre_tv_short_items.append(item)
-
-    view_type = 'addons' if control.getBool('interface.content_type') else ''
-    control.draw_items([utils.allocate_item(name, url, True, False, [], image, info) for name, url, image, info in enabled_genre_tv_short_items], view_type)
-
-
-@Route('genres_special')
-def GENRE_SPECIAL_MENU(payload, params):
-    GENRE_SPECIAL_ITEMS = get_menu_items('genres_special')
-
-    enabled_genre_special_items = []
-
-    # Retrieve the list from your settings list control
-    enabled_ids = control.getStringList('special.genres.config')
-
-    for item in GENRE_SPECIAL_ITEMS:
-        if item[1] in enabled_ids:
-            enabled_genre_special_items.append(item)
-
-    view_type = 'addons' if control.getBool('interface.content_type') else ''
-    control.draw_items([utils.allocate_item(name, url, True, False, [], image, info) for name, url, image, info in enabled_genre_special_items], view_type)
-
-
-@Route('genres_ova')
-def GENRE_OVA_MENU(payload, params):
-    GENRE_OVA_ITEMS = get_menu_items('genres_ova')
-
-    enabled_genre_ova_items = []
-
-    # Retrieve the list from your settings list control
-    enabled_ids = control.getStringList('ova.genres.config')
-
-    for item in GENRE_OVA_ITEMS:
-        if item[1] in enabled_ids:
-            enabled_genre_ova_items.append(item)
-
-    view_type = 'addons' if control.getBool('interface.content_type') else ''
-    control.draw_items([utils.allocate_item(name, url, True, False, [], image, info) for name, url, image, info in enabled_genre_ova_items], view_type)
-
-
-@Route('genres_ona')
-def GENRE_ONA_MENU(payload, params):
-    GENRE_ONA_ITEMS = get_menu_items('genres_ona')
-
-    enabled_genre_ona_items = []
-
-    # Retrieve the list from your settings list control
-    enabled_ids = control.getStringList('ona.genres.config')
-
-    for item in GENRE_ONA_ITEMS:
-        if item[1] in enabled_ids:
-            enabled_genre_ona_items.append(item)
-
-    view_type = 'addons' if control.getBool('interface.content_type') else ''
-    control.draw_items([utils.allocate_item(name, url, True, False, [], image, info) for name, url, image, info in enabled_genre_ona_items], view_type)
-
-
-@Route('genres_music')
-def GENRE_MUSIC_MENU(payload, params):
-    GENRE_MUSIC_ITEMS = get_menu_items('genres_music')
-
-    enabled_genre_music_items = []
-
-    # Retrieve the list from your settings list control
-    enabled_ids = control.getStringList('music.genres.config')
-
-    for item in GENRE_MUSIC_ITEMS:
-        if item[1] in enabled_ids:
-            enabled_genre_music_items.append(item)
-
-    view_type = 'addons' if control.getBool('interface.content_type') else ''
-    control.draw_items([utils.allocate_item(name, url, True, False, [], image, info) for name, url, image, info in enabled_genre_music_items], view_type)
+    control.draw_items(
+        [utils.allocate_item(name, url, True, False, [], image, info) for name, url, image, info in enabled],
+        view_type,
+    )
+
+
+# --- UI route registration (main menu + filtered submenus) --------------------
+# (url route, handler __name__, menu key, settings id, last_watched suffix, refresh log message)
+_CATEGORY_MAIN_MENU_ROUTES = (
+    ('', 'LIST_MENU', 'main', 'menu.mainmenu.config', '', 'Menu refresh flag detected - rebuilding menu items'),
+    ('movies', 'MOVIES_MENU', 'movies', 'movie.mainmenu.config', '_movie', 'Movie menu refresh flag detected - rebuilding menu items'),
+    ('tv_shows', 'TV_SHOWS_MENU', 'tv_shows', 'tv_show.mainmenu.config', '_tv_show', 'TV shows menu refresh flag detected - rebuilding menu items'),
+    ('tv_shorts', 'TV_SHORTS_MENU', 'tv_shorts', 'tv_short.mainmenu.config', '_tv_short', 'TV shorts menu refresh flag detected - rebuilding menu items'),
+    ('specials', 'SPECIALS_MENU', 'specials', 'special.mainmenu.config', '_special', 'Specials menu refresh flag detected - rebuilding menu items'),
+    ('ovas', 'OVAS_MENU', 'ovas', 'ova.mainmenu.config', '_ova', 'OVAs menu refresh flag detected - rebuilding menu items'),
+    ('onas', 'ONAS_MENU', 'onas', 'ona.mainmenu.config', '_ona', 'ONAs menu refresh flag detected - rebuilding menu items'),
+    ('music', 'MUSIC_MENU', 'music', 'music.mainmenu.config', '_music', 'Music menu refresh flag detected - rebuilding menu items'),
+)
+
+_FILTERED_SUBMENU_ROUTES = (
+    ('trending', 'TRENDING_MENU', 'trending', 'menu.submenu.config'),
+    ('trending_movie', 'TRENDING_MOVIE_MENU', 'trending_movie', 'movie.submenu.config'),
+    ('trending_tv_show', 'TRENDING_TV_SHOW_MENU', 'trending_tv_show', 'tv_show.submenu.config'),
+    ('trending_tv_short', 'TRENDING_TV_SHORT_MENU', 'trending_tv_short', 'tv_short.submenu.config'),
+    ('trending_special', 'TRENDING_SPECIAL_MENU', 'trending_special', 'special.submenu.config'),
+    ('trending_ova', 'TRENDING_OVA_MENU', 'trending_ova', 'ova.submenu.config'),
+    ('trending_ona', 'TRENDING_ONA_MENU', 'trending_ona', 'ona.submenu.config'),
+    ('trending_music', 'TRENDING_MUSIC_MENU', 'trending_music', 'music.submenu.config'),
+    ('popular', 'POPULAR_MENU', 'popular', 'menu.submenu.config'),
+    ('popular_movie', 'POPULAR_MOVIE_MENU', 'popular_movie', 'movie.submenu.config'),
+    ('popular_tv_show', 'POPULAR_TV_SHOW_MENU', 'popular_tv_show', 'tv_show.submenu.config'),
+    ('popular_tv_short', 'POPULAR_TV_SHORT_MENU', 'popular_tv_short', 'tv_short.submenu.config'),
+    ('popular_special', 'POPULAR_SPECIAL_MENU', 'popular_special', 'special.submenu.config'),
+    ('popular_ova', 'POPULAR_OVA_MENU', 'popular_ova', 'ova.submenu.config'),
+    ('popular_ona', 'POPULAR_ONA_MENU', 'popular_ona', 'ona.submenu.config'),
+    ('popular_music', 'POPULAR_MUSIC_MENU', 'popular_music', 'music.submenu.config'),
+    ('voted', 'VOTED_MENU', 'voted', 'menu.submenu.config'),
+    ('voted_movie', 'VOTED_MOVIE_MENU', 'voted_movie', 'movie.submenu.config'),
+    ('voted_tv_show', 'VOTED_TV_SHOW_MENU', 'voted_tv_show', 'tv_show.submenu.config'),
+    ('voted_tv_short', 'VOTED_TV_SHORT_MENU', 'voted_tv_short', 'tv_short.submenu.config'),
+    ('voted_special', 'VOTED_SPECIAL_MENU', 'voted_special', 'special.submenu.config'),
+    ('voted_ova', 'VOTED_OVA_MENU', 'voted_ova', 'ova.submenu.config'),
+    ('voted_ona', 'VOTED_ONA_MENU', 'voted_ona', 'ona.submenu.config'),
+    ('voted_music', 'VOTED_MUSIC_MENU', 'voted_music', 'music.submenu.config'),
+    ('favourites', 'FAVOURITES_MENU', 'favourites', 'menu.submenu.config'),
+    ('favourites_movie', 'FAVOURITES_MOVIE_MENU', 'favourites_movie', 'movie.submenu.config'),
+    ('favourites_tv_show', 'FAVOURITES_TV_SHOW_MENU', 'favourites_tv_show', 'tv_show.submenu.config'),
+    ('favourites_tv_short', 'FAVOURITES_TV_SHORT_MENU', 'favourites_tv_short', 'tv_short.submenu.config'),
+    ('favourites_special', 'FAVOURITES_SPECIAL_MENU', 'favourites_special', 'special.submenu.config'),
+    ('favourites_ova', 'FAVOURITES_OVA_MENU', 'favourites_ova', 'ova.submenu.config'),
+    ('favourites_ona', 'FAVOURITES_ONA_MENU', 'favourites_ona', 'ona.submenu.config'),
+    ('favourites_music', 'FAVOURITES_MUSIC_MENU', 'favourites_music', 'music.submenu.config'),
+    ('genres', 'GENRES_MENU', 'genres', 'menu.genres.config'),
+    ('genres_movie', 'GENRE_MOVIE_MENU', 'genres_movie', 'movie.genres.config'),
+    ('genres_tv_show', 'GENRE_TV_SHOW_MENU', 'genres_tv_show', 'tv_show.genres.config'),
+    ('genres_tv_short', 'GENRE_TV_SHORT_MENU', 'genres_tv_short', 'tv_short.genres.config'),
+    ('genres_special', 'GENRE_SPECIAL_MENU', 'genres_special', 'special.genres.config'),
+    ('genres_ova', 'GENRE_OVA_MENU', 'genres_ova', 'ova.genres.config'),
+    ('genres_ona', 'GENRE_ONA_MENU', 'genres_ona', 'ona.genres.config'),
+    ('genres_music', 'GENRE_MUSIC_MENU', 'genres_music', 'music.genres.config'),
+)
+
+
+def _register_ui_menu_routes():
+    """Wire LIST_MENU / submenus; exposes Main.LIST_MENU etc. for compatibility."""
+    mod = sys.modules[__name__]
+    for route, fname, mkey, cfg, suf, log in _CATEGORY_MAIN_MENU_ROUTES:
+        def cat_handler(payload, params, mk=mkey, sk=cfg, sx=suf, lg=log):
+            _draw_category_main_menu(mk, sk, sx, lg)
+        cat_handler.__name__ = fname
+        cat_handler.__qualname__ = fname
+        setattr(mod, fname, cat_handler)
+        Route(route)(cat_handler)
+
+    for route, fname, mkey, cfg in _FILTERED_SUBMENU_ROUTES:
+        def sub_handler(payload, params, mk=mkey, sk=cfg):
+            _draw_filtered_submenu(mk, sk)
+        sub_handler.__name__ = fname
+        sub_handler.__qualname__ = fname
+        setattr(mod, fname, sub_handler)
+        Route(route)(sub_handler)
+
+
+_register_ui_menu_routes()
 
 
 @Route('search')
@@ -4211,29 +1866,9 @@ def CLEAR_CACHE(payload, params):
     database.cache_clear()
 
 
-@Route('clear_search_history')
-@Route('clear_search_history_anime')
-@Route('clear_search_history_movie')
-@Route('clear_search_history_tv_show')
-@Route('clear_search_history_tv_short')
-@Route('clear_search_history_special')
-@Route('clear_search_history_ova')
-@Route('clear_search_history_ona')
-@Route('clear_search_history_music')
+@multi_route(*_CLEAR_SEARCH_HISTORY_ROUTES)
 def CLEAR_SEARCH_HISTORY(payload, params):
-    mapping = {
-        'clear_search_history': 'all',
-        'clear_search_history_anime': 'anime',
-        'clear_search_history_movie': 'movie',
-        'clear_search_history_tv_show': 'tv_show',
-        'clear_search_history_tv_short': 'tv_short',
-        'clear_search_history_special': 'special',
-        'clear_search_history_ova': 'ova',
-        'clear_search_history_ona': 'ona',
-        'clear_search_history_music': 'music'
-    }
-
-    format = mapping.get(plugin_url)
+    format = _CLEAR_SEARCH_HISTORY_MAP.get(plugin_url)
 
     if format == 'all':
         database.clearSearchHistory()

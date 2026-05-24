@@ -158,6 +158,18 @@ def prefetch_watchlist():
         control.log(f'### Watchlist prefetch failed: {e}', 'warning')
 
 
+def prefetch_calendar():
+    """Warm AnimeSchedule cache in background at Kodi startup."""
+    try:
+        from resources.lib.AnimeSchedule import AnimeScheduleCalendar
+        control.log('### Prefetching airing calendar cache')
+        scheduler = AnimeScheduleCalendar()
+        scheduler.get_calendar_data(types=['sub', 'dub', 'raw'])
+        control.log('### Airing calendar prefetch complete')
+    except Exception as e:
+        control.log(f'### Calendar prefetch failed: {e}', 'warning')
+
+
 def update_dub_json():
     control.log("### Updating Dub json")
     with open(control.maldubFile, 'w') as file:
@@ -321,6 +333,8 @@ if __name__ == "__main__":
             control.setInt('update.time.1', int(time.time()))
     # Prefetch watchlist in background thread (non-blocking)
     threading.Thread(target=prefetch_watchlist, daemon=True).start()
+    # Prefetch airing calendar in background thread (non-blocking)
+    threading.Thread(target=prefetch_calendar, daemon=True).start()
     control.log('##################  MAINTENANCE COMPLETE ######################')
     if control.getBool('general.kodi.cache'):
         Monitor().waitForAbort()

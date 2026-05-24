@@ -1,32 +1,39 @@
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
+from functools import partial
 
-from resources.lib.pages import nyaa, animetosho, nekobt, torrentio, debrid_cloudfiles, animixplay, aniwave, animepahe, hianime, animekai, watchnixtoons2, localfiles
+from resources.lib.pages import nyaa, animetosho, nekobt, torrentio, debrid_cloudfiles, easynews, animepahe, anikoto, watchnixtoons2, localfiles
 from resources.lib.ui import control, database
 from resources.lib.windows.get_sources_window import GetSources
 from resources.lib.windows import sort_select
 
 
-# Filter structure for source filtering UI (similar to Seren)
-INFO_STRUCT = {
-    "videocodec": {
-        "AVC", "HEVC", "XVID", "DIVX", "WMV", "MP4", "MPEG", "VP9", "AV1",
-    },
-    "hdrcodec": {
-        "DV", "HDR", "HYBRID", "SDR",
-    },
-    "audiocodec": {
-        "AAC", "DTS", "DTS-HDMA", "DTS-HDHR", "DTS-X", "ATMOS", "TRUEHD",
-        "DD+", "DD", "MP3", "WMA", "OPUS",
-    },
-    "audiochannels": {
-        "2.0", "5.1", "7.1",
-    },
-    "misc": {
-        "CAM", "HDTV", "PDTV", "REMUX", "HDRIP", "BLURAY", "DVDRIP", "WEB",
-        "HC", "SCR", "3D", "60-FPS", "BATCH"
-    },
+# (python_module, database.get cache key) — provider ids = dict keys below (insertion order)
+_TORRENT_MODULES = {
+    'nyaa': (nyaa, 'nyaa'),
+    'animetosho': (animetosho, 'animetosho'),
+    'nekobt': (nekobt, 'nekobt'),
+    'torrentio': (torrentio, 'torrentio'),
 }
+
+# (module, cache_key, enabled_fn, merge_mode) — provider ids = dict keys below
+# merge_mode: 'torrent_full' (cached+uncached → torrent lists) | 'cached_only' (cached only → hosterSources)
+_HOSTER_MODULES = {
+    'easynews': (easynews, 'easynews', control.easynews_enabled, 'cached_only'),
+}
+
+# (provider_id, module, database.get key, skip window prefix or None, pass_media_type)
+# skip prefix drives _apply_embed_skip (aniwave / hianime / animekai)
+_EMBED_MODULES = (
+    ('animepahe', animepahe, 'animepahe', None, False),
+    # ('animix', animixplay, 'animix', None, False),
+    # ('aniwave', aniwave, 'aniwave', 'aniwave', False),
+    # ('hianime', hianime, 'hianime', 'hianime', False),
+    # ('animekai', animekai, 'animekai', 'animekai', False),
+    ('anikoto', anikoto, 'anikoto', 'anikoto', False),
+    ('watchnixtoons2', watchnixtoons2, 'watchnixtoons2', None, True),
+)
 
 
 def getSourcesHelper(actionArgs):
@@ -34,20 +41,23 @@ def getSourcesHelper(actionArgs):
         sources_window = Sources('get_sources_alt.xml', control.ADDON_PATH, actionArgs=actionArgs)
     else:
         sources_window = Sources('get_sources.xml', control.ADDON_PATH, actionArgs=actionArgs)
-    sources = sources_window.doModal()
-    return sources
+    return sources_window.doModal()
 
 
 class Sources(GetSources):
     def __init__(self, xml_file, location, actionArgs=None):
-        super(Sources, self).__init__(xml_file, location, actionArgs)
-        self.torrentProviders = ['nyaa', 'animetosho', 'nekobt', 'torrentio']
-        self.embedProviders = ['animepahe', 'animix', 'aniwave', 'hianime', 'animekai', 'watchnixtoons2']
+        super(Sources, self).__init__(xml_file, location, actionArgs=actionArgs)
+        self.torrentProviders = [row[0] for row in _TORRENT_MODULES.items()]
+        self.embedProviders = [row[0] for row in _EMBED_MODULES]
+        self.hosterProviders = [row[0] for row in _HOSTER_MODULES.items()]
         self.CloudProviders = ['Cloud Inspection']
         self.localProviders = ['Local Inspection']
-        self.remainingProviders = self.embedProviders + self.torrentProviders + self.localProviders + self.CloudProviders
+        self.remainingProviders = (
+            self.embedProviders + self.torrentProviders + self.hosterProviders + self.localProviders + self.CloudProviders
+        )
 
         self.torrents_qual_len = [0, 0, 0, 0, 0]
+        self.hosters_qual_len = [0, 0, 0, 0, 0]
         self.embeds_qual_len = [0, 0, 0, 0, 0]
         self.return_data = []
         self.progress = 1
@@ -56,9 +66,16 @@ class Sources(GetSources):
         self.torrentSources = []
         self.torrentCacheSources = []
         self.torrentUnCacheSources = []
+        self.hosterSources = []
         self.embedSources = []
         self.cloud_files = []
         self.local_files = []
+
+    @staticmethod
+    def _start_worker(fn):
+        t = threading.Thread(target=fn)
+        t.start()
+        return t
 
     def getSources(self, args):
         query = args['query']
@@ -70,133 +87,55 @@ class Sources(GetSources):
         rescrape = args['rescrape']
         season = args.get('season')
         part = args.get('part')
-        # source_select = args['source_select']
 
         self.setProperty('process_started', 'true')
 
-        # set skipintro times to -1 before scraping
-        control.setInt('hianime.skipintro.start', -1)
-        control.setInt('hianime.skipintro.end', -1)
-        control.setInt('aniwave.skipintro.start', -1)
-        control.setInt('aniwave.skipintro.end', -1)
-        control.setInt('animekai.skipintro.start', -1)
-        control.setInt('animekai.skipintro.end', -1)
-
-        # set skipoutro times to -1 before scraping
-        control.setInt('hianime.skipoutro.start', -1)
-        control.setInt('hianime.skipoutro.end', -1)
-        control.setInt('aniwave.skipoutro.start', -1)
-        control.setInt('aniwave.skipoutro.end', -1)
-        control.setInt('animekai.skipoutro.start', -1)
-        control.setInt('animekai.skipoutro.end', -1)
+        for prefix in ('hianime', 'aniwave', 'animekai', 'anikoto'):
+            for key in ('skipintro.start', 'skipintro.end', 'skipoutro.start', 'skipoutro.end'):
+                control.setInt(f'{prefix}.{key}', -1)
 
         enabled_debrids = control.enabled_debrid()
         enabled_clouds = control.enabled_cloud()
-
-        # Activate cloud inspection only if the same debrid service is enabled for both
         common_debrids = [
             service for service, is_enabled in enabled_debrids.items()
             if is_enabled and enabled_clouds.get(service, False)
         ]
 
-        if any(enabled_debrids.values()):
-            if control.getBool('provider.nyaa'):
-                t = threading.Thread(target=self.nyaa_worker, args=(query, mal_id, episode, status, media_type, rescrape, season, part))
-                t.start()
-                self.threads.append(t)
-            else:
-                self.remainingProviders.remove('nyaa')
+        debrid_on = any(enabled_debrids.values())
+        t_args = (query, mal_id, episode, status, media_type, rescrape, season, part)
 
-            if control.getBool('provider.animetosho'):
-                t = threading.Thread(target=self.animetosho_worker, args=(query, mal_id, episode, status, media_type, rescrape, season, part))
-                t.start()
-                self.threads.append(t)
+        for provider in self.torrentProviders:
+            if debrid_on and control.getBool(f'provider.{provider}'):
+                self.threads.append(self._start_worker(partial(self._torrent_sources_worker, provider, *t_args)))
             else:
-                self.remainingProviders.remove('animetosho')
-
-            if control.getBool('provider.nekobt'):
-                t = threading.Thread(target=self.nekobt_worker, args=(query, mal_id, episode, status, media_type, rescrape, season, part))
-                t.start()
-                self.threads.append(t)
-            else:
-                self.remainingProviders.remove('nekobt')
-
-            if control.getBool('provider.torrentio'):
-                t = threading.Thread(target=self.torrentio_worker, args=(query, mal_id, episode, status, media_type, rescrape, season, part))
-                t.start()
-                self.threads.append(t)
-            else:
-                self.remainingProviders.remove('torrentio')
-
-        else:
-            for provider in self.torrentProviders:
                 self.remainingProviders.remove(provider)
 
-        # cloud #
+        for hoster in self.hosterProviders:
+            spec = _HOSTER_MODULES.get(hoster)
+            if spec and spec[2]():
+                self.threads.append(self._start_worker(partial(self._hoster_sources_worker, hoster, *t_args)))
+            else:
+                self.remainingProviders.remove(hoster)
+
         if common_debrids:
-            t = threading.Thread(target=self.user_cloud_inspection, args=(query, mal_id, episode, season))
-            t.start()
-            self.threads.append(t)
+            self.threads.append(self._start_worker(partial(self.user_cloud_inspection, query, mal_id, episode, season)))
         else:
             self.remainingProviders.remove('Cloud Inspection')
 
-        # local #
         if control.getBool('provider.localfiles'):
-            t = threading.Thread(target=self.user_local_inspection, args=(query, mal_id, episode, season))
-            t.start()
-            self.threads.append(t)
+            self.threads.append(self._start_worker(partial(self.user_local_inspection, query, mal_id, episode, season)))
         else:
             self.remainingProviders.remove('Local Inspection')
 
-        # embeds #
-        if control.getBool('provider.animepahe'):
-            t = threading.Thread(target=self.animepahe_worker, args=(mal_id, episode, rescrape))
-            t.start()
-            self.threads.append(t)
-        else:
-            self.remainingProviders.remove('animepahe')
-
-        if control.getBool('provider.animix'):
-            t = threading.Thread(target=self.animix_worker, args=(mal_id, episode, rescrape))
-            t.start()
-            self.threads.append(t)
-        else:
-            self.remainingProviders.remove('animix')
-
-        if control.getBool('provider.aniwave'):
-            t = threading.Thread(target=self.aniwave_worker, args=(mal_id, episode, rescrape))
-            t.start()
-            self.threads.append(t)
-        else:
-            self.remainingProviders.remove('aniwave')
-
-        # if control.getBool('provider.gogo'):
-        #     t = threading.Thread(target=self.gogo_worker, args=(mal_id, episode, rescrape))
-        #     t.start()
-        #     self.threads.append(t)
-        # else:
-        #     self.remainingProviders.remove('gogo')
-
-        if control.getBool('provider.hianime'):
-            t = threading.Thread(target=self.hianime_worker, args=(mal_id, episode, rescrape))
-            t.start()
-            self.threads.append(t)
-        else:
-            self.remainingProviders.remove('hianime')
-
-        if control.getBool('provider.animekai'):
-            t = threading.Thread(target=self.animekai_worker, args=(mal_id, episode, rescrape))
-            t.start()
-            self.threads.append(t)
-        else:
-            self.remainingProviders.remove('animekai')
-
-        if control.getBool('provider.watchnixtoons2'):
-            t = threading.Thread(target=self.watchnixtoons2_worker, args=(mal_id, episode, media_type, rescrape))
-            t.start()
-            self.threads.append(t)
-        else:
-            self.remainingProviders.remove('watchnixtoons2')
+        for pid, mod, cache_key, skip_prefix, needs_media_type in _EMBED_MODULES:
+            if control.getBool(f'provider.{pid}'):
+                self.threads.append(self._start_worker(partial(
+                    self._embed_sources_worker,
+                    pid, mod, cache_key, skip_prefix, needs_media_type,
+                    mal_id, episode, media_type, rescrape,
+                )))
+            else:
+                self.remainingProviders.remove(pid)
 
         timeout = 60 if rescrape else control.getInt('general.timeout')
         start_time = time.perf_counter()
@@ -206,11 +145,11 @@ class Sources(GetSources):
             if not self.silent:
                 self.updateProgress()
                 self.update_properties("4K: %s | 1080: %s | 720: %s | SD: %s| EQ: %s" % (
-                    control.colorstr(self.torrents_qual_len[0] + self.embeds_qual_len[0]),
-                    control.colorstr(self.torrents_qual_len[1] + self.embeds_qual_len[1]),
-                    control.colorstr(self.torrents_qual_len[2] + self.embeds_qual_len[2]),
-                    control.colorstr(self.torrents_qual_len[3] + self.embeds_qual_len[3]),
-                    control.colorstr(self.torrents_qual_len[4] + self.embeds_qual_len[4])
+                    control.colorstr(self.torrents_qual_len[0] + self.hosters_qual_len[0] + self.embeds_qual_len[0]),
+                    control.colorstr(self.torrents_qual_len[1] + self.hosters_qual_len[1] + self.embeds_qual_len[1]),
+                    control.colorstr(self.torrents_qual_len[2] + self.hosters_qual_len[2] + self.embeds_qual_len[2]),
+                    control.colorstr(self.torrents_qual_len[3] + self.hosters_qual_len[3] + self.embeds_qual_len[3]),
+                    control.colorstr(self.torrents_qual_len[4] + self.hosters_qual_len[4] + self.embeds_qual_len[4])
                 ))
             control.sleep(500)
 
@@ -225,152 +164,63 @@ class Sources(GetSources):
             runtime = time.perf_counter() - start_time
             self.progress = runtime / timeout * 100
 
-        if len(self.torrentSources) + len(self.embedSources) + len(self.cloud_files) + len(self.local_files) == 0:
+        if len(self.torrentSources) + len(self.hosterSources) + len(self.embedSources) + len(self.cloud_files) + len(self.local_files) == 0:
             self.return_data = []
         else:
-            self.return_data = self.sortSources(self.torrentSources, self.embedSources, self.cloud_files, self.local_files, media_type, duration)
+            self.return_data = self.sortSources(self.torrentSources, self.hosterSources, self.embedSources, self.cloud_files, self.local_files, media_type, duration)
         self.close()
         return self.return_data
 
-    # Torrents #
-    def nyaa_worker(self, query, mal_id, episode, status, media_type, rescrape, season, part):
+    def _torrent_sources_worker(self, provider, query, mal_id, episode, status, media_type, rescrape, season, part):
+        mod, cache_key = _TORRENT_MODULES[provider]
+        get_sources = mod.Sources().get_sources
+        call_args = (query, mal_id, episode, status, media_type, season, part)
         if rescrape:
-            all_sources = nyaa.Sources().get_sources(query, mal_id, episode, status, media_type, season, part)
+            all_sources = get_sources(*call_args)
         else:
-            all_sources = database.get(nyaa.Sources().get_sources, 8, query, mal_id, episode, status, media_type, season, part, key='nyaa')
-
-        # Defensive check to ensure all_sources is not None
+            all_sources = database.get(get_sources, 8, *call_args, key=cache_key)
         if all_sources is None:
             all_sources = {'cached': [], 'uncached': []}
-
         self.torrentUnCacheSources += all_sources['uncached']
         self.torrentCacheSources += all_sources['cached']
         self.torrentSources += all_sources['cached'] + all_sources['uncached']
-        self.remainingProviders.remove('nyaa')
+        self.remainingProviders.remove(provider)
 
-    def animetosho_worker(self, query, mal_id, episode, status, media_type, rescrape, season, part):
+    def _hoster_sources_worker(self, hoster, query, mal_id, episode, status, media_type, rescrape, season, part):
+        mod, cache_key, _, merge_mode = _HOSTER_MODULES[hoster]
+        get_sources = mod.Sources().get_sources
+        call_args = (query, mal_id, episode, status, media_type, season, part)
         if rescrape:
-            all_sources = animetosho.Sources().get_sources(query, mal_id, episode, status, media_type, season, part)
+            all_sources = get_sources(*call_args)
         else:
-            all_sources = database.get(animetosho.Sources().get_sources, 8, query, mal_id, episode, status, media_type, season, part, key='animetosho')
-
-        # Defensive check to ensure all_sources is not None
+            all_sources = database.get(get_sources, 8, *call_args, key=cache_key)
         if all_sources is None:
             all_sources = {'cached': [], 'uncached': []}
-
-        self.torrentUnCacheSources += all_sources['uncached']
-        self.torrentCacheSources += all_sources['cached']
-        self.torrentSources += all_sources['cached'] + all_sources['uncached']
-        self.remainingProviders.remove('animetosho')
-
-    def nekobt_worker(self, query, mal_id, episode, status, media_type, rescrape, season, part):
-        if rescrape:
-            all_sources = nekobt.Sources().get_sources(query, mal_id, episode, status, media_type, season, part)
+        if merge_mode == 'cached_only':
+            self.hosterSources += all_sources['cached']
         else:
-            all_sources = database.get(nekobt.Sources().get_sources, 8, query, mal_id, episode, status, media_type, season, part, key='nekobt')
+            self.torrentUnCacheSources += all_sources['uncached']
+            self.torrentCacheSources += all_sources['cached']
+            self.torrentSources += all_sources['cached'] + all_sources['uncached']
+        self.remainingProviders.remove(hoster)
 
-        # Defensive check to ensure all_sources is not None
-        if all_sources is None:
-            all_sources = {'cached': [], 'uncached': []}
-
-        self.torrentUnCacheSources += all_sources['uncached']
-        self.torrentCacheSources += all_sources['cached']
-        self.torrentSources += all_sources['cached'] + all_sources['uncached']
-        self.remainingProviders.remove('nekobt')
-
-    def torrentio_worker(self, query, mal_id, episode, status, media_type, rescrape, season, part):
-        if rescrape:
-            all_sources = torrentio.Sources().get_sources(query, mal_id, episode, status, media_type, season, part)
+    def _embed_sources_worker(self, pid, mod, cache_key, skip_prefix, needs_media_type, mal_id, episode, media_type, rescrape):
+        get_sources = mod.Sources().get_sources
+        if needs_media_type:
+            if rescrape:
+                src = get_sources(mal_id, episode, media_type)
+            else:
+                src = database.get(get_sources, 8, mal_id, episode, media_type, key=cache_key)
         else:
-            all_sources = database.get(torrentio.Sources().get_sources, 8, query, mal_id, episode, status, media_type, season, part, key='torrentio')
+            if rescrape:
+                src = get_sources(mal_id, episode)
+            else:
+                src = database.get(get_sources, 8, mal_id, episode, key=cache_key)
+        self.embedSources += src
+        if skip_prefix:
+            self._apply_embed_skip(skip_prefix, src)
+        self.remainingProviders.remove(pid)
 
-        # Defensive check to ensure all_sources is not None
-        if all_sources is None:
-            all_sources = {'cached': [], 'uncached': []}
-
-        self.torrentUnCacheSources += all_sources['uncached']
-        self.torrentCacheSources += all_sources['cached']
-        self.torrentSources += all_sources['cached'] + all_sources['uncached']
-        self.remainingProviders.remove('torrentio')
-
-    # embeds #
-    def animepahe_worker(self, mal_id, episode, rescrape):
-        if rescrape:
-            self.embedSources += animepahe.Sources().get_sources(mal_id, episode)
-        else:
-            self.embedSources += database.get(animepahe.Sources().get_sources, 8, mal_id, episode, key='animepahe')
-        self.remainingProviders.remove('animepahe')
-
-    def animix_worker(self, mal_id, episode, rescrape):
-        if rescrape:
-            self.embedSources += animixplay.Sources().get_sources(mal_id, episode)
-        else:
-            self.embedSources += database.get(animixplay.Sources().get_sources, 8, mal_id, episode, key='animix')
-        self.remainingProviders.remove('animix')
-
-    def aniwave_worker(self, mal_id, episode, rescrape):
-        if rescrape:
-            aniwave_sources = aniwave.Sources().get_sources(mal_id, episode)
-        else:
-            aniwave_sources = database.get(aniwave.Sources().get_sources, 8, mal_id, episode, key='aniwave')
-        self.embedSources += aniwave_sources
-        for x in aniwave_sources:
-            if x.get('skip'):
-                if x['skip'].get('intro') and x['skip']['intro']['start'] != 0:
-                    control.setInt('aniwave.skipintro.start', int(x['skip']['intro']['start']))
-                    control.setInt('aniwave.skipintro.end', int(x['skip']['intro']['end']))
-                if x['skip'].get('outro') and x['skip']['outro']['start'] != 0:
-                    control.setInt('aniwave.skipoutro.start', int(x['skip']['outro']['start']))
-                    control.setInt('aniwave.skipoutro.end', int(x['skip']['outro']['end']))
-        self.remainingProviders.remove('aniwave')
-
-    # def gogo_worker(self, mal_id, episode, rescrape):
-    #     if rescrape:
-    #         self.embedSources += gogoanime.Sources().get_sources(mal_id, episode)
-    #     else:
-    #         self.embedSources += database.get(gogoanime.Sources().get_sources, 8, mal_id, episode, key='gogoanime')
-    #     self.remainingProviders.remove('gogo')
-
-    def hianime_worker(self, mal_id, episode, rescrape):
-        if rescrape:
-            hianime_sources = hianime.Sources().get_sources(mal_id, episode)
-        else:
-            hianime_sources = database.get(hianime.Sources().get_sources, 8, mal_id, episode, key='hianime')
-        self.embedSources += hianime_sources
-        for x in hianime_sources:
-            if x.get('skip'):
-                if x['skip'].get('intro') and x['skip']['intro']['start'] != 0:
-                    control.setInt('hianime.skipintro.start', int(x['skip']['intro']['start']))
-                    control.setInt('hianime.skipintro.end', int(x['skip']['intro']['end']))
-                if x['skip'].get('outro') and x['skip']['outro']['start'] != 0:
-                    control.setInt('hianime.skipoutro.start', int(x['skip']['outro']['start']))
-                    control.setInt('hianime.skipoutro.end', int(x['skip']['outro']['end']))
-        self.remainingProviders.remove('hianime')
-
-    def animekai_worker(self, mal_id, episode, rescrape):
-        if rescrape:
-            animekai_sources = animekai.Sources().get_sources(mal_id, episode)
-        else:
-            animekai_sources = database.get(animekai.Sources().get_sources, 8, mal_id, episode, key='animekai')
-        self.embedSources += animekai_sources
-        for x in animekai_sources:
-            if x.get('skip'):
-                if x['skip'].get('intro') and x['skip']['intro']['start'] != 0:
-                    control.setInt('animekai.skipintro.start', int(x['skip']['intro']['start']))
-                    control.setInt('animekai.skipintro.end', int(x['skip']['intro']['end']))
-                if x['skip'].get('outro') and x['skip']['outro']['start'] != 0:
-                    control.setInt('animekai.skipoutro.start', int(x['skip']['outro']['start']))
-                    control.setInt('animekai.skipoutro.end', int(x['skip']['outro']['end']))
-        self.remainingProviders.remove('animekai')
-
-    def watchnixtoons2_worker(self, mal_id, episode, media_type, rescrape):
-        if rescrape:
-            self.embedSources += watchnixtoons2.Sources().get_sources(mal_id, episode, media_type)
-        else:
-            self.embedSources += database.get(watchnixtoons2.Sources().get_sources, 8, mal_id, episode, media_type, key='watchnixtoons2')
-        self.remainingProviders.remove('watchnixtoons2')
-
-    # Local & Cloud #
     def user_local_inspection(self, query, mal_id, episode, season):
         self.local_files += localfiles.Sources().get_sources(query, mal_id, episode, season)
         self.remainingProviders.remove('Local Inspection')
@@ -379,10 +229,26 @@ class Sources(GetSources):
         self.cloud_files += debrid_cloudfiles.Sources().get_sources(query, mal_id, episode, season)
         self.remainingProviders.remove('Cloud Inspection')
 
+    def _apply_embed_skip(self, prefix, sources):
+        for x in sources:
+            sk = x.get('skip')
+            if not sk:
+                continue
+            intro = sk.get('intro')
+            if intro and intro.get('start'):
+                control.setInt(f'{prefix}.skipintro.start', int(intro['start']))
+                control.setInt(f'{prefix}.skipintro.end', int(intro['end']))
+            outro = sk.get('outro')
+            if outro and outro.get('start'):
+                control.setInt(f'{prefix}.skipoutro.start', int(outro['start']))
+                control.setInt(f'{prefix}.skipoutro.end', int(outro['end']))
+
     @staticmethod
-    def sortSources(torrent_list, embed_list, cloud_files, local_files, media_type, duration):
-        all_list = torrent_list + embed_list + cloud_files + local_files
+    def sortSources(torrent_list, hoster_list, embed_list, cloud_files, local_files, media_type, duration):
+        all_list = torrent_list + hoster_list + embed_list + cloud_files + local_files
         sortedList = [x for x in all_list if control.getInt('general.minResolution') <= x['quality'] <= control.getInt('general.maxResolution')]
+
+        combined = torrent_list + hoster_list
 
         # Filter by size
         filter_option = control.getInt('general.fileFilter')
@@ -392,12 +258,12 @@ class Sources(GetSources):
             webspeed = control.getInt('general.webspeed')
             len_in_sec = int(duration) * 60
 
-            _torrent_list = torrent_list
-            torrent_list = [i for i in _torrent_list if i['size'] != 'NA' and ((float(i['size'][:-3]) * 8000) / len_in_sec) <= webspeed]
+            _combined = combined
+            combined = [i for i in _combined if i['size'] != 'NA' and ((float(i['size'][:-3]) * 8000) / len_in_sec) <= webspeed]
 
         elif filter_option == 2:
             # hard limit
-            _torrent_list = torrent_list
+            _combined = combined
 
             if media_type == 'movie':
                 max_GB = float(control.getInt('general.movie.maxGB'))
@@ -406,8 +272,8 @@ class Sources(GetSources):
                 max_GB = float(control.getInt('general.episode.maxGB'))
                 min_GB = control.getNumber('general.episode.minGB')
 
-            torrent_list = []
-            for i in _torrent_list:
+            combined = []
+            for i in _combined:
                 if i['size'] != 'NA':
                     size = float(i['size'][:-3])
                     unit = i['size'][-2:].strip()
@@ -416,7 +282,7 @@ class Sources(GetSources):
                         size /= 1024  # convert MB to GB for comparison
 
                     if min_GB <= size <= max_GB:
-                        torrent_list.append(i)
+                        combined.append(i)
 
         # Filter by release title
         if control.getBool('general.release_title_filter.enabled'):
@@ -433,12 +299,12 @@ class Sources(GetSources):
             exclude_filter4 = control.getBool('general.release_title_filter.exclude4')
             exclude_filter5 = control.getBool('general.release_title_filter.exclude5')
 
-            _torrent_list = torrent_list
+            _combined = combined
             release_title_logic = control.getInt('general.release_title_filter.logic')
             if release_title_logic == 0:
                 # AND filter (case-insensitive)
-                torrent_list = [
-                    i for i in _torrent_list
+                combined = [
+                    i for i in _combined
                     if (not exclude_filter1 or release_title_filter1.lower() not in i['release_title'].lower())
                     and (not exclude_filter2 or release_title_filter2.lower() not in i['release_title'].lower())
                     and (not exclude_filter3 or release_title_filter3.lower() not in i['release_title'].lower())
@@ -447,8 +313,8 @@ class Sources(GetSources):
                 ]
             if release_title_logic == 1:
                 # OR filter (case-insensitive)
-                torrent_list = [
-                    i for i in _torrent_list
+                combined = [
+                    i for i in _combined
                     if (release_title_filter1 != "" and (exclude_filter1 ^ (release_title_filter1.lower() in i['release_title'].lower())))
                     or (release_title_filter2 != "" and (exclude_filter2 ^ (release_title_filter2.lower() in i['release_title'].lower())))
                     or (release_title_filter3 != "" and (exclude_filter3 ^ (release_title_filter3.lower() in i['release_title'].lower())))
@@ -456,8 +322,7 @@ class Sources(GetSources):
                     or (release_title_filter5 != "" and (exclude_filter5 ^ (release_title_filter5.lower() in i['release_title'].lower())))
                 ]
 
-        # Update sortedList to include the filtered torrent_list
-        sortedList = [x for x in sortedList if x in torrent_list or x in embed_list or x in cloud_files or x in local_files]
+        sortedList = [x for x in sortedList if x in combined or x in embed_list or x in cloud_files or x in local_files]
 
         # Apply general.filters (comprehensive filtering like Seren)
         filter_list = control.getStringList("general.filters")
@@ -493,32 +358,22 @@ class Sources(GetSources):
             elif source == 2:
                 sortedList = [i for i in sortedList if i['lang'] in [0, 1, 3]]
 
-        # Sort Sources
-        SORT_METHODS = sort_select.SORT_METHODS
-        sort_options = sort_select.sort_options
-
-        for x in range(len(SORT_METHODS), 0, -1):
-            reverse = sort_options[f'sortmethod.{x}.reverse']
-            method = SORT_METHODS[int(sort_options[f'sortmethod.{x}'])]
-            # Replace spaces with underscores in the method name
-            method = method.replace(' ', '_')
-            sortedList = getattr(sort_select, f'sort_by_{method}')(sortedList, not reverse)
+        # Sort sources (Seren-style composite keys; fresh sort_options.json)
+        sortedList = sort_select.sort_sources_list(sortedList)
 
         return sortedList
 
     def updateProgress(self):
-        self.torrents_qual_len = [
-            len([i for i in self.torrentSources if i['quality'] == 4]),
-            len([i for i in self.torrentSources if i['quality'] == 3]),
-            len([i for i in self.torrentSources if i['quality'] == 2]),
-            len([i for i in self.torrentSources if i['quality'] == 1]),
-            len([i for i in self.torrentSources if i['quality'] == 0])
-        ]
+        qualities = [4, 3, 2, 1, 0]
 
-        self.embeds_qual_len = [
-            len([i for i in self.embedSources if i['quality'] == 4]),
-            len([i for i in self.embedSources if i['quality'] == 3]),
-            len([i for i in self.embedSources if i['quality'] == 2]),
-            len([i for i in self.embedSources if i['quality'] == 1]),
-            len([i for i in self.embedSources if i['quality'] == 0])
-        ]
+        def count_quality(args):
+            source_list, quality = args
+            return len([i for i in source_list if i['quality'] == quality])
+
+        with ThreadPoolExecutor(max_workers=min(control.max_threads or 1, 20)) as executor:
+            torrent_tasks = [(self.torrentSources, quality) for quality in qualities]
+            hoster_tasks = [(self.hosterSources, quality) for quality in qualities]
+            embed_tasks = [(self.embedSources, quality) for quality in qualities]
+            self.torrents_qual_len = list(executor.map(count_quality, torrent_tasks))
+            self.hosters_qual_len = list(executor.map(count_quality, hoster_tasks))
+            self.embeds_qual_len = list(executor.map(count_quality, embed_tasks))

@@ -12,6 +12,8 @@ Fuzzy Matching             - get_fuzzy_match, get_best_match
 Torrent Filtering          - filter_sources (season / episode / part regex)
 Text Cleaning              - remove_patterns, cleanup_text, clean_text, cleanTitle
 File Utilities             - is_file_ext_valid, video_ext, user_select, get_embedhost
+Chapter Keywords           - CHAPTER_*_KEYWORDS, chapter_title_matches_intro/outro
+Filter UI vocabulary       - INFO_STRUCT (codec / HDR / audio / misc tags for filter dialog)
 """
 
 import re
@@ -22,6 +24,131 @@ import xbmc
 from resources.lib.ui import control
 
 res = ['EQ', '480p', '720p', '1080p', '4k']
+
+# Filter dialog: selectable tags per category (see windows/filter_select.py)
+INFO_STRUCT = {
+    "videocodec": {
+        "AVC", "HEVC", "XVID", "DIVX", "WMV", "MP4", "MPEG", "VP9", "AV1",
+    },
+    "hdrcodec": {
+        "DV", "HDR", "HYBRID", "SDR",
+    },
+    "audiocodec": {
+        "AAC", "DTS", "DTS-HDMA", "DTS-HDHR", "DTS-X", "ATMOS", "TRUEHD",
+        "DD+", "DD", "MP3", "WMA", "OPUS",
+    },
+    "audiochannels": {
+        "2.0", "5.1", "7.1",
+    },
+    "misc": {
+        "CAM", "HDTV", "PDTV", "REMUX", "HDRIP", "BLURAY", "DVDRIP", "WEB",
+        "HC", "SCR", "3D", "60-FPS", "BATCH"
+    },
+}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  MKV / container chapter title keywords (ffprobe, optional skip hints)
+# ═══════════════════════════════════════════════════════════════════════════
+# Substrings are matched case-insensitively. Entries in the *_SHORT_* frozensets
+# use word boundaries (\b) to cut false positives (e.g. "op" in "operation").
+# Naming varies wildly by muxer; treat matches as hints only — combine with
+# time sanity checks and never override AniSkip / AnimeSkip when present.
+
+_CHAPTER_SHORT_INTRO = frozenset({'op', 'op1', 'op2', 'ncop'})
+_CHAPTER_SHORT_OUTRO = frozenset({'ed', 'ed1', 'ed2', 'ed3', 'nced', 'pv'})
+
+# Longer phrases first (checked in order for documentation; matching uses any()).
+CHAPTER_INTRO_KEYWORDS = (
+    'opening theme',
+    'opening sequence',
+    'opening animation',
+    'opening song',
+    'opening credit',
+    'opening credits',
+    'openning',  # common typo
+    'title sequence',
+    'title animation',
+    'title song',
+    'main title',
+    'tv opening',
+    'tv size op',
+    'tv-size op',
+    'opening',
+    'intro',
+    'prologue',  # sometimes used for cold open; gate with duration if used
+    '序章',
+    'オープニング',
+    'オープニングテーマ',
+    '前クレジット',
+    'nc op',
+)
+
+CHAPTER_OUTRO_KEYWORDS = (
+    'ending theme',
+    'ending sequence',
+    'ending animation',
+    'ending song',
+    'ending credit',
+    'ending credits',
+    'end credits',
+    'end credit',
+    'credit roll',
+    'credit sequence',
+    'closing theme',
+    'closing credits',
+    'closing animation',
+    'main ending',
+    'tv ending',
+    'tv size ed',
+    'tv-size ed',
+    'ending',
+    'credits',
+    'outro',
+    'epilogue',
+    'post-credits',
+    'post credits',
+    'after credits',
+    'next episode',
+    'next time',
+    'next on',
+    'web preview',
+    'episode preview',
+    'preview',
+    '予告',
+    '次回予告',
+    'エンディング',
+    'エンディングテーマ',
+    'ノンクレジット',
+    'nc ed',
+)
+
+
+def chapter_title_matches_intro(title):
+    """
+    Return True if title looks like an opening / OP chapter (substring / word match).
+    """
+    return _chapter_title_matches_bucket(title, CHAPTER_INTRO_KEYWORDS, _CHAPTER_SHORT_INTRO)
+
+
+def chapter_title_matches_outro(title):
+    """
+    Return True if title looks like an ending / ED / credits / preview chapter.
+    """
+    return _chapter_title_matches_bucket(title, CHAPTER_OUTRO_KEYWORDS, _CHAPTER_SHORT_OUTRO)
+
+
+def _chapter_title_matches_bucket(title, phrases, short_tokens):
+    t = (title or '').strip().lower()
+    if not t:
+        return False
+    for phrase in phrases:
+        if phrase in t:
+            return True
+    for tok in short_tokens:
+        if re.search(r'\b' + re.escape(tok) + r'\b', t):
+            return True
+    return False
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -384,6 +511,9 @@ def filter_sources(provider, torrent_list, mal_id, season=None, episode=None, pa
                 continue
         elif provider == 'local':
             torrent['hash'] = torrent.get('path', '')
+        elif provider == 'easynews':
+            if 'hash' not in torrent or 'name' not in torrent:
+                continue
         else:
             continue
 

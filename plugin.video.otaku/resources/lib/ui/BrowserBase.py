@@ -19,6 +19,15 @@ from resources.lib.ui import client, control, utils
 class BrowserBase(object):
     _BASE_URL = None
 
+    # Full embed host list applied on metadata schema bumps only
+    # (see ``database_sync.SyncDatabase.check_database_version``).
+    EMBED_SERVERS_DEFAULT = (
+        'doodstream', 'filelions', 'filemoon', 'hd-1', 'hd-2', 'hd-3', 'iga', 'kwik',
+        'megacloud', 'megaf', 'moonf', 'mp4upload', 'mp4u', 'mycloud', 'noads',
+        'noadsalt', 'swish', 'streamtape', 'streamwish', 't-cloud', 'vidcdn',
+        'vidhide', 'vidplay', 'vidsrc', 'vidstream', 'yourupload', 'zto'
+    )
+
     @staticmethod
     def handle_paging(hasnextpage, base_url, page):
         if not hasnextpage or not control.is_addon_visible() and control.getBool('widget.hide.nextpage'):
@@ -152,12 +161,3 @@ class BrowserBase(object):
     @staticmethod
     def embeds():
         return control.getStringList('embed.config')
-
-    # Enable all embed servers options after update
-    embed_servers = [
-        'doodstream', 'filelions', 'filemoon', 'hd-1', 'hd-2', 'hd-3', 'iga', 'kwik',
-        'megacloud', 'megaf', 'moonf', 'mp4upload', 'mp4u', 'mycloud', 'noads',
-        'noadsalt', 'swish', 'streamtape', 'streamwish', 't-cloud', 'vidcdn',
-        'vidhide', 'vidplay', 'vidsrc', 'vidstream', 'yourupload', 'zto'
-    ]
-    control.setStringList('embed.config', (embed_servers))

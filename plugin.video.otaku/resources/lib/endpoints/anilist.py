@@ -378,6 +378,63 @@ class Anilist:
             control.log(f"Error fetching AniList banner for MAL ID {mal_id}: {str(e)}", "error")
             return None
 
+    def get_synopsis_by_mal_ids(self, mal_ids):
+        """
+        Get AniList synopsis text keyed by MAL ID in one batch request flow.
+
+        Returns:
+            dict: {mal_id: description}
+        """
+        if not mal_ids:
+            return {}
+
+        query = '''
+        query ($page: Int, $malIds: [Int], $type: MediaType) {
+          Page(page: $page, perPage: 50) {
+            pageInfo {
+              hasNextPage
+            }
+            media(idMal_in: $malIds, type: $type) {
+              idMal
+              description(asHtml: false)
+            }
+          }
+        }
+        '''
+
+        synopsis_map = {}
+        page = 1
+
+        try:
+            while True:
+                variables = {
+                    "page": page,
+                    "malIds": mal_ids,
+                    "type": "ANIME"
+                }
+                result = client.post(self._BASE_URL, json_data={'query': query, 'variables': variables})
+                if not result:
+                    break
+
+                data = result.json()
+                if "errors" in data:
+                    control.log(f"AniList synopsis API error (MAL IDs): {data['errors']}", "warning")
+                    break
+
+                page_data = data.get('data', {}).get('Page', {})
+                for media in page_data.get('media', []) or []:
+                    mal_id = media.get('idMal')
+                    desc = media.get('description')
+                    if mal_id and desc:
+                        synopsis_map[int(mal_id)] = desc
+
+                if not page_data.get('pageInfo', {}).get('hasNextPage', False):
+                    break
+                page += 1
+        except Exception as e:
+            control.log(f"Error fetching AniList synopsis by MAL IDs: {str(e)}", "warning")
+
+        return synopsis_map
 
 # Convenience functions
 def get_anilist_ratings_for_mal_ids(mal_ids):
