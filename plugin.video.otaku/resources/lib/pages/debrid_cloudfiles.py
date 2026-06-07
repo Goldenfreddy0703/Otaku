@@ -143,23 +143,47 @@ class Sources(BrowserBase):
 
     def alldebrid_cloud_inspection(self, query, mal_id, episode, season=None):
         api = all_debrid.AllDebrid()
-        torrents = api.list_torrents()['links']
+        torrents = api.list_torrents()
+        for saved in (api.list_saved_links(), api.list_history()):
+            if saved and saved.get('links'):
+                torrents += saved['links']
+        seen = set()
+        torrents = [t for t in torrents if t.get('filename') and not (t['filename'] in seen or seen.add(t['filename']))]
         torrents = source_utils.filter_sources('alldebrid', torrents, mal_id, season, episode)
         filenames = [re.sub(r'\[.*?]\s*', '', i['filename'].replace(',', '')) for i in torrents]
         resp = source_utils.get_fuzzy_match(query, filenames)
 
         for i in resp:
             torrent = torrents[i]
-            torrent_info = api.link_info(torrent['link'])
-            torrent_files = torrent_info['infos']
+            if torrent.get('link'):
+                if not source_utils.is_file_ext_valid(torrent['filename'].lower()):
+                    continue
+                url = api.resolve_hoster(torrent['link'])
+            else:
+                status_data = api.magnet_status(torrent['id'])
+                if not status_data or 'magnets' not in status_data or 'files' not in status_data['magnets']:
+                    continue
 
-            if len(torrent_files) > 1 and len(torrent_info['links']) == 1:
+                folder_details = []
+                for x in status_data['magnets']['files']:
+                    api.collect_files(x, folder_details)
+                folder_details = [f for f in folder_details if source_utils.is_file_ext_valid(f['path'].lower())]
+
+                if not folder_details:
+                    continue
+
+                selected_file = folder_details[0]
+                if len(folder_details) > 1 and episode:
+                    regex = source_utils.get_cache_check_reg(episode)
+                    ep_matches = [f for f in folder_details if regex.search(f['path'].split('/')[-1])]
+                    if ep_matches:
+                        selected_file = ep_matches[0]
+
+                url = api.resolve_hoster(selected_file['link'])
+
+            if not url:
                 continue
 
-            if not any(source_utils.is_file_ext_valid(tor_file['filename'].lower()) for tor_file in torrent_files):
-                continue
-
-            url = api.resolve_hoster(torrent['link'])
             self.cloud_files.append(
                 {
                     'quality': source_utils.getQuality(torrent['filename']),
