@@ -500,8 +500,7 @@ def filter_sources(provider, torrent_list, mal_id, season=None, episode=None, pa
         elif provider == 'realdebrid':
             torrent['hash'] = torrent.get('hash', '')
         elif provider == 'alldebrid':
-            link = torrent['link']
-            torrent['hash'] = re.search(r'/f/([^/]+)', link).group(1)
+            torrent['hash'] = torrent.get('hash', '')
         elif provider == 'premiumize':
             torrent['hash'] = torrent.get('id', '')
         elif provider == 'torbox':
