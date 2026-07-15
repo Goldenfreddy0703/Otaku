@@ -37,7 +37,7 @@ _MAL_GENRE_PRESETS = (
 
 
 class MalBrowser(BrowserBase):
-    _BASE_URL = "https://api.jikan.moe/v4"
+    _BASE_URL = control.MAL_API_BASE_URL
 
     _IX_YEAR_START = 2
     _IX_YEAR_END = 3

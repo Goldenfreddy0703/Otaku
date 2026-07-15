@@ -10,7 +10,7 @@ from resources.lib import indexers
 
 class OtakuAPI:
     def __init__(self):
-        self.baseUrl = "https://api.jikan.moe/v4"
+        self.baseUrl = control.MAL_API_BASE_URL
         # Simkl API setup
         api_info = database.get_info('Simkl')
         self.simklClientID = api_info['client_id']

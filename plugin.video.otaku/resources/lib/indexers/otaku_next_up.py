@@ -20,7 +20,7 @@ class Otaku_Next_Up_API:
         # Kitsu API setup
         self.kitsuBaseUrl = "https://kitsu.io/api/edge"
         # Jikan API setup (MAL)
-        self.baseUrl = "https://api.jikan.moe/v4"
+        self.baseUrl = control.MAL_API_BASE_URL
 
     def get_kitsu_id(self, mal_id):
         meta_ids = database.get_mappings(mal_id, 'mal_id')

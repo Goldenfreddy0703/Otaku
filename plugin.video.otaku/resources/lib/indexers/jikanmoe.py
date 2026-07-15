@@ -14,7 +14,7 @@ class JikanAPI:
     _request_timestamps = []
 
     def __init__(self):
-        self.baseUrl = "https://api.jikan.moe/v4"
+        self.baseUrl = control.MAL_API_BASE_URL
 
     @classmethod
     def _throttle_3req_per_second(cls):
