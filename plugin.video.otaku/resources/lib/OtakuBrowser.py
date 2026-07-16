@@ -38,7 +38,7 @@ _MAL_GENRE_PRESETS = (
 
 
 class OtakuBrowser(BrowserBase):
-    _BASE_URL = "https://api.jikan.moe/v4"
+    _BASE_URL = control.MAL_API_BASE_URL
 
     # Indices returned by get_season_year()
     _IX_YEAR_START = 2
@@ -74,6 +74,11 @@ class OtakuBrowser(BrowserBase):
         """Normalize direct items and nested/list 'entry' shapes (e.g. relations)."""
         mal_items_flat = []
         mal_ids = []
+        if not mal_res:
+            # Upstream API call failed (timeout, 5xx, rate limit) and returned
+            # None instead of a response body - fail soft instead of crashing.
+            control.log("MAL API request failed or returned no data", 'warning')
+            return mal_ids, mal_items_flat
         for item in mal_res.get('data', []):
             if 'mal_id' in item:
                 mal_ids.append(item['mal_id'])

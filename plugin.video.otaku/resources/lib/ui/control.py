@@ -71,6 +71,12 @@ CONTEXT_ADDON = xbmcaddon.Addon(CONTEXT_ADDON_ID)
 CONTEXT_ADDON_PATH = CONTEXT_ADDON.getAddonInfo('path')
 infoDB = os.path.join(CONTEXT_ADDON_PATH, 'info.db')
 
+# — External API endpoints —
+# Jikan v4-schema-compatible MAL metadata provider. Centralized here so a
+# future provider swap (e.g. Jikan -> Tenrai) is a one-line change instead
+# of a multi-file find/replace.
+MAL_API_BASE_URL = "https://api.tenrai.org/v1"
+
 # — Database files —
 cacheFile = os.path.join(dataPath, 'cache.db')
 searchHistoryDB = os.path.join(dataPath, 'search.db')

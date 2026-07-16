@@ -5,7 +5,7 @@ from resources.lib.ui import client, control
 
 
 class Mal:
-    _BASE_URL = "https://api.jikan.moe/v4"
+    _BASE_URL = control.MAL_API_BASE_URL
 
     def update_calendar(self, page=1):
         days_of_week = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
