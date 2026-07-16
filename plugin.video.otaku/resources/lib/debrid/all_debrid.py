@@ -114,12 +114,35 @@ class AllDebrid:
         r = client.get(f'{self.base_url}/magnet/status', params=params)
         return r.json()['data'] if r else None
 
-    def list_torrents(self):
+    def list_saved_links(self):
         params = {
             'agent': self.agent_identifier,
             'apikey': self.token
         }
         r = client.get(f'{self.base_url}/user/links', params=params)
+        return r.json()['data'] if r else None
+
+    def list_torrents(self):
+        params = {
+            'agent': self.agent_identifier,
+            'apikey': self.token,
+            'status': 'ready'
+        }
+        r = client.get(f'{self.base_url}/magnet/status', params=params)
+        data = r.json()['data'] if r else None
+        if not data:
+            return []
+        magnets = data['magnets']
+        if isinstance(magnets, dict):
+            magnets = list(magnets.values())
+        return magnets
+
+    def list_history(self):
+        params = {
+            'agent': self.agent_identifier,
+            'apikey': self.token
+        }
+        r = client.get(f'{self.base_url}/user/history', params=params)
         return r.json()['data'] if r else None
 
     def link_info(self, link):
