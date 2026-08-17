@@ -11,7 +11,7 @@ from resources.lib.ui.BrowserBase import BrowserBase
 
 
 class Sources(BrowserBase):
-    _BASE_URL = 'https://animixplay.st/' if control.getBool('provider.animixalt') else 'https://animixplay.name/'
+    _BASE_URL = 'https://animixplay.la/'
 
     def get_sources(self, mal_id, episode):
         show = database.get_show(mal_id)
@@ -78,9 +78,9 @@ class Sources(BrowserBase):
         eplist = re.search(r'<div\s*id="epslistplace".+?>([^<]+)', r)
         if eplist:
             eplist = json.loads(eplist.group(1).strip())
-            ep = str(int(episode) - 1)
+            ep = str(int(episode))
             if ep in eplist.keys():
-                playbunny = 'https://play.bunnycdn.to/'
+                playbunny = 'https://play2.echovideo.ru/'
                 esurl = '{0}hs/{1}'.format(playbunny, eplist.get(ep).split('/')[-1])
                 epage = database.get(self._get_request, 8, esurl, headers={'Referer': playbunny})
                 ep_id = re.search(r'<div\s*id="mg-player"\s*data-id="([^"]+)', epage)
@@ -116,6 +116,5 @@ class Sources(BrowserBase):
                             'skip': skip
                         }
                         sources.append(source)
-                        control.log(f"AnimixPlay: Found {lang_str} source from bunny server")
 
         return sources

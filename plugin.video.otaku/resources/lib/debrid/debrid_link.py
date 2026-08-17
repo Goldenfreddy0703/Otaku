@@ -63,7 +63,7 @@ class DebridLink:
             control.copy2clip(user_code)
 
             qr_path = os.path.join(control.dataPath, 'qr_code.png')
-            qr_code = pyqrcode.create(verification_url)
+            qr_code = pyqrcode.create(verification_url + '/' + user_code)
             qr_code.png(qr_path, scale=20)
 
             config = {

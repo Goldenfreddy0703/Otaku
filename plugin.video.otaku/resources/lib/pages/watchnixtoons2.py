@@ -2,101 +2,137 @@ import html
 import pickle
 import re
 import time
+import uuid
 import urllib.parse
 import json
 from bs4 import BeautifulSoup
 from resources.lib.ui import control, database, client
 from resources.lib.ui.BrowserBase import BrowserBase
-from resources.lib.ui.source_utils import get_fuzzy_match
-from concurrent.futures import ThreadPoolExecutor, as_completed
 import threading
 
 
 class Sources(BrowserBase):
     _BASE_URL = 'https://www.wcostream.tv/'
-    _WNT2_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36'
+    _WNT2_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36'
 
     def __init__(self):
         super().__init__()
-        self.request_delay = 1.2  # Conservative rate limiting to avoid blocks
+        self.request_delay = 1.2  # Minimum spacing between WCO requests
         self._cache = {}  # Simple response cache
         self._cache_lock = threading.Lock()
+        self._rate_lock = threading.Lock()
         self._last_request_time = 0
-        # Clear any previous session state
-        client.clear_session()
+        self._thread_local = threading.local()
+        self._on_ad_verify_complete = None
 
-    def _make_request(self, url, method='GET', data=None, headers=None, timeout=8, use_cache=True):
-        """Make a request using enhanced client with WNT2's proven Cloudflare bypass approach"""
+    def _get_wco_session(self):
+        """Per-thread session so parallel SUB/DUB embed flows keep separate cookies."""
+        session = getattr(self._thread_local, 'wco_session', None)
+        if session is None:
+            session = client.Session()
+            self._thread_local.wco_session = session
+        return session
 
-        # Check cache first for GET requests
-        cache_key = f"{method}:{url}"
+    def _build_search_titles(self, romaji_title, english_title, clean_title):
+        """English first; only add fallbacks when titles differ."""
+        ordered = []
+        seen = set()
+        for search_type, title in (
+            ('english', english_title),
+            ('romaji', romaji_title),
+            ('clean', clean_title),
+        ):
+            if not title:
+                continue
+            key = title.strip().lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            ordered.append((search_type, title))
+        return ordered
+
+    def _episode_langs_complete(self, found_episodes):
+        return 2 in found_episodes and 3 in found_episodes
+
+    def _merge_episode_results(self, found_episodes, episode_results, search_type):
+        for episode_result in episode_results:
+            lang = self._episode_lang_key(episode_result)
+            version_type = "DUB" if lang == 3 else "SUB"
+            existing = found_episodes.get(lang)
+            if self._is_better_episode(episode_result, existing):
+                found_episodes[lang] = episode_result
+                control.log(
+                    f"Added {search_type} {version_type} episode: {episode_result['title']} "
+                    f"(from {episode_result.get('series_title', 'Unknown')})"
+                )
+            else:
+                control.log(f"Duplicate {version_type} episode found for {search_type}, skipping")
+
+    def _make_request(self, url, method='GET', data=None, json_data=None, headers=None, timeout=10, use_cache=True):
+        """HTTP helper with per-thread cookies and shared rate limiting."""
+
+        cache_key = "{0}:{1}".format(method, url)
         if use_cache and method.upper() == 'GET':
             with self._cache_lock:
                 if cache_key in self._cache:
                     return self._cache[cache_key]
 
         try:
-            # Use WNT2's proven headers approach
             my_headers = {
                 'User-Agent': self._WNT2_UA,
                 'Accept': 'text/html,application/xhtml+xml,application/xml,application/json;q=0.9,image/webp,*/*;q=0.8',
                 'Accept-Language': 'en-US,en;q=0.5',
                 'Cache-Control': 'no-cache',
             }
-
             if headers:
                 my_headers.update(headers)
 
-            start_time = time.time()
+            with self._rate_lock:
+                time_since_last = time.time() - self._last_request_time
+                if time_since_last < self.request_delay:
+                    time.sleep(self.request_delay - time_since_last)
 
-            # Rate limiting
-            time_since_last = start_time - self._last_request_time
-            if time_since_last < self.request_delay:
-                time.sleep(self.request_delay - time_since_last)
-
-            # Try the request with automatic TLS retry on Cloudflare 403
-            # The enhanced client now handles TLS adapter switching automatically
+            wco_session = self._get_wco_session()
             if method.upper() == 'POST':
-                response = client.session_request(
-                    url,
-                    method='POST',
-                    data=data,
-                    headers=my_headers,
-                    timeout=timeout,
-                    verify=False
-                )
+                if json_data is not None:
+                    resp = wco_session.post(
+                        url, json_data=json_data, headers=my_headers, timeout=timeout, verify=False
+                    )
+                else:
+                    resp = wco_session.post(
+                        url, data=data, headers=my_headers, timeout=timeout, verify=False
+                    )
             else:
-                response = client.session_request(
-                    url,
-                    method='GET',
-                    headers=my_headers,
-                    timeout=timeout,
-                    verify=False
+                resp = wco_session.get(
+                    url, headers=my_headers, timeout=timeout, verify=False
                 )
 
-            self._last_request_time = time.time()
+            with self._rate_lock:
+                self._last_request_time = time.time()
 
-            # response is now a string from session_request (legacy)
-            # We should update to use client.Session() instead for Response objects
-            if response:
-                # Cache successful GET responses
-                if use_cache and method.upper() == 'GET':
-                    with self._cache_lock:
-                        self._cache[cache_key] = response
-                        # Keep cache size reasonable
-                        if len(self._cache) > 50:
-                            # Remove oldest entries
-                            oldest_keys = list(self._cache.keys())[:10]
-                            for key in oldest_keys:
-                                del self._cache[key]
-
-                return response
-            else:
-                control.log(f"Request failed for {url}")
+            if resp.status_code not in (200, 204):
+                control.log(
+                    "Request failed for {0} (HTTP {1})".format(url, resp.status_code),
+                    level='warning',
+                )
                 return None
 
+            response = resp.text if resp.content else None
+            if not response:
+                control.log("Request returned empty body for {0}".format(url), level='warning')
+                return None
+
+            if use_cache and method.upper() == 'GET':
+                with self._cache_lock:
+                    self._cache[cache_key] = response
+                    if len(self._cache) > 50:
+                        for key in list(self._cache.keys())[:10]:
+                            del self._cache[key]
+
+            return response
+
         except Exception as e:
-            control.log(f"Client request failed for {url}: {str(e)}", "error")
+            control.log("Client request failed for {0}: {1}".format(url, str(e)), "error")
             return None
 
     def get_sources(self, mal_id, episode, media_type):
@@ -141,103 +177,123 @@ class Sources(BrowserBase):
                     mapped_episode = global_start + offset
                     control.log(f"Mapped episode {episode} to {mapped_episode}")
 
-        # Collect all unique search titles
-        search_titles = []
-        if romaji_title:
-            search_titles.append(("romaji", romaji_title))
-        if english_title:
-            search_titles.append(("english", english_title))
-        if clean_title:
-            search_titles.append(("clean", clean_title))
-
-        # Search for episodes using all titles concurrently for faster results
+        search_titles = self._build_search_titles(romaji_title, english_title, clean_title)
         found_episodes = {}  # keyed by lang (2=SUB, 3=DUB)
 
-        def search_title_worker(search_data):
-            search_type, search_title = search_data
+        for search_type, search_title in search_titles:
+            if self._episode_langs_complete(found_episodes):
+                control.log('WatchNixtoons2: SUB and DUB episodes found, skipping remaining searches')
+                break
+
             control.log(f"Searching for {search_type} version with title: {search_title}")
-            return self._search_and_get_episodes(search_title, season, mapped_episode, search_type)
-
-        # Process searches concurrently
-        with ThreadPoolExecutor(max_workers=control.max_threads) as executor:
-            future_to_search = {executor.submit(search_title_worker, search_data): search_data for search_data in search_titles}
-
-            for future in as_completed(future_to_search):
-                search_data = future_to_search[future]
-                search_type = search_data[0]
-                try:
-                    episode_results = future.result() or []
-                    for episode_result in episode_results:
-                        lang = self._episode_lang_key(episode_result)
-                        version_type = "DUB" if lang == 3 else "SUB"
-                        existing = found_episodes.get(lang)
-                        if self._is_better_episode(episode_result, existing):
-                            found_episodes[lang] = episode_result
-                            control.log(
-                                f"Added {search_type} {version_type} episode: {episode_result['title']} "
-                                f"(from {episode_result.get('series_title', 'Unknown')})"
-                            )
-                        else:
-                            control.log(f"Duplicate {version_type} episode found for {search_type}, skipping")
-                except Exception as e:
-                    control.log(f"Search failed for {search_type}: {str(e)}")
-
-        # Convert found episodes to sources with concurrent processing
-        sources = []
-        sources_found_per_lang = {}  # Track which languages we've found sources for
+            try:
+                episode_results = self._search_and_get_episodes(
+                    search_title, season, mapped_episode, search_type
+                ) or []
+                self._merge_episode_results(found_episodes, episode_results, search_type)
+            except Exception as e:
+                control.log(f"Search failed for {search_type}: {str(e)}")
 
         control.log(f"WatchNixtoons2: Found {len(found_episodes)} episode variants to process")
 
-        def extract_sources_worker(episode_data):
-            lang = self._episode_lang_key(episode_data)
-            version_type = "DUB" if lang == 3 else "SUB"
+        sources = []
+        sub_ep = found_episodes.get(2)
+        dub_ep = found_episodes.get(3)
+        piped_dub = {'thread': None, 'result': None}
 
-            # Early exit check - skip if we already have sources for this language
-            if lang in sources_found_per_lang:
-                control.log(f"WatchNixtoons2: Skipping '{version_type}' - already have sources")
-                return None
+        def start_dub_pipeline():
+            if not dub_ep or piped_dub['thread'] is not None:
+                return
 
-            control.log(f"WatchNixtoons2: Processing '{version_type}' episode: {episode_data.get('title', 'Unknown')}")
+            def run_dub():
+                piped_dub['result'] = self._extract_episode_sources(dub_ep)
 
-            # Get the episode page content
-            resp = self._make_request(episode_data['url'])
-            if resp:
-                # First try to find direct video sources using the advanced method
-                advanced_sources = self._extract_advanced_sources(episode_data['url'], resp, version_type, lang, episode_data['title'])
-                if advanced_sources:
-                    return (advanced_sources, lang)
-                else:
-                    # Fallback to basic iframe extraction
-                    iframe_sources = self._extract_iframe_sources(resp, version_type, lang, episode_data)
-                    if iframe_sources:
-                        return (iframe_sources, lang)
-            else:
-                control.log(f"Failed to get episode page: {episode_data['url']}")
-            return None
+            piped_dub['thread'] = threading.Thread(target=run_dub, daemon=True)
+            piped_dub['thread'].start()
+            control.log('WatchNixtoons2: started DUB extraction during SUB ad-verify wait', level='info')
 
-        # Process episodes concurrently for faster source extraction
-        with ThreadPoolExecutor(max_workers=control.max_threads) as executor:
-            future_to_episode = {executor.submit(extract_sources_worker, episode_data): episode_data for episode_data in found_episodes.values()}
+        if sub_ep:
+            self._on_ad_verify_complete = start_dub_pipeline
+            try:
+                sub_result = self._extract_episode_sources(sub_ep)
+                if sub_result:
+                    sources.extend(sub_result[0])
+                    control.log(
+                        f"WatchNixtoons2: Found {len(sub_result[0])} sources for lang {sub_result[1]}"
+                    )
+            finally:
+                self._on_ad_verify_complete = None
 
-            for future in as_completed(future_to_episode):
-                episode_data = future_to_episode[future]
-                try:
-                    result = future.result()
-                    if result:
-                        episode_sources, lang = result
-                        sources.extend(episode_sources)
-                        sources_found_per_lang[lang] = True
-                        control.log(f"WatchNixtoons2: Found {len(episode_sources)} sources for lang {lang}")
+            if dub_ep and piped_dub['thread'] is None:
+                start_dub_pipeline()
+        elif dub_ep:
+            dub_result = self._extract_episode_sources(dub_ep)
+            if dub_result:
+                sources.extend(dub_result[0])
+                control.log(
+                    f"WatchNixtoons2: Found {len(dub_result[0])} sources for lang {dub_result[1]}"
+                )
 
-                        # If we have both SUB and DUB, we can stop early
-                        if len(sources_found_per_lang) >= 2:
-                            control.log("WatchNixtoons2: Found sources for both SUB and DUB - stopping early")
-                            break
-                except Exception as e:
-                    control.log(f"Source extraction failed for {episode_data.get('title', 'Unknown')}: {str(e)}")
+        if piped_dub['thread'] is not None:
+            piped_dub['thread'].join()
+
+        if piped_dub['result']:
+            dub_sources, dub_lang = piped_dub['result']
+            if dub_sources:
+                sources.extend(dub_sources)
+                control.log(f"WatchNixtoons2: Found {len(dub_sources)} sources for lang {dub_lang}")
+
+        langs_found = {s.get('lang') for s in sources}
+        if 2 in langs_found and 3 in langs_found:
+            control.log("WatchNixtoons2: Found sources for both SUB and DUB")
 
         control.log(f"WatchNixtoons2: Returning {len(sources)} total sources")
         return sources
+
+    def _extract_episode_sources(self, episode_data):
+        """Extract playable sources for one episode link (SUB or DUB)."""
+        lang = self._episode_lang_key(episode_data)
+        version_type = "DUB" if lang == 3 else "SUB"
+
+        try:
+            control.log(
+                f"WatchNixtoons2: Processing '{version_type}' episode: "
+                f"{episode_data.get('title', 'Unknown')}"
+            )
+
+            resp = self._make_request(episode_data['url'])
+            if not resp:
+                control.log(f"Failed to get episode page: {episode_data['url']}")
+                return None
+
+            for attempt in (1, 2):
+                advanced_sources = self._extract_advanced_sources(
+                    episode_data['url'], resp, version_type, lang, episode_data['title']
+                )
+                if advanced_sources:
+                    return (advanced_sources, lang)
+                if attempt == 1 and lang == 2:
+                    control.log(
+                        'WatchNixtoons2: SUB extraction returned no sources, retrying once',
+                        level='warning',
+                    )
+                    self._thread_local.wco_session = None
+                    time.sleep(2)
+                    continue
+
+                iframe_sources = self._extract_iframe_sources(
+                    resp, version_type, lang, episode_data
+                )
+                if iframe_sources:
+                    return (iframe_sources, lang)
+                break
+
+        except Exception as e:
+            control.log(
+                f"Source extraction failed for {episode_data.get('title', 'Unknown')}: {str(e)}"
+            )
+
+        return None
 
     def _unescape_html_url(self, url):
         return html.unescape(url or '')
@@ -285,14 +341,6 @@ class Sources(BrowserBase):
             if match:
                 return self._ensure_full_url(episode_url, match.group(1)), False
 
-        embed_match = re.search(
-            r'<iframe[^>]+src="((?:https?:)?//embed\.wcostream\.com/inc/embed/[^"]+)"',
-            page_content,
-            re.IGNORECASE
-        )
-        if embed_match:
-            return self._ensure_full_url(episode_url, embed_match.group(1)), False
-
         embed_url_index = page_content.find('onclick="myFunction')
         if embed_url_index <= 0:
             embed_url_index = page_content.find('class="episode-descp"')
@@ -300,7 +348,9 @@ class Sources(BrowserBase):
         if embed_url_index > 0:
             match = re.search(r'src="([^"]+)', page_content[embed_url_index:])
             if match:
-                return self._ensure_full_url(episode_url, match.group(1)), False
+                embed_src = self._ensure_full_url(episode_url, match.group(1))
+                is_vhs = 'vhs.wcostream.com' in embed_src.lower()
+                return embed_src, is_vhs
 
         skip_hosts = ('ads', 'analytics', 'disqus', 'facebook', 'twitter', 'check-login')
         for iframe_url in re.findall(r'<iframe[^>]+src="([^"]+)"', page_content, re.IGNORECASE):
@@ -310,23 +360,117 @@ class Sources(BrowserBase):
 
         return None, False
 
-    def _normalize_embed_player_url(self, embed_url):
+    def _prepare_embed_player_url(self, embed_url):
+        """Run WCO ad-verify and return the video-js-old.php player URL."""
         embed_url = self._unescape_html_url(embed_url)
-        if 'inc/embed/index.php' in embed_url:
-            embed_url = embed_url.replace('inc/embed/index.php', 'inc/embed/video-js.php')
-        return embed_url
+        if 'inc/embed/index.php' not in embed_url:
+            return embed_url
 
-    def _fetch_player_html(self, embed_url, episode_url):
-        player_url = self._normalize_embed_player_url(embed_url)
+        control.log('WatchNixtoons2: running WCO ad-verify for embed', level='info')
+        flag = '__abd_' + uuid.uuid4().hex[:8]
+        self._make_request(
+            'https://embed.wcostream.com/assets/ads/advertisement.js?flag={0}&_={1}'.format(
+                flag, int(time.time() * 1000)
+            ),
+            headers={
+                'Accept': '*/*',
+                'Referer': embed_url,
+            },
+            use_cache=False,
+        )
+
+        pid_match = re.search(r'&pid=([0-9]+)', embed_url)
+        if not pid_match:
+            control.log('WatchNixtoons2: embed URL missing pid for ad-verify', level='warning')
+            return embed_url.replace('inc/embed/index.php', 'inc/embed/video-js-old.php')
+
+        nonce = uuid.uuid4().hex
+        self._make_request(
+            'https://embed.wcostream.com/ad-verify',
+            method='POST',
+            json_data={'nonce': nonce, 'status': 'clear', 'id': pid_match.group(1)},
+            headers={
+                'Content-Type': 'application/json',
+                'Referer': embed_url,
+            },
+            use_cache=False,
+        )
+
+        player_url = embed_url.replace('inc/embed/index.php', 'inc/embed/video-js-old.php') + '&n=' + nonce
+        control.log('WatchNixtoons2: ad-verify complete, loading player URL', level='info')
+        if self._on_ad_verify_complete:
+            try:
+                self._on_ad_verify_complete()
+            except Exception as exc:
+                control.log(
+                    'WatchNixtoons2: pipelined DUB start failed: {0}'.format(exc),
+                    level='warning',
+                )
+        time.sleep(5)
+        return player_url
+
+    def _follow_redirect_url(self, url, referer):
+        """Follow 3xx redirects on media URLs (same as WNT2 solve_media_redirect)."""
         headers = {
             'User-Agent': self._WNT2_UA,
-            'Referer': episode_url,
+            'Referer': referer,
+            'Accept': 'video/webm,video/ogg,video/*;q=0.9,application/ogg;q=0.7,audio/*;q=0.6,*/*;q=0.5',
+        }
+        current = url
+        for _ in range(10):
+            result = client.request(
+                current,
+                headers=headers,
+                redirect=False,
+                verify=False,
+                error=True,
+                output='extended',
+                timeout=10,
+            )
+            if not result or not isinstance(result, tuple) or len(result) < 6:
+                return url
+            _content, status_code, resp_headers, _req_headers, _cookie, resp_url = result
+            location = resp_headers.get('Location')
+            if str(status_code) in ('301', '302', '303', '307', '308') and location:
+                if location.startswith('/'):
+                    parsed = urllib.parse.urlparse(resp_url or current)
+                    current = '{0}://{1}{2}'.format(parsed.scheme, parsed.netloc, location)
+                elif location.startswith('http'):
+                    current = location
+                else:
+                    current = urllib.parse.urljoin(resp_url or current, location)
+                continue
+            if str(status_code).startswith('2'):
+                return resp_url or current
+            break
+        return url
+
+    def _fetch_player_html(self, embed_url, episode_url):
+        original_embed = self._unescape_html_url(embed_url)
+        player_url = self._prepare_embed_player_url(original_embed)
+        headers = {
+            'User-Agent': self._WNT2_UA,
+            'Referer': player_url,
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         }
         player_html = self._make_request(player_url, headers=headers, use_cache=False)
+        if not player_html:
+            control.log(
+                'WatchNixtoons2: empty player page for {0}'.format(player_url),
+                level='warning',
+            )
+        elif not any(
+            marker in player_html
+            for marker in ('getvid?evid', 'getvidlink', 'getRedirectedUrl', '<source')
+        ):
+            control.log(
+                'WatchNixtoons2: player page missing stream markers (len={0})'.format(len(player_html)),
+                level='warning',
+            )
         return player_html, player_url
 
     def _build_direct_source(self, title, version_type, lang, video_url, referer, quality_num, info_label):
+        video_url = self._follow_redirect_url(video_url, referer)
         video_headers = {
             'User-Agent': self._WNT2_UA,
             'Referer': referer,
@@ -349,49 +493,72 @@ class Sources(BrowserBase):
         }
 
     def _resolve_api_url(self, player_html, embed_url):
-        api_origin = self._embed_api_origin(embed_url)
-
-        if 'getRedirectedUrl(videoUrl)' in player_html or 'getRedirectedUrl("' in player_html:
+        if 'getRedirectedUrl(videoUrl)' in player_html:
             match = re.search(r'\$\.getJSON\("([^"]+)"', player_html, re.DOTALL)
             if match:
-                path = match.group(1)
-                if path.startswith('http'):
-                    source_url = path
-                else:
-                    source_url = urllib.parse.urljoin(api_origin, path.lstrip('/'))
+                source_url = 'https://embed.wcostream.com/' + match.group(1).lstrip('/')
                 if 'json' not in source_url:
                     source_url += '&json' if '?' in source_url else '?json'
                 return source_url
 
         match = re.search(r'"(/inc/embed/getvidlink[^"]+)', player_html, re.DOTALL)
         if match:
-            return urllib.parse.urljoin(api_origin, match.group(1).lstrip('/'))
+            return self._BASE_URL.rstrip('/') + match.group(1)
 
         return None
 
+    def _api_source_candidates(self, player_html, embed_url):
+        candidates = []
+        primary = self._resolve_api_url(player_html, embed_url)
+        if primary:
+            candidates.append(primary)
+
+        match = re.search(r'"(/inc/embed/getvidlink[^"]+)', player_html or '', re.DOTALL)
+        if match:
+            embed_fallback = 'https://embed.wcostream.com' + match.group(1)
+            if embed_fallback not in candidates:
+                candidates.append(embed_fallback)
+
+        return candidates
+
     def _extract_api_sources_from_html(self, player_html, embed_url, title, version_type, lang):
         sources = []
-        source_url = self._resolve_api_url(player_html, embed_url)
-        if not source_url:
+        api_urls = self._api_source_candidates(player_html, embed_url)
+        if not api_urls:
+            control.log('WatchNixtoons2: no WCO API URL found in player HTML', level='info')
             return sources
 
-        control.log(f"Requesting WCO server API: {source_url}")
+        server_resp = None
+        json_data = None
         api_headers = {
             'Accept': '*/*',
             'Referer': embed_url,
             'X-Requested-With': 'XMLHttpRequest',
             'User-Agent': self._WNT2_UA,
         }
-        server_resp = self._make_request(source_url, headers=api_headers, use_cache=False)
-        if not server_resp:
-            control.log("Failed to get WCO server API response")
-            return sources
+        for candidate in api_urls:
+            control.log('WatchNixtoons2: requesting WCO server API: {0}'.format(candidate))
+            server_resp = self._make_request(candidate, headers=api_headers, use_cache=False)
+            if not server_resp:
+                control.log(
+                    'WatchNixtoons2: WCO API request failed for {0}'.format(candidate),
+                    level='warning',
+                )
+                continue
+            try:
+                json_data = json.loads(server_resp)
+                break
+            except json.JSONDecodeError as exc:
+                control.log(
+                    'WatchNixtoons2: invalid JSON from {0}: {1}'.format(candidate, exc),
+                    level='warning',
+                )
+                control.log('Response preview: {0}'.format(server_resp[:500]))
+                server_resp = None
+                json_data = None
 
-        try:
-            json_data = json.loads(server_resp)
-        except json.JSONDecodeError as exc:
-            control.log(f"Failed to parse WCO server JSON: {exc}")
-            control.log(f"Response content: {server_resp[:500]}")
+        if not server_resp or json_data is None:
+            control.log('WatchNixtoons2: all WCO API requests failed', level='warning')
             return sources
 
         control.log(f"WCO API response keys: {list(json_data.keys())}")
@@ -477,6 +644,9 @@ class Sources(BrowserBase):
         return sources
 
     def _extract_streams_from_player_html(self, player_html, embed_url, title, version_type, lang, is_m3u8_player=False):
+        if not player_html:
+            return []
+
         if 'high volume of requests' in player_html:
             control.log('WCO player blocked free users temporarily')
             return []
@@ -495,7 +665,13 @@ class Sources(BrowserBase):
         if sources:
             return sources
 
-        return self._extract_jwplayer_sources_from_html(player_html, embed_url, title, version_type, lang)
+        sources = self._extract_jwplayer_sources_from_html(player_html, embed_url, title, version_type, lang)
+        if not sources:
+            control.log(
+                'WatchNixtoons2: no streams extracted from player HTML for {0}'.format(version_type),
+                level='warning',
+            )
+        return sources
 
     def _extract_advanced_sources(self, episode_url, page_content, version_type, lang, title):
         """Extract sources using the original WNT2 embed/player resolution flow."""
@@ -867,38 +1043,90 @@ class Sources(BrowserBase):
             control.log(f"Error getting episodes from {series_url}: {e}")
             return []
 
-    def _filter_by_title_match(self, search_title, episodes):
-        """Keep episode-number matches whose titles fuzzy-match the search query."""
-        if not search_title or not episodes:
-            return episodes or []
+    def _episode_season_in_title(self, title):
+        match = re.search(r'season\s+(\d+)', title or '', re.I)
+        return int(match.group(1)) if match else None
 
-        titles = [ep.get('title', '') for ep in episodes]
-        match_indices = get_fuzzy_match(search_title, titles)
-        if not match_indices:
-            for ep in episodes:
-                control.log(
-                    f"Rejected episode (title mismatch): {ep.get('title')} "
-                    f"(series: {ep.get('series_title', 'Unknown')})"
-                )
+    def _is_bonus_or_crossover_episode(self, title):
+        """True when the link title names another show before the episode (e.g. B.King Episode 17)."""
+        match = re.search(r'episode\s+(\d+)', title or '', re.I)
+        if not match:
+            return False
+        prefix = title[:match.start()].strip()
+        if not prefix:
+            return False
+        prefix = re.sub(r'^season\s+\d+\s*', '', prefix, flags=re.I).strip()
+        if not prefix:
+            return False
+        if re.match(
+            r'^(english\s+(subbed|dubbed)|subbed|dubbed|fullhd|fhd|hd|sd|\d+k)$',
+            prefix,
+            re.I,
+        ):
+            return False
+        return True
+
+    def _refine_episode_matches(self, matches, target_season, target_episode, search_title=None):
+        """
+        Refine episode-number matches from a series page.
+
+        WCO episode link titles are like 'Episode 17 English Subbed' — they do not contain
+        the series name, so fuzzy-matching them against the search query always fails.
+        Series identity is already validated when picking the series from search results.
+        """
+        if not matches:
             return []
 
-        filtered = []
-        matched_indices = set(match_indices)
-        for rank, idx in enumerate(match_indices):
-            ep = episodes[idx]
-            ep['title_rank'] = rank
-            filtered.append(ep)
+        strong = [m for m in matches if m.get('priority', 99) <= 2]
+        if strong:
+            matches = strong
 
-        for idx, ep in enumerate(episodes):
-            if idx not in matched_indices:
+        refined = []
+        for ep in matches:
+            title = ep.get('title', '')
+            if self._is_bonus_or_crossover_episode(title):
                 control.log(
-                    f"Rejected episode (title mismatch): {ep.get('title')} "
-                    f"(series: {ep.get('series_title', 'Unknown')})"
+                    "WatchNixtoons2: skipping bonus/crossover episode '{0}'".format(title),
+                    level='info',
                 )
-        return filtered
+                continue
+
+            ep_season = self._episode_season_in_title(title)
+            if target_season is not None and ep_season is not None and ep_season != int(target_season):
+                control.log(
+                    "WatchNixtoons2: skipping season {0} link (wanted season {1}): '{2}'".format(
+                        ep_season, target_season, title
+                    ),
+                    level='info',
+                )
+                continue
+
+            refined.append(ep)
+
+        if refined:
+            control.log(
+                "WatchNixtoons2: kept {0} episode match(es) for S{1}E{2}".format(
+                    len(refined), target_season or '?', target_episode
+                ),
+                level='info',
+            )
+            return refined
+
+        if search_title:
+            for ep in matches:
+                series_title = ep.get('series_title', '')
+                if series_title and self._titles_match(search_title, series_title):
+                    refined.append(ep)
+            if refined:
+                control.log(
+                    "WatchNixtoons2: recovered {0} weak match(es) via series title".format(len(refined)),
+                    level='info',
+                )
+
+        return refined
 
     def _is_better_episode(self, candidate, existing):
-        """Prefer lower episode priority, then better fuzzy title rank."""
+        """Prefer lower episode priority, standard titles, then fuzzy title rank."""
         if not existing:
             return True
 
@@ -906,6 +1134,11 @@ class Sources(BrowserBase):
         existing_priority = existing.get('priority', 99)
         if candidate_priority != existing_priority:
             return candidate_priority < existing_priority
+
+        cand_bonus = self._is_bonus_or_crossover_episode(candidate.get('title', ''))
+        exist_bonus = self._is_bonus_or_crossover_episode(existing.get('title', ''))
+        if cand_bonus != exist_bonus:
+            return not cand_bonus
 
         candidate_rank = candidate.get('title_rank', 99)
         existing_rank = existing.get('title_rank', 99)
@@ -948,8 +1181,9 @@ class Sources(BrowserBase):
         # Sort by priority (lower number = higher priority)
         matches.sort(key=lambda x: x['priority'])
 
-        if search_title:
-            matches = self._filter_by_title_match(search_title, matches)
+        matches = self._refine_episode_matches(
+            matches, target_season, target_episode, search_title=search_title
+        )
 
         return matches
 

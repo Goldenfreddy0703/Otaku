@@ -56,7 +56,7 @@ class Sources(BrowserBase):
             subs = []
             sub_headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0',
-                'Referer': embed_url,
+                'Referer': urllib.parse.urljoin(embed_url, '/'),
             }
             for idx, track in enumerate(res.get('tracks') or []):
                 if track.get('kind') == 'captions' and track.get('file'):

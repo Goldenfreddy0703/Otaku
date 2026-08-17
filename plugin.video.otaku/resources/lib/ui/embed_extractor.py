@@ -504,12 +504,29 @@ def normalize_sub_lang(label):
     return detect_sub_lang('', label)
 
 
-def get_sub(sub_url, sub_lang, headers=None, sub_index=0, display_name=None):
+def _detect_sub_ext(sub_url, content):
+    """Pick .vtt vs .srt from body or URL (proxied fetch URLs hide the real extension)."""
+    head = (content or '').lstrip('\ufeff').lstrip()[:8].upper()
+    if head.startswith('WEBVTT'):
+        return '.vtt'
+    decoded = urllib.parse.unquote(sub_url or '').lower()
+    if '.vtt' in decoded:
+        return '.vtt'
+    if '.srt' in decoded:
+        return '.srt'
+    if (sub_url or '').lower().endswith('.vtt'):
+        return '.vtt'
+    return '.srt'
+
+
+def get_sub(sub_url, sub_lang, headers=None, sub_index=0, display_name=None, source_url=None):
     if not sub_url:
         return None
 
     label = display_name or sub_lang
-    lang = detect_sub_lang(sub_url, label)
+    lang = detect_sub_lang(source_url or sub_url, label)
+    if sub_lang and re.match(r'^[a-z]{3}$', str(sub_lang).lower()):
+        lang = str(sub_lang).lower()
     response = client.get(sub_url, headers=headers)
 
     if not response:
@@ -528,7 +545,7 @@ def get_sub(sub_url, sub_lang, headers=None, sub_index=0, display_name=None):
         control.log(f"get_sub: empty subtitle body for {sub_url}", level='info')
         return None
 
-    ext = '.vtt' if sub_url.endswith('.vtt') else '.srt'
+    ext = _detect_sub_ext(source_url or sub_url, content)
     fname = 'TemporarySubs.{0}.{1}{2}'.format(sub_index, lang, ext)
     subtitle = xbmcvfs.translatePath('special://temp/')
     fpath = os.path.join(subtitle, fname)

@@ -1,3 +1,18 @@
+Changelog v5.3.1 (2026-08-16):
+- MAL/Jikan: switched metadata API to Tenrai v1; endpoint centralized in control.MAL_API_BASE_URL
+- Otaku browser: fail soft when the MAL API returns no data instead of crashing
+- AnimixPlay: re-enabled provider; updated base URL and play host; fixed episode index mapping (PR #149)
+- Anikoto: fix subtitle Referer header for caption tracks
+- Debrid auth: fix AllDebrid and DebridLink QR code URLs
+- Client: stop applying system proxy overrides on HTTP requests
+- Resolver: consolidated HLS/MP2T/jpeg playback hooks
+
+Changelog v5.3.0 (2026-06-07):
+- Client: removed HTTP fast path that bypassed FlareSolverr/Cloudflare protection
+- AnimePahe: refresh DDoS-Guard cookies via FlareSolverr; embed resolve uses dynamic headers
+- WatchNixtoons2: WCO ad-verify unlock, video-js-old.php player, getvidlink API and redirect follow
+- HiAnime: re-added hianime.ms embeds (Ryu, Volt, Ayame); proxy playback/subs, skip times, embed settings
+
 Changelog v5.2.99 (2026-05-23):
 - WatchNixtoons2: fuzzy title-match filtering on episode candidates; tie-break by priority then title rank; season pattern when season set
 - AnimePahe: minor embed hash formatting fix (Referer suffix concatenation instead of nested f-string)

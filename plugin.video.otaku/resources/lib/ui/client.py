@@ -6,8 +6,6 @@ Cloudflare/DDoS-Guard bypass, and a requests-compatible Response API.
 
 Architecture
 ------------
-Connection Pool - Thread-safe TCP/TLS keep-alive pool (_KeepAlivePool)
-Fast Path        - _fast_request() for pool-based HTTP with redirect/gzip
 Session Mgmt     - Cookie/opener caching per domain with auto cleanup
 User Agents      - Cached random desktop/mobile UA strings
 Response         - Requests-like Response object (text, json, status_code)
@@ -58,7 +56,7 @@ _cached_mobile_useragent = None
 _cached_mobile_useragent_time = 0
 _USERAGENT_CACHE_TTL = 3600  # 1 hour
 
-# Amortize session/pool cleanup: random 1%/request caused extra work on the hot path.
+# Amortize session cleanup on a fixed interval instead of per-request random checks.
 _request_count = 0
 _CLEANUP_EVERY_N_REQUESTS = 128
 
@@ -72,195 +70,6 @@ def _cleanup_old_sessions():
         _session_cookies.pop(key, None)
         _session_openers.pop(key, None)
         _session_timestamps.pop(key, None)
-    # Also clean up stale keep-alive connections
-    _keepalive_pool.cleanup()
-
-
-# ═══════════════════════════════════════════════════════════════════════════
-#  Keep-Alive Connection Pool
-# ═══════════════════════════════════════════════════════════════════════════
-
-import threading as _threading
-
-
-class _KeepAlivePool:
-    """Thread-safe pool of persistent http.client connections keyed by (host, port, scheme).
-    Reuses TCP+TLS sockets so repeated requests to the same host skip the handshake."""
-
-    def __init__(self, max_per_host=6, idle_timeout=120):
-        self._lock = _threading.Lock()
-        self._pool = {}          # key -> list of (conn, last_used_time)
-        self._max = max_per_host
-        self._idle = idle_timeout
-        self._ssl_ctx = None     # lazily created
-
-    def _get_ssl_context(self):
-        if self._ssl_ctx is None:
-            try:
-                self._ssl_ctx = ssl.create_default_context(cafile=CERT_FILE)
-            except Exception:
-                self._ssl_ctx = ssl.create_default_context()
-            self._ssl_ctx.set_alpn_protocols(['http/1.1'])
-        return self._ssl_ctx
-
-    def _key(self, parsed):
-        return (parsed.hostname, parsed.port or (443 if parsed.scheme == 'https' else 80), parsed.scheme)
-
-    def _make_conn(self, key):
-        host, port, scheme = key
-        if scheme == 'https':
-            conn = http.client.HTTPSConnection(host, port, timeout=20, context=self._get_ssl_context())
-        else:
-            conn = http.client.HTTPConnection(host, port, timeout=20)
-        return conn
-
-    def acquire(self, parsed):
-        """Get a live connection from the pool or create a new one."""
-        key = self._key(parsed)
-        now = time.time()
-        with self._lock:
-            conns = self._pool.get(key, [])
-            while conns:
-                conn, ts = conns.pop(0)
-                if now - ts < self._idle:
-                    return conn
-                # Too old, close it
-                try:
-                    conn.close()
-                except Exception:
-                    pass
-        return self._make_conn(key)
-
-    def release(self, parsed, conn):
-        """Return a connection to the pool for reuse."""
-        key = self._key(parsed)
-        with self._lock:
-            conns = self._pool.setdefault(key, [])
-            if len(conns) < self._max:
-                conns.append((conn, time.time()))
-            else:
-                try:
-                    conn.close()
-                except Exception:
-                    pass
-
-    def discard(self, parsed, conn):
-        """Discard a broken connection."""
-        try:
-            conn.close()
-        except Exception:
-            pass
-
-    def cleanup(self):
-        """Remove idle connections."""
-        now = time.time()
-        with self._lock:
-            for key in list(self._pool.keys()):
-                conns = self._pool[key]
-                alive = []
-                for conn, ts in conns:
-                    if now - ts < self._idle:
-                        alive.append((conn, ts))
-                    else:
-                        try:
-                            conn.close()
-                        except Exception:
-                            pass
-                if alive:
-                    self._pool[key] = alive
-                else:
-                    del self._pool[key]
-
-
-_keepalive_pool = _KeepAlivePool()
-
-
-# ═══════════════════════════════════════════════════════════════════════════
-#  Fast Path - Pool-Based HTTP with Redirect & Gzip
-# ═══════════════════════════════════════════════════════════════════════════
-
-def _fast_request(url, headers, post_data=None, method='GET', timeout=20, jpost=False):
-    """
-    Fast-path HTTP request using keep-alive connection pool.
-    Returns (body_bytes, status_code, response_headers_dict, url) or None on error.
-    Handles gzip decompression, UTF-8 decoding, and HTTP redirects.
-    """
-    max_redirects = 5
-    current_url = url
-    current_method = method
-    current_body_data = post_data
-
-    for _ in range(max_redirects):
-        parsed = urllib.parse.urlparse(current_url)
-        path = parsed.path or '/'
-        if parsed.query:
-            path = f'{path}?{parsed.query}'
-
-        conn = _keepalive_pool.acquire(parsed)
-        try:
-            conn.timeout = int(timeout)
-            body = None
-            if current_body_data is not None:
-                if jpost:
-                    body = json.dumps(current_body_data).encode('utf-8')
-                elif isinstance(current_body_data, dict):
-                    body = urllib.parse.urlencode(current_body_data).encode('utf-8')
-                elif isinstance(current_body_data, str):
-                    body = current_body_data.encode('utf-8')
-                elif isinstance(current_body_data, bytes):
-                    body = current_body_data
-
-            conn.request(current_method, path, body=body, headers=headers)
-            resp = conn.getresponse()
-            raw = resp.read()
-            status = resp.status
-            resp_headers = {h[0]: h[1] for h in resp.getheaders()}
-
-            # Handle redirects (301, 302, 303, 307, 308)
-            if status in (301, 302, 303, 307, 308) and 'Location' in resp_headers:
-                redirect_url = resp_headers['Location']
-                # Handle relative redirects
-                if redirect_url.startswith('/'):
-                    redirect_url = f'{parsed.scheme}://{parsed.netloc}{redirect_url}'
-                elif not redirect_url.startswith('http'):
-                    redirect_url = urllib.parse.urljoin(current_url, redirect_url)
-
-                _keepalive_pool.release(parsed, conn)
-
-                # 303 always converts to GET; 301/302 convert POST to GET
-                if status == 303 or (status in (301, 302) and current_method == 'POST'):
-                    current_method = 'GET'
-                    current_body_data = None
-                    # Remove content headers that don't apply to GET
-                    headers = {k: v for k, v in headers.items() if k.lower() not in ('content-type', 'content-length')}
-
-                current_url = redirect_url
-                continue
-
-            # Decompress gzip
-            if resp_headers.get('Content-Encoding', '').lower() == 'gzip':
-                raw = gzip.GzipFile(fileobj=io.BytesIO(raw)).read()
-
-            # Decode to string
-            ct = resp_headers.get('Content-Type', '').lower()
-            if any(x in ct for x in ['text', 'json', 'xml', 'html', 'javascript']):
-                try:
-                    result = raw.decode('utf-8')
-                except UnicodeDecodeError:
-                    result = raw.decode('latin-1', errors='ignore')
-            else:
-                result = raw
-
-            # Return connection to pool if all is well
-            _keepalive_pool.release(parsed, conn)
-            return result, str(status), resp_headers, current_url
-
-        except Exception:
-            _keepalive_pool.discard(parsed, conn)
-            return None
-
-    # Max redirects exceeded
-    return None
 
 
 def _get_cached_useragent(mobile=False):
@@ -398,68 +207,7 @@ def request(
         # Parse domain for session management
         uri = urllib.parse.urlparse(url)
         domain = uri.scheme + '://' + uri.netloc
-        system_proxy = urllib.request.getproxies()
-
-        # === FAST PATH: use keep-alive pool for session requests without special features ===
-        _can_fast = all([
-            use_session,
-            proxy is None,
-            system_proxy == {},
-            redirect,
-            tls_version is None,
-            verify,
-            output in ['', 'extended'],
-            limit is None
-        ])
-
-        if _can_fast:
-            # Build minimal headers
-            if params is not None:
-                if isinstance(params, dict):
-                    params = urllib.parse.urlencode(params)
-                url = url + '?' + params
-
-            if 'User-Agent' not in _headers:
-                _headers['User-Agent'] = _get_cached_useragent(mobile=mobile)
-            if 'Accept-Language' not in _headers:
-                _headers['Accept-Language'] = 'en-US,en'
-            if 'Accept' not in _headers:
-                _headers['Accept'] = '*/*'
-            if XHR and 'X-Requested-With' not in _headers:
-                _headers['X-Requested-With'] = 'XMLHttpRequest'
-            if cookie is not None and 'Cookie' not in _headers:
-                if isinstance(cookie, dict):
-                    cookie = '; '.join([f'{x}={y}' for x, y in cookie.items()])
-                _headers['Cookie'] = cookie
-            elif 'Cookie' not in _headers and domain in _session_cookies:
-                _headers['Cookie'] = _session_cookies[domain]
-            if compression and 'Accept-Encoding' not in _headers:
-                _headers['Accept-Encoding'] = 'gzip'
-            if referer and 'Referer' not in _headers:
-                _headers['Referer'] = referer
-            if jpost and 'Content-Type' not in _headers:
-                _headers['Content-Type'] = 'application/json'
-            elif post is not None and not jpost and 'Content-Type' not in _headers:
-                _headers['Content-Type'] = 'application/x-www-form-urlencoded'
-            # Connection keep-alive header
-            _headers['Connection'] = 'keep-alive'
-
-            http_method = method or ('POST' if post is not None else 'GET')
-            fast = _fast_request(url, _headers, post_data=post, method=http_method, timeout=timeout, jpost=jpost)
-
-            if fast is not None:
-                result, status_code, resp_headers, resp_url = fast
-                # Store session cookies if present
-                if 'Set-Cookie' in resp_headers:
-                    _session_cookies[domain] = resp_headers['Set-Cookie']
-                    _session_timestamps[domain] = time.time()
-
-                if output == 'extended':
-                    cookie_str = _session_cookies.get(domain, '')
-                    return (result, status_code, resp_headers, _headers, cookie_str, resp_url)
-                else:
-                    return result
-            pass
+        # system_proxy = urllib.request.getproxies()
 
         handlers = []
 
@@ -954,10 +702,11 @@ def _build_response(result, url):
     return Response(content=None, status_code=0, url=url)
 
 
-def get(url, headers=None, timeout=20, verify=True, cookies=None, params=None):
+def get(url, headers=None, timeout=20, verify=True, cookies=None, params=None, redirect=True):
     """Requests-like GET.  Returns a Response object."""
     result = request(url, headers=headers or {}, timeout=timeout, verify=verify,
-                     cookie=cookies, params=params, output='extended', use_session=True)
+                     cookie=cookies, params=params, redirect=redirect,
+                     output='extended', use_session=True)
     return _build_response(result, url)
 
 

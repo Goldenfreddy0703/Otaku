@@ -922,11 +922,11 @@
 						<dependency type="visible" setting="provider.animepahe">true</dependency>
 					</dependencies>
 				</setting>
-				<!-- <setting id="provider.animix" type="boolean" label="30238" help="">
+				<setting id="provider.animix" type="boolean" label="30238" help="">
 					<level>0</level>
 					<default>true</default>
 					<control type="toggle"/>
-				</setting> -->
+				</setting>
 				<!-- <setting id="provider.animixalt" type="boolean" label="30243" help="" parent="provider.animix">
 					<level>0</level>
 					<default>false</default>

@@ -30,7 +30,7 @@ class AllDebrid:
             display_dialog = f"{display_dialog}[CR]{control.lang(30083)}"
 
         qr_path = os.path.join(control.dataPath, 'qr_code.png')
-        qr = pyqrcode.create(resp['base_url'])
+        qr = pyqrcode.create(resp['user_url'])
         qr.png(qr_path, scale=20)
         config = {
             'heading': f'{control.ADDON_NAME}: AllDebrid Auth',

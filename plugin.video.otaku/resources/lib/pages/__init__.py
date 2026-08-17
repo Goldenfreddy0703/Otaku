@@ -3,7 +3,10 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 
-from resources.lib.pages import nyaa, animetosho, nekobt, torrentio, debrid_cloudfiles, easynews, animepahe, anikoto, watchnixtoons2, localfiles
+from resources.lib.pages import (
+    nyaa, animetosho, nekobt, torrentio, debrid_cloudfiles, easynews,
+    animepahe, anikoto, animixplay, hianime, watchnixtoons2, localfiles
+)
 from resources.lib.ui import control, database
 from resources.lib.windows.get_sources_window import GetSources
 from resources.lib.windows import sort_select
@@ -27,9 +30,9 @@ _HOSTER_MODULES = {
 # skip prefix drives _apply_embed_skip (aniwave / hianime / animekai)
 _EMBED_MODULES = (
     ('animepahe', animepahe, 'animepahe', None, False),
-    # ('animix', animixplay, 'animix', None, False),
+    ('animix', animixplay, 'animix', None, False),
     # ('aniwave', aniwave, 'aniwave', 'aniwave', False),
-    # ('hianime', hianime, 'hianime', 'hianime', False),
+    ('hianime', hianime, 'hianime', 'hianime', False),
     # ('animekai', animekai, 'animekai', 'animekai', False),
     ('anikoto', anikoto, 'anikoto', 'anikoto', False),
     ('watchnixtoons2', watchnixtoons2, 'watchnixtoons2', None, True),

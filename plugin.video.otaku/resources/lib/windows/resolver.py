@@ -216,6 +216,7 @@ class Resolver(BaseWindow):
                     headers=sub.get('headers'),
                     sub_index=sub.get('index', idx),
                     display_name=sub.get('name'),
+                    source_url=sub.get('file'),
                 )
                 if entry:
                     subtitle_entries.append(entry)
@@ -537,35 +538,9 @@ def _DASH_HOOK(item):
 
 
 @hook_mimetype('application/vnd.apple.mpegurl')
-def _HLS_HOOK(item):
-    if control.getBool('inputstreamadaptive.enabled'):
-        stream_url = item.getPath()
-        import inputstreamhelper
-        is_helper = inputstreamhelper.Helper('hls')
-        if is_helper.check_inputstream():
-            item.setProperty('inputstream', is_helper.inputstream_addon)
-            if control.kodi_version < 20.9:
-                item.setProperty('inputstream.adaptive.manifest_type', 'hls')
-                item.setProperty('MimeType', 'application/vnd.apple.mpegurl')
-                item.setMimeType('application/vnd.apple.mpegstream_url')
-                item.setContentLookup(False)
-            if '|' in stream_url:
-                stream_url, headers = stream_url.split('|')
-                item.setPath(stream_url)  # Set clean URL without headers
-                item.setProperty('inputstream.adaptive.stream_headers', headers)
-                # For HLS AES-128 encrypted streams, license_key is used for key file requests
-                item.setProperty('inputstream.adaptive.license_key', '|' + headers + '||R{SSM}')
-                if control.kodi_version > 21.8:
-                    item.setProperty('inputstream.adaptive.common_headers', headers)
-                else:
-                    item.setProperty('inputstream.adaptive.stream_params', headers)
-                    item.setProperty('inputstream.adaptive.manifest_headers', headers)
-
-    return item
-
-
 @hook_mimetype('video/MP2T')
-def _HLS2_HOOK(item):
+@hook_mimetype('image/jpeg')
+def _HLS_HOOK(item):
     if control.getBool('inputstreamadaptive.enabled'):
         stream_url = item.getPath()
         import inputstreamhelper

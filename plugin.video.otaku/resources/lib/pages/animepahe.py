@@ -17,7 +17,6 @@ class Sources(BrowserBase):
 
     _headers = {
         'Referer': _BASE_URL,
-        'Cookie': '__ddg1_=PZYJSmACHBBQGP6auJU9; __ddg2_=hxAe1bBqtlUhMFik'
     }
 
     def _build_source(self, item, title, episode, embed_hosts):
@@ -87,12 +86,16 @@ class Sources(BrowserBase):
     def get_sources(self, mal_id, episode):
         title = malsync.get_title(mal_id, site='animepahe')
         if not title:
+            control.log('AnimePahe: no mapped title for mal_id={0}'.format(mal_id), level='info')
             return []
 
+        control.log('AnimePahe: scraping mal_id={0} ep={1} title="{2}"'.format(mal_id, episode, title), level='info')
         slug = self._resolve_session_from_malsync(mal_id)
         if slug:
+            control.log('AnimePahe: resolved session slug from MAL sync: {0}'.format(slug), level='info')
             direct = self._process_ap(slug, title=title, episode=episode)
             if direct:
+                control.log('AnimePahe: found {0} source(s) via MAL sync slug'.format(len(direct)), level='info')
                 return direct
 
         params = {'m': 'search', 'q': title}
@@ -106,6 +109,7 @@ class Sources(BrowserBase):
         try:
             sitems = json.loads(r).get('data')
         except json.JSONDecodeError:
+            control.log('AnimePahe: search API returned invalid JSON', level='warning')
             return []
 
         if not sitems and ':' in title:
@@ -131,6 +135,7 @@ class Sources(BrowserBase):
             if items:
                 slug = items[0].get('session')
                 all_results = self._process_ap(slug, title=title, episode=episode)
+        control.log('AnimePahe: returning {0} source(s)'.format(len(all_results)), level='info')
         return all_results
 
     def _process_ap(self, slug, title, episode):
@@ -154,24 +159,41 @@ class Sources(BrowserBase):
             data=params,
             headers=self._headers
         )
-        r = json.loads(r)
-        items = r.get('data')
+        if not r:
+            control.log('AnimePahe: release API returned no data for slug={0} page={1}'.format(slug, page), level='warning')
+            return sources
+        try:
+            r = json.loads(r)
+        except json.JSONDecodeError:
+            control.log('AnimePahe: release API returned invalid JSON for slug={0}'.format(slug), level='warning')
+            return sources
+        items = r.get('data') or []
+        if not items:
+            control.log('AnimePahe: no episodes on release page {0} for slug={1}'.format(page, slug), level='info')
+            return sources
         items = sorted(items, key=lambda x: x.get('episode'))
 
         if items[0].get('episode') > 1 and not big_series:
             e_num = e_num + items[0].get('episode') - 1
 
         items = [x for x in items if x.get('episode') == e_num]
-        if items:
-            eurl = self._BASE_URL + 'play/' + slug + '/' + items[0].get('session')
-            html = self._get_request(eurl, headers=self._headers)
-            mlink = SoupStrainer('div', {'id': 'resolutionMenu'})
-            mdiv = BeautifulSoup(html, "html.parser", parse_only=mlink)
-            items = mdiv.find_all('button')
-            embed_hosts = self.embeds()
-            max_workers = max(1, min(control.max_threads or 1, len(items)))
-            with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                parsed = list(executor.map(lambda item: self._build_source(item, title, episode, embed_hosts), items))
-            sources.extend([item for item in parsed if item is not None])
+        if not items:
+            control.log('AnimePahe: episode {0} not found for slug={1}'.format(e_num, slug), level='info')
+            return sources
+
+        eurl = self._BASE_URL + 'play/' + slug + '/' + items[0].get('session')
+        html = self._get_request(eurl, headers=self._headers)
+        if not html:
+            control.log('AnimePahe: empty play page for {0}'.format(eurl), level='warning')
+            return sources
+        mlink = SoupStrainer('div', {'id': 'resolutionMenu'})
+        mdiv = BeautifulSoup(html, "html.parser", parse_only=mlink)
+        items = mdiv.find_all('button')
+        control.log('AnimePahe: found {0} embed button(s) on play page'.format(len(items)), level='info')
+        embed_hosts = self.embeds()
+        max_workers = max(1, min(control.max_threads or 1, len(items)))
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            parsed = list(executor.map(lambda item: self._build_source(item, title, episode, embed_hosts), items))
+        sources.extend([item for item in parsed if item is not None])
 
         return sources
