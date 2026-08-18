@@ -953,11 +953,11 @@
 						<dependency type="visible" setting="provider.gogo">true</dependency>
 					</dependencies>
 				</setting> -->
-				<!-- <setting id="provider.hianime" type="boolean" label="30235" help="">
+				<setting id="provider.hianime" type="boolean" label="30235" help="">
 					<level>0</level>
 					<default>true</default>
 					<control type="toggle"/>
-				</setting> -->
+				</setting>
 				<setting id="provider.watchnixtoons2" type="boolean" label="30379" help="">
 					<level>0</level>
 					<default>true</default>
