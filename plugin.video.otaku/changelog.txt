@@ -1,3 +1,7 @@
+Changelog v5.3.2 (2026-08-17):
+- Settings: Enable hianime in settings as without it cant scrape. Bug fix
+- Alldebrid - Alldebrid Cloud scraping fix. PR #475
+
 Changelog v5.3.1 (2026-08-16):
 - MAL/Jikan: switched metadata API to Tenrai v1; endpoint centralized in control.MAL_API_BASE_URL
 - Otaku browser: fail soft when the MAL API returns no data instead of crashing
