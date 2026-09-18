@@ -142,18 +142,18 @@ class OtakuBrowser(BrowserBase):
         date = datetime.datetime.today()
         year = date.year
         month = date.month
-        seasons = ['WINTER', 'SPRING', 'SUMMER', 'FALL']
+        seasons = ['winter', 'spring', 'summer', 'fall']
         season_start_dates = {
-            'WINTER': datetime.date(year, 1, 1),
-            'SPRING': datetime.date(year, 4, 1),
-            'SUMMER': datetime.date(year, 7, 1),
-            'FALL': datetime.date(year, 10, 1)
+            'winter': datetime.date(year, 1, 1),
+            'spring': datetime.date(year, 4, 1),
+            'summer': datetime.date(year, 7, 1),
+            'fall': datetime.date(year, 10, 1)
         }
         season_end_dates = {
-            'WINTER': datetime.date(year, 3, 31),
-            'SPRING': datetime.date(year, 6, 30),
-            'SUMMER': datetime.date(year, 9, 30),
-            'FALL': datetime.date(year, 12, 31)
+            'winter': datetime.date(year, 3, 31),
+            'spring': datetime.date(year, 6, 30),
+            'summer': datetime.date(year, 9, 30),
+            'fall': datetime.date(year, 12, 31)
         }
 
         if self.year_type:
@@ -170,21 +170,21 @@ class OtakuBrowser(BrowserBase):
                 if period == "next":
                     next_season_index = (self.season_type + 1) % 4
                     season = seasons[next_season_index]
-                    if season == 'WINTER':
+                    if season == 'winter':
                         year += 1
                 elif period == "last":
                     last_season_index = (self.season_type - 1) % 4
                     season = seasons[last_season_index]
-                    if season == 'FALL' and month <= 3:
+                    if season == 'fall' and month <= 3:
                         year -= 1
         else:
             if period == "next":
                 season = seasons[int((month - 1) / 3 + 1) % 4]
-                if season == 'WINTER':
+                if season == 'winter':
                     year += 1
             elif period == "last":
                 season = seasons[int((month - 1) / 3 - 1) % 4]
-                if season == 'FALL' and month <= 3:
+                if season == 'fall' and month <= 3:
                     year -= 1
             else:
                 season = seasons[int((month - 1) / 3)]
@@ -197,7 +197,7 @@ class OtakuBrowser(BrowserBase):
 
         last_season_index = (seasons.index(season) - 1) % 4
         last_season = seasons[last_season_index]
-        last_season_year = year if last_season != 'FALL' or month > 3 else year - 1
+        last_season_year = year if last_season != 'fall' or month > 3 else year - 1
         season_start_date_last = season_start_dates[last_season].replace(year=last_season_year)
         season_end_date_last = season_end_dates[last_season].replace(year=last_season_year)
 
@@ -206,7 +206,7 @@ class OtakuBrowser(BrowserBase):
 
         next_season_index = (seasons.index(season) + 1) % 4
         next_season = seasons[next_season_index]
-        next_season_year = year if next_season != 'WINTER' else year + 1
+        next_season_year = year if next_season != 'winter' else year + 1
         season_start_date_next = season_start_dates[next_season].replace(year=next_season_year)
         season_end_date_next = season_end_dates[next_season].replace(year=next_season_year)
 

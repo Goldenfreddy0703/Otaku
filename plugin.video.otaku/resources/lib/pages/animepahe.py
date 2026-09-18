@@ -106,9 +106,12 @@ class Sources(BrowserBase):
             data=params,
             headers=self._headers
         )
+        if not r:
+            control.log('AnimePahe: search API returned no data', level='warning')
+            return []
         try:
             sitems = json.loads(r).get('data')
-        except json.JSONDecodeError or TypeError:
+        except (json.JSONDecodeError, TypeError):
             control.log('AnimePahe: search API returned invalid JSON', level='warning')
             return []
 
