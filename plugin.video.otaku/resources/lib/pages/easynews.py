@@ -137,6 +137,10 @@ class Sources(BrowserBase):
                 queries.append(f'{t} S{sz}E{ep_str}')
             queries = self._uniq_queries(queries)
 
+        # ':' in a title ("BLEACH: Thousand-Year Blood War") makes Easynews answer with an
+        # error page instead of JSON, so that whole query was lost
+        queries = self._uniq_queries([re.sub(r'\s+', ' ', q.replace(':', ' ')) for q in queries])
+
         if not queries:
             return {'cached': [], 'uncached': []}
 
