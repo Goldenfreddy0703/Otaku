@@ -1,8 +1,23 @@
 """MegaPlay video source extractor for Anikoto embed URLs."""
+import base64
 import json
 import re
 
-from resources.lib.ui import client, control
+from resources.lib.ui import client, control, pyaes
+
+
+def decrypt_megaplay_source(enc_data):
+    key = b"i?LMTAx0Q6,:}50U" + b'\x00' * 16
+    iv = b"W0;27ToaUpl_P%'c"
+    enc_data = enc_data.replace('-', '+').replace('_', '/')
+    n = len(enc_data) % 4
+    if n:
+        enc_data += "===="[n:]
+    decrypter = pyaes.Decrypter(pyaes.AESModeOfOperationCBC(key, iv))
+    dec_text = decrypter.feed(base64.b64decode(enc_data))
+    dec_text += decrypter.feed()
+    data = json.loads(dec_text.decode('utf-8'))
+    return data.get('file')
 
 
 def extract_megaplay_sources(embed_url, referer=None):
@@ -36,11 +51,8 @@ def extract_megaplay_sources(embed_url, referer=None):
 
         player_id = match.group(1)
         api_url = 'https://megaplay.buzz/stream/getSources?id={0}'.format(player_id)
-        api_headers = headers.copy()
-        api_headers['X-Requested-With'] = 'XMLHttpRequest'
-        api_headers['Referer'] = embed_url
-
-        api_response = client.get(api_url, headers=api_headers, timeout=15)
+        headers['X-Requested-With'] = 'XMLHttpRequest'
+        api_response = client.get(api_url, headers=headers, timeout=15)
         if not api_response or not api_response.text:
             return None
 
@@ -50,14 +62,10 @@ def extract_megaplay_sources(embed_url, referer=None):
             file_url = sources.get('file')
             if file_url:
                 data['sources'] = [{'file': file_url}]
-        elif not sources:
-            track = data.get('tracks')[0]
-            file_url = track.get('file')
-            if file_url:
-                file_url = file_url.split('subtitles')[0] + 'index-f2.m3u8'
-                data['sources'] = [{'file': file_url}]
         else:
-            return None
+            file_url = decrypt_megaplay_source(data.get('enc'))
+            if file_url:
+                data['sources'] = [{'file': file_url}]
 
         return data
     except (json.JSONDecodeError, AttributeError, TypeError) as e:
