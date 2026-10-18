@@ -1,3 +1,9 @@
+Changelog v5.3.4 (2026-10-18):
+- Otaku browser: fixed Airing Last, This, and Next season tabs (season query casing for the metadata API)
+- AnimePahe: fail soft when the search API returns no data; fixed invalid-JSON exception handling
+- MegaPlay: decrypt encrypted embed sources when the API no longer returns a plain file URL
+- Settings maintenance: renamed Instructions.txt to instructions.txt for the instructions viewer
+
 Changelog v5.3.3 (2026-9-13):
 - fix megaplay extractor
 
