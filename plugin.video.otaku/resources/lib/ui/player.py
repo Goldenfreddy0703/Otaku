@@ -21,6 +21,20 @@ from resources.lib.ui import control, database, source_utils
 from resources.lib.endpoints import aniskip, anime_skip
 from resources.lib import indexers
 
+
+def _lang3(code):
+    """Kodi reports track languages as 'jpn' or, in newer versions, 'ja' / 'ja-JP': compare
+    them as ISO 639-2 ('jpn') so the preferred audio and subtitle settings keep matching."""
+    code = (code or '').strip()
+    for c in (code, code.split('-')[0].split('_')[0]):
+        try:
+            got = xbmc.convertLanguage(c, xbmc.ISO_639_2)
+        except Exception:
+            got = ''
+        if got:
+            return got
+    return code
+
 playList = control.playList
 player = xbmc.Player
 
@@ -411,7 +425,7 @@ class WatchlistPlayer(player):
 
             # Set preferred audio stream
             for stream in audio_streams:
-                if stream['language'] == preferred_audio_streams:
+                if _lang3(stream['language']) == preferred_audio_streams:
                     self.setAudioStream(stream['index'])
                     break
             else:
@@ -439,14 +453,14 @@ class WatchlistPlayer(player):
 
                     # Check for type match
                     if control.getBool('general.subtitles.type'):
-                        if sub['language'] == preferred_subtitle_lang:
+                        if _lang3(sub['language']) == preferred_subtitle_lang:
                             if sub[preffeded_subtitle_type]:
                                 subtitle_int = index
                                 break
 
                     # Check for keyword match
                     if control.getBool('general.subtitles.keyword'):
-                        if sub['language'] == preferred_subtitle_lang:
+                        if _lang3(sub['language']) == preferred_subtitle_lang:
                             sub_name_lower = sub['name'].lower()
                             if isinstance(preffeded_subtitle_keyword, list):
                                 if any(kw in sub_name_lower for kw in preffeded_subtitle_keyword):
@@ -459,13 +473,13 @@ class WatchlistPlayer(player):
                 # fallback to first of preferred language if no type or keyword match
                 if subtitle_int is None:
                     for index, sub in enumerate(subtitle_streams):
-                        if sub['language'] == preferred_subtitle_lang:
+                        if _lang3(sub['language']) == preferred_subtitle_lang:
                             subtitle_int = index
                             break
             else:
                 # No type filter or keyword filter, just check for preferred language
                 for index, sub in enumerate(subtitle_streams):
-                    if sub['language'] == preferred_subtitle_lang:
+                    if _lang3(sub['language']) == preferred_subtitle_lang:
                         subtitle_int = index
                         break
 
