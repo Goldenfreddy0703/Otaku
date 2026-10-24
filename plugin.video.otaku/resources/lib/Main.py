@@ -1419,7 +1419,7 @@ def TMDB_HELPER(payload, params):
 
         if mal_ids:
             episode_titles = tmdb.get_episode_titles(tmdb_id, season_number, episode_number)
-            match = find_episode_by_title(mal_ids, episode_titles)
+            match = tmdb_mapping_match(tmdb_id, id_sources, season_number, episode_number) or find_episode_by_title(mal_ids, episode_titles)
             if match:
                 mal_id = match['mal_id']
                 episode_num = match['episode_number']
@@ -1548,6 +1548,91 @@ def find_episode_by_title(mal_ids, episode_titles):
                     return info
             control.log("No fuzzy or direct match for Jikan episode titles against TMDB titles.")
     return None  # No match found
+
+
+def tmdb_mapping_match(tmdb_id, id_sources, season_number, episode_number):
+    """Find the MAL id and episode for a TMDb season/episode using mappings.db, returns None if unsure"""
+    try:
+        return _tmdb_mapping_match(tmdb_id, id_sources, season_number, episode_number)
+    except Exception as e:
+        # Fallback to title matching if anything goes wrong
+        control.log(f'TMDB mapping: error, falling back to title matching: {e}', 'warning')
+        return None
+
+
+def _tmdb_mapping_match(tmdb_id, id_sources, season_number, episode_number):
+    import re
+    from resources.lib.ui import client
+    from resources.lib.endpoints import tmdb as tmdb_api
+
+    if not tmdb_id or not season_number or not episode_number:
+        return None
+
+    # Get all mapping rows for this show and only keep the ones for this TMDb id
+    rows, seen = [], set()
+    for key, value in id_sources:
+        if not value:
+            continue
+        for row in database.get_mal_ids(value, key) or []:
+            if row and row.get('mal_id') and row['mal_id'] not in seen:
+                seen.add(row['mal_id'])
+                rows.append(row)
+    rows = [r for r in rows if str(r.get('themoviedb_id')) == str(tmdb_id)]
+    if not rows:
+        return None
+
+    # Turn a range like '13-25' into (13, 25)
+    def ep_range(value):
+        m = re.match(r'\s*(\d+)\s*-\s*(\d+)', str(value or ''))
+        return (int(m.group(1)), int(m.group(2))) if m else None
+
+    # Check if the episode is inside this MAL entry and get its episode number there
+    def result(row, number):
+        g, a = ep_range(row.get('global_media_episodes')), ep_range(row.get('anime_media_episodes'))
+        if not g or not (g[0] <= number <= g[1]):
+            return None
+        start = a[0] if a else 1
+        control.log(f"TMDB mapping match: S{season_number}E{episode_number} -> MAL {row['mal_id']} ep {start + number - g[0]}")
+        return {'mal_id': row['mal_id'], 'episode_number': start + number - g[0], 'matched_title': 'mappings.db'}
+
+    # Get the episode count of each season from TMDb
+    layout = {}
+    try:
+        res = control.safe_json(client.get(f'{tmdb_api.baseUrl}tv/{tmdb_id}', params={'api_key': tmdb_api.apiKey}))
+        layout = {int(s['season_number']): int(s.get('episode_count') or 0)
+                  for s in res.get('seasons', []) if s.get('season_number') is not None}
+    except Exception as e:
+        control.log(f'TMDB mapping: could not load season layout: {e}', 'warning')
+    tmdb_before = sum(n for s, n in layout.items() if 0 < s < season_number) if layout else None
+
+    # Try the TVDb season with the same number as the TMDb season first
+    season_rows = [r for r in rows if str(r.get('thetvdb_season')) == str(season_number)]
+    if season_rows:
+        if tmdb_before is not None:
+            # Only use it if the earlier seasons add up to the same episode count on TMDb and TVDb
+            tvdb_ends = {}
+            for r in rows:
+                s, g = str(r.get('thetvdb_season')), ep_range(r.get('global_media_episodes'))
+                if s.isdigit() and 0 < int(s) < season_number and g:
+                    tvdb_ends[int(s)] = max(tvdb_ends.get(int(s), 0), g[1])
+            complete = all(s in tvdb_ends for s in range(1, season_number))
+            if not complete or sum(tvdb_ends.values()) != tmdb_before:
+                control.log('TMDB mapping: TMDb and TVDb season layouts differ, falling back to title matching')
+                season_rows = []
+        for r in season_rows:
+            match = result(r, episode_number)
+            if match:
+                return match
+
+    # Absolute numbered shows like Naruto and One Piece
+    abs_rows = [r for r in rows if str(r.get('thetvdb_season')) == 'a']
+    if abs_rows and tmdb_before is not None:
+        absolute = tmdb_before + episode_number
+        for r in abs_rows:
+            match = result(r, absolute)
+            if match:
+                return match
+    return None
 
 
 @multi_route(*_wildcard_browser_paths('marked_as_watched'))
