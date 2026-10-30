@@ -79,6 +79,9 @@ class Easynews:
                     'name': display_name,
                     'rawSize': int(item.get('rawSize', 0)),
                     'language': language,
+                    # when it was posted (unix time), to tell a new part's episode 6 from an
+                    # older part's episode 6 with the same file name
+                    'ts': item.get('ts'),
                 })
             except Exception as e:
                 control.log(f'Easynews row parse: {e}', 'warning')

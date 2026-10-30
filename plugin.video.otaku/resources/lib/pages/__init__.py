@@ -167,6 +167,17 @@ class Sources(GetSources):
             runtime = time.perf_counter() - start_time
             self.progress = runtime / timeout * 100
 
+        # keep only this part's releases (episode 6 of an earlier part has the same numbering)
+        if media_type != 'movie':
+            # all named releases are checked together (torrents, hosters and the debrid cloud),
+            # so a list with only wrong releases is compared with the others
+            from resources.lib.ui import part_filter
+            pool = self.torrentSources + self.hosterSources + self.cloud_files
+            kept = {id(s) for s in part_filter.apply(pool, mal_id, query, '', episode)}
+            self.torrentSources = [s for s in self.torrentSources if id(s) in kept]
+            self.hosterSources = [s for s in self.hosterSources if id(s) in kept]
+            self.cloud_files = [s for s in self.cloud_files if id(s) in kept]
+
         if len(self.torrentSources) + len(self.hosterSources) + len(self.embedSources) + len(self.cloud_files) + len(self.local_files) == 0:
             self.return_data = []
         else:

@@ -334,6 +334,18 @@ def get_fuzzy_match(query, filenames):
     if not query or not filenames:
         return []
 
+    # '(Gintama°)|(Gintama Season 4)' is a list of titles, not one title: match each
+    # title on its own, so the "|" and brackets do not stop real matches and do not let
+    # the loose fallback below pick unrelated files
+    titles = [t.strip() for t in re.findall(r'\(([^)]+)\)', query) if t.strip()] if '|' in query else []
+    if len(titles) > 1:
+        merged = []
+        for t in titles:
+            for i in get_fuzzy_match(t, filenames):
+                if i not in merged:
+                    merged.append(i)
+        return merged
+
     # Normalize query for matching
     query_clean = cleanTitle(query)
     query_lower = query.lower()
