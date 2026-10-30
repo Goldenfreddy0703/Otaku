@@ -113,6 +113,41 @@ class Sources(BrowserBase):
             return self._uniq_queries([f'{t} {year}'.strip() for t in search_titles])
         return self._uniq_queries(list(search_titles))
 
+    @staticmethod
+    def _start_ts(mal_id):
+        """Unix time this anime entry started airing, from its start_date, or None."""
+        import time
+        try:
+            row = database.get_show(mal_id)
+            meta = pickle.loads(row['kodi_meta']) if row and row.get('kodi_meta') else {}
+            start = str(meta.get('start_date') or '')[:10]
+            return time.mktime(time.strptime(start, '%Y-%m-%d')) if start else None
+        except Exception:
+            return None
+
+    def _this_part_only(self, dicts, by_hash, mal_id, titles):
+        """Later parts of a show (Bleach: Thousand-Year Blood War - The Calamity) are often
+        released as plain "S01E06" or "- 06", exactly like the first part or the original show.
+        1. Drop files posted before this part started airing (2 days of grace).
+        Other parts' names and the series subtitle are checked for every provider in
+        ui/part_filter.py."""
+        start = self._start_ts(mal_id)
+        if start:
+            kept = []
+            for d in dicts:
+                ts = (by_hash.get(d['hash']) or {}).get('ts')
+                try:
+                    ts = float(ts)
+                except (TypeError, ValueError):
+                    ts = None
+                if ts is None or ts >= start - 2 * 86400:
+                    kept.append(d)
+            if len(kept) != len(dicts):
+                control.log(f'Easynews: {len(dicts) - len(kept)} hits posted before this part aired', 'info')
+            dicts = kept
+
+        return dicts
+
     def get_sources(self, query, mal_id, episode, status, media_type, season=None, part=None):
         if not control.easynews_enabled():
             return {'cached': [], 'uncached': []}
@@ -135,7 +170,13 @@ class Sources(BrowserBase):
             for t in search_titles:
                 queries.append(f'{t} - {ep_str}')
                 queries.append(f'{t} S{sz}E{ep_str}')
-            queries = self._uniq_queries(queries)
+            # the part itself ("BLEACH Kashin-tan 06"): the general words above return
+            # hundreds of older parts' episode 6 and can miss the new part's releases
+            from resources.lib.ui import part_filter
+            number = part_filter.part_info(mal_id)[0]
+            queries += part_filter.part_queries(originals, episode, number)
+            # ':' makes Easynews answer with an error page instead of results
+            queries = self._uniq_queries([re.sub(r'\s+', ' ', q.replace(':', ' ')) for q in queries])
 
         if not queries:
             return {'cached': [], 'uncached': []}
@@ -184,6 +225,8 @@ class Sources(BrowserBase):
         control.log(f'Easynews: {len(filtered_dicts)} hits after episode/season filter', 'info')
 
         by_hash = {r['url_dl']: r for r in relevant}
+        if media_type != 'movie':
+            filtered_dicts = self._this_part_only(filtered_dicts, by_hash, mal_id, originals)
         cached = []
         for d in filtered_dicts:
             url_dl = d['hash']
