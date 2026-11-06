@@ -16,8 +16,12 @@ class Sources(BrowserBase):
         self.cached = []
         self.uncached = []
         self.sources = []
+        self.filter_kwargs = {}
+        self.absolute_episode = None
 
-    def get_sources(self, query, mal_id, episode, status, media_type, season=None, part=None):
+    def get_sources(self, query, mal_id, episode, status, media_type, season=None, part=None, hints=None):
+        self.filter_kwargs = source_utils.filter_kwargs(hints)
+        self.absolute_episode = (hints or {}).get('absolute_episode')
         query = self._clean_title(query).replace('-', ' ')
         self.media_type = media_type
         if media_type == 'movie':
@@ -47,6 +51,8 @@ class Sources(BrowserBase):
 
         # Primary episode search
         query1 = f'{show} "- {episode_zfill}"|"S{season_zfill}E{episode_zfill}"'
+        if self.absolute_episode:
+            query1 += f'|"- {str(self.absolute_episode).zfill(2)}"'
         search_tasks.append({
             'query': query1,
             'params': {'f': '0', 'c': '1_0', 'q': query1.replace(' ', '+'), 's': 'downloads', 'o': 'desc'},
@@ -167,7 +173,7 @@ class Sources(BrowserBase):
             for idx, torrent in enumerate(list_):
                 torrent['hash'] = re.findall(r'btih:(.*?)(?:&|$)', torrent['magnet'])[0]
 
-            filtered_list = source_utils.filter_sources('nyaa', list_, mal_id, int(season_zfill), int(episode_zfill), part)
+            filtered_list = source_utils.filter_sources('nyaa', list_, mal_id, int(season_zfill), int(episode_zfill), part, **self.filter_kwargs)
 
             cache_list, uncashed_list_ = Debrid().torrentCacheCheck(filtered_list, mal_id=mal_id, episode=episode_zfill, media_type=self.media_type)
             cache_list = sorted(cache_list, key=lambda k: k['downloads'], reverse=True)
@@ -238,7 +244,7 @@ class Sources(BrowserBase):
             'episode_re': episode,
             'size': res['size'],
             'byte_size': 0,
-            'info': source_utils.getInfo(res['name']),
+            'info': source_utils.get_release_info(res),
             'lang': source_utils.getAudio_lang(res['name']),
             'channel': source_utils.getAudio_channel(res['name']),
             'sub': source_utils.getSubtitle_lang(res['name']),
