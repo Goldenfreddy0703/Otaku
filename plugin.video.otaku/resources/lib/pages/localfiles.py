@@ -37,7 +37,7 @@ class Sources(BrowserBase):
             'sub': source_utils.getSubtitle_lang(file_info['name'])
         }
 
-    def get_sources(self, query, mal_id, episode, season=None):
+    def get_sources(self, query, mal_id, episode, season=None, hints=None):
         filenames = []
         for root, dirs, files in os.walk(PATH):
             for file in files:
@@ -48,7 +48,7 @@ class Sources(BrowserBase):
                         'path': full_path
                     })
 
-        filenames = source_utils.filter_sources('local', filenames, mal_id, season, episode)
+        filenames = source_utils.filter_sources('local', filenames, mal_id, season, episode, **source_utils.filter_kwargs(hints))
         clean_filenames = [re.sub(r'\[.*?]\s*', '', i['name'].replace(',', '')) for i in filenames]
         resp = source_utils.get_fuzzy_match(query, clean_filenames)
         match_files = [filenames[i] for i in resp]

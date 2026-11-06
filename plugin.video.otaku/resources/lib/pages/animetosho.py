@@ -21,8 +21,12 @@ class Sources(BrowserBase):
         self.anidb_id = None
         self.anidb_ep_id = None
         self.paging = control.getInt('animetosho.paging')
+        self.filter_kwargs = {}
+        self.absolute_episode = None
 
-    def get_sources(self, show, mal_id, episode, status, media_type, season=None, part=None):
+    def get_sources(self, show, mal_id, episode, status, media_type, season=None, part=None, hints=None):
+        self.filter_kwargs = source_utils.filter_kwargs(hints)
+        self.absolute_episode = (hints or {}).get('absolute_episode')
         control.log(f"Animetosho: Starting search for '{show}' episode {episode}")
         if media_type == "movie":
             return self.get_movie_sources(show, mal_id)
@@ -66,6 +70,8 @@ class Sources(BrowserBase):
 
         # Primary episode search
         query = f'{show} "- {episode_zfill}"|"S{season_zfill}E{episode_zfill}"'
+        if self.absolute_episode:
+            query += f'|"- {str(self.absolute_episode).zfill(2)}"'
         params1 = {
             'q': self._sphinx_clean(query),
             'qx': 1,
@@ -220,7 +226,7 @@ class Sources(BrowserBase):
 
                 list_.append(list_item)
 
-            filtered_list = source_utils.filter_sources('animetosho', list_, mal_id, int(season), int(episode), part, anidb_id=self.anidb_id)
+            filtered_list = source_utils.filter_sources('animetosho', list_, mal_id, int(season), int(episode), part, anidb_id=self.anidb_id, **self.filter_kwargs)
 
             cache_list, uncashed_list_ = Debrid().torrentCacheCheck(filtered_list, mal_id=mal_id, episode=episode, media_type='episode')
             cache_list = sorted(cache_list, key=lambda k: k['downloads'], reverse=True)
@@ -296,7 +302,7 @@ class Sources(BrowserBase):
             'provider': 'animetosho',
             'episode_re': episode,
             'size': res['size'],
-            'info': source_utils.getInfo(res['name']),
+            'info': source_utils.get_release_info(res),
             'byte_size': 0,
             'lang': source_utils.getAudio_lang(res['name']),
             'channel': source_utils.getAudio_channel(res['name']),

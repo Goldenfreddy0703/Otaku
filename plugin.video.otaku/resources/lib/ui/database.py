@@ -396,6 +396,15 @@ def update_episode(mal_id, season, number, update_time, kodi_meta,
         cur.connection.commit()
 
 
+def update_show_season(mal_id, season):
+    # Season is part of the unique index, so REPLACE alone would leave the old rows behind
+    with SQL(control.malSyncDB) as cur:
+        cur.execute(
+            'UPDATE OR REPLACE episodes SET season=? WHERE mal_id=? AND season!=?',
+            (season, mal_id, season))
+        cur.connection.commit()
+
+
 def update_episode_column(mal_id, episode, column, value):
     with SQL(control.malSyncDB) as cur:
         cur.execute(

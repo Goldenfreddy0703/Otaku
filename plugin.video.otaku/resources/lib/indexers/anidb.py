@@ -140,7 +140,7 @@ class ANIDBAPI:
 
         # Use alt_titles parsed from XML to build a list of names.
         title_list = [name['name'] for name in result.get('alt_titles', [])]
-        season = utils.get_season(title_list, mal_id)
+        season = utils.resolve_season(title_list, mal_id)[0]
 
         result_ep = result['episodes']
         mapfunc = partial(self.parse_episode_view, mal_id=mal_id, season=season, poster=poster, fanart=fanart, clearart=clearart, clearlogo=clearlogo, eps_watched=eps_watched, update_time=update_time, tvshowtitle=tvshowtitle, dub_data=dub_data, filler_data=filler_data)
@@ -161,7 +161,7 @@ class ANIDBAPI:
         update_time, diff = indexers.get_diff(episodes[-1])
         if diff > control.getInt('interface.check.updates'):
             result = self.get_episode_meta(mal_id)
-            season = episodes[0]['season']
+            season = indexers.refresh_season(mal_id, episodes)
             mapfunc2 = partial(self.parse_episode_view, mal_id=mal_id, season=season, poster=poster, fanart=fanart, clearart=clearart, clearlogo=clearlogo, eps_watched=eps_watched, update_time=update_time, tvshowtitle=tvshowtitle, dub_data=dub_data, filler_data=filler_data, episodes=episodes)
             # Parallelize episode parsing
             all_results = utils.parallel_process(result['episodes'], mapfunc2)

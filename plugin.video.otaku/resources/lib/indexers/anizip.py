@@ -94,7 +94,7 @@ class ANIZIPAPI:
         if diff > control.getInt('interface.check.updates'):
             result = self.get_anime_info(mal_id)
             result_ep = [result['episodes'][res] for res in result['episodes'] if res.isdigit()]
-            season = episodes[0]['season']
+            season = indexers.refresh_season(mal_id, episodes)
             mapfunc2 = partial(self.parse_episode_view, mal_id=mal_id, season=season, poster=poster, fanart=fanart, clearart=clearart, clearlogo=clearlogo, eps_watched=eps_watched, update_time=update_time, tvshowtitle=tvshowtitle, dub_data=dub_data, filler_data=None, episodes=episodes)
             # Parallelize episode parsing
             all_results = utils.parallel_process(result_ep, mapfunc2)

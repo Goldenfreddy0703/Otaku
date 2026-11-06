@@ -15,6 +15,7 @@ class Sources(BrowserBase):
         self.uncached = []
         self.sources = []
         self.media_id = None
+        self.filter_kwargs = {}
 
     @staticmethod
     def _parse_titles(query):
@@ -124,7 +125,8 @@ class Sources(BrowserBase):
             size /= 1024
         return f'{size:.2f} PB'
 
-    def get_sources(self, query, mal_id, episode, status, media_type, season=None, part=None):
+    def get_sources(self, query, mal_id, episode, status, media_type, season=None, part=None, hints=None):
+        self.filter_kwargs = source_utils.filter_kwargs(hints)
         query = self._clean_title(query).replace('-', ' ')
         self.media_type = media_type
         titles = self._parse_titles(query)
@@ -253,7 +255,7 @@ class Sources(BrowserBase):
             try:
                 raw_results = self._search_torrents(task['params'])
                 list_ = self._results_to_list(raw_results)
-                filtered = source_utils.filter_sources('nekobt', list_, mal_id, int(season_zfill), int(episode_zfill), part)
+                filtered = source_utils.filter_sources('nekobt', list_, mal_id, int(season_zfill), int(episode_zfill), part, **self.filter_kwargs)
                 control.log(f"nekoBT: {task['name']} returned {len(raw_results)} raw, {len(filtered)} after filter")
                 return filtered
             except Exception as e:
@@ -386,7 +388,7 @@ class Sources(BrowserBase):
             'episode_re': episode,
             'size': res['size'],
             'byte_size': res.get('byte_size', 0),
-            'info': source_utils.getInfo(res['name']),
+            'info': source_utils.get_release_info(res),
             'lang': source_utils.getAudio_lang(res['name']),
             'channel': source_utils.getAudio_channel(res['name']),
             'sub': source_utils.getSubtitle_lang(res['name']),
