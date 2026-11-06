@@ -25,8 +25,11 @@ class Sources(BrowserBase):
         self.absolute_episode = None
 
     def get_sources(self, show, mal_id, episode, status, media_type, season=None, part=None, hints=None):
+        hints = hints or {}
         self.filter_kwargs = source_utils.filter_kwargs(hints)
-        self.absolute_episode = (hints or {}).get('absolute_episode')
+        self.absolute_episode = hints.get('absolute_episode')
+        if hints.get('titles'):
+            show = self._build_title_query(hints['titles'])
         control.log(f"Animetosho: Starting search for '{show}' episode {episode}")
         if media_type == "movie":
             return self.get_movie_sources(show, mal_id)
@@ -69,9 +72,10 @@ class Sources(BrowserBase):
         search_tasks = []
 
         # Primary episode search
-        query = f'{show} "- {episode_zfill}"|"S{season_zfill}E{episode_zfill}"'
+        episode_terms = f'"- {episode_zfill}"|"S{season_zfill}E{episode_zfill}"'
         if self.absolute_episode:
-            query += f'|"- {str(self.absolute_episode).zfill(2)}"'
+            episode_terms += f'|"- {str(self.absolute_episode).zfill(2)}"'
+        query = f'{show} {episode_terms}'
         params1 = {
             'q': self._sphinx_clean(query),
             'qx': 1,
@@ -109,12 +113,20 @@ class Sources(BrowserBase):
             params3['aids'] = self.anidb_id
         search_tasks.append({'params': params3, 'name': 'fallback'})
 
+        # The AniDB id alone finds releases named differently from every known title
+        if self.anidb_id:
+            search_tasks.append({
+                'params': {'q': self._sphinx_clean(episode_terms), 'qx': 1, 'aids': self.anidb_id},
+                'name': 'id_only'
+            })
+
         # Season variation search
-        if 'season' in show.lower():
-            show_variations = re.split(r'season\s*\d+', show.lower())
-            cleaned_variations = [self._sphinx_clean(var.strip() + ')') for var in show_variations if var.strip()]
+        titles = self._parse_query_titles(show)
+        stripped = [utils.strip_season_tokens(title) for title in titles]
+        changed = [base for base, title in zip(stripped, titles) if base and base != title]
+        if changed:
             params4 = {
-                'q': '|'.join(cleaned_variations),
+                'q': self._sphinx_clean(self._build_title_query(list(dict.fromkeys(changed)))),
                 'qx': 1
             }
             if self.anidb_id:
@@ -146,6 +158,12 @@ class Sources(BrowserBase):
         animetosho_sources = []
         for sources in all_search_results:
             animetosho_sources.extend(sources)
+
+        # New shows are often not linked to their AniDB id yet, and the id filter then hides everything
+        if self.anidb_id and not animetosho_sources:
+            control.log('AnimeTosho: No results with the AniDB id, retrying without it')
+            params5 = {key: value for key, value in params1.items() if key != 'aids'}
+            animetosho_sources = run_search({'params': params5, 'name': 'no_id'})
 
         control.log(f"AnimeTosho: Episode search complete - returning {len(animetosho_sources)} total sources")
         return animetosho_sources

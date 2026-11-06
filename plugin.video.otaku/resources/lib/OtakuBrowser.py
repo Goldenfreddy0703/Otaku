@@ -1008,6 +1008,7 @@ class OtakuBrowser(BrowserBase):
             'title_userPreferred': title_userPreferred,
             'start_date': start_date,
             'query': titles,
+            'synonyms': (anilist_res.get('synonyms') or []) if anilist_res else [],
             'episodes': episodes,
             'poster': poster,
             'status': status,

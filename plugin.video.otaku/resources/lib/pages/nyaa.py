@@ -20,29 +20,35 @@ class Sources(BrowserBase):
         self.absolute_episode = None
 
     def get_sources(self, query, mal_id, episode, status, media_type, season=None, part=None, hints=None):
+        hints = hints or {}
         self.filter_kwargs = source_utils.filter_kwargs(hints)
-        self.absolute_episode = (hints or {}).get('absolute_episode')
-        query = self._clean_title(query).replace('-', ' ')
+        self.absolute_episode = hints.get('absolute_episode')
+        titles = hints.get('titles') or self._parse_query_titles(self._clean_title(query).replace('-', ' '))
         self.media_type = media_type
         if media_type == 'movie':
-            return self.get_movie_sources(query, mal_id)
+            return self.get_movie_sources(self._build_title_query(titles), mal_id)
 
-        episode_sources = self.get_episode_sources(query, mal_id, episode, season, part, status)
-        show_sources = self.get_show_sources(query, mal_id, episode, season, part)
+        episode_sources = self.get_episode_sources(titles, mal_id, episode, season, part, status)
+        show_sources = self.get_show_sources(self._build_title_query(titles), mal_id, episode, season, part)
         self.sources = episode_sources + show_sources
 
-        if not self.sources and ':' in query:
-            q1, q2 = query.split('|', 2)
-            q1 = q1[1:-1].split(':')[0]
-            q2 = q2[1:-1].split(':')[0]
-            query2 = '({0})|({1})'.format(q1, q2)
-            self.sources = self.get_episode_sources(query2, mal_id, episode, season, part, status)
+        short_titles = [title.split(':')[0].strip() for title in titles if ':' in title]
+        if not self.sources and short_titles:
+            self.sources = self.get_episode_sources(short_titles, mal_id, episode, season, part, status)
 
         # remove any duplicate sources
         self.append_cache_uncached_noduplicates()
         return {'cached': self.cached, 'uncached': self.uncached}
 
-    def get_episode_sources(self, show, mal_id, episode, season, part, status):
+    @staticmethod
+    def season_stripped_query(titles):
+        """Title query with season markers removed, or None if no title has one."""
+        stripped = [utils.strip_season_tokens(title) for title in titles]
+        changed = [base for base, title in zip(stripped, titles) if base and base != title]
+        return Sources._build_title_query(list(dict.fromkeys(changed))) if changed else None
+
+    def get_episode_sources(self, titles, mal_id, episode, season, part, status):
+        show = self._build_title_query(titles)
         season_zfill = str(season).zfill(2) if season else '01'
         episode_zfill = episode.zfill(2)
 
@@ -87,11 +93,7 @@ class Sources(BrowserBase):
         })
 
         # Season search
-        query4 = show
-        if 'season' in show.lower():
-            matches = [re.match(r'\(.+?(?=season)', title, re.IGNORECASE) for title in show.split('|')]
-            query4 = '|'.join(match.group(0).strip() + ')' for match in matches if match) or show
-
+        query4 = self.season_stripped_query(titles) or show
         search_tasks.append({
             'query': query4,
             'params': {'f': '0', 'c': '1_0', 'q': query4.replace(' ', '+')},

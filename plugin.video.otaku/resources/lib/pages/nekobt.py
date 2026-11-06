@@ -16,22 +16,7 @@ class Sources(BrowserBase):
         self.sources = []
         self.media_id = None
         self.filter_kwargs = {}
-
-    @staticmethod
-    def _parse_titles(query):
-        """Extract individual titles from the '(Title1)|(Title2)' format."""
-        titles = re.findall(r'\(([^)]+)\)', query)
-        if not titles:
-            titles = [query.strip()]
-        # Deduplicate while preserving order
-        seen = set()
-        unique = []
-        for t in titles:
-            t_stripped = t.strip()
-            if t_stripped and t_stripped.lower() not in seen:
-                seen.add(t_stripped.lower())
-                unique.append(t_stripped)
-        return unique
+        self.tvdb_hint = None
 
     def _get_tvdb_id(self, mal_id):
         """Look up the TVDB ID from the mapping database."""
@@ -40,7 +25,7 @@ class Sources(BrowserBase):
             tvdb_id = mapping.get('thetvdb_id')
             if tvdb_id:
                 return int(tvdb_id)
-        return None
+        return int(self.tvdb_hint) if self.tvdb_hint else None
 
     def _resolve_media_id(self, titles, mal_id):
         """Search nekoBT /media/search by title and match by TVDB ID to find the internal media_id."""
@@ -126,10 +111,11 @@ class Sources(BrowserBase):
         return f'{size:.2f} PB'
 
     def get_sources(self, query, mal_id, episode, status, media_type, season=None, part=None, hints=None):
+        hints = hints or {}
         self.filter_kwargs = source_utils.filter_kwargs(hints)
-        query = self._clean_title(query).replace('-', ' ')
+        self.tvdb_hint = hints.get('tvdb_id')
         self.media_type = media_type
-        titles = self._parse_titles(query)
+        titles = hints.get('titles') or self._parse_query_titles(self._clean_title(query).replace('-', ' '))
         control.log(f"nekoBT: Parsed titles: {titles}")
 
         # Resolve nekoBT's internal media_id using title search + TVDB matching

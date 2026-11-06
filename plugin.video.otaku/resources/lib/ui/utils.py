@@ -7,7 +7,7 @@ Sections
 --------
 Item Allocation   - allocate_item, parse_view, artwork path cache
 Search History    - search_history, parse_history_view, URL mappings
-Season Detection  - get_season, resolve_season, get_source_context
+Season Detection  - get_season, resolve_season, get_source_context, get_search_titles
 Parallel Helpers  - parallel_fetch, parallel_process
 """
 
@@ -140,6 +140,13 @@ _SEASON_PATTERNS = (
     r'第\s*(\d{1,2})\s*[期季]',                           # 第2期
     rf'第\s*([{_CJK_NUMERALS}])\s*[期季]',                 # 第二季
 )
+_SEASON_TOKEN_RE = re.compile('|'.join(
+    (r'(?:\b\d{1,2}(?:st|nd|rd|th)[\s._-]+season\b)',
+     r'(?:\bseason[\s._-]*\d{0,2}\b)',
+     r'(?:(?<![a-z0-9])s\d{1,2}(?![a-z0-9]))')
+), re.IGNORECASE)
+_TITLE_STOP_WORDS = {'season', 'anime', 'series', 'movie', 'special', 'part'}
+_MAX_SEARCH_TITLES = 6
 
 
 def _mapped_season(mal_id):
@@ -203,9 +210,12 @@ def _fetch_anizip_summary(mal_id):
     if isinstance(episode_number, int) and isinstance(absolute_number, int) and absolute_number > episode_number:
         offset = absolute_number - episode_number
 
+    titles = data.get('titles') or {}
     return {
         'season': season if isinstance(season, int) and season > 0 else None,
         'offset': offset,
+        'titles': [titles[key] for key in ('x-jat', 'en') if titles.get(key)],
+        'tvdb_id': (data.get('mappings') or {}).get('thetvdb_id'),
     }
 
 
@@ -229,12 +239,51 @@ def resolve_season(titles_list, mal_id):
     return _parse_season(titles_list)
 
 
+def strip_season_tokens(title):
+    """Remove season markers from a title: 'Foo 2nd Season' -> 'Foo'."""
+    return re.sub(r'\s+', ' ', _SEASON_TOKEN_RE.sub(' ', title)).strip(' -')
+
+
+def _clean_search_title(title):
+    title = title.replace('×', ' x ')
+    title = re.sub(r'[|()"~*!^-]', ' ', title)
+    return re.sub(r'\s+', ' ', title).strip()
+
+
+def _is_searchable_title(title):
+    letters = [char for char in title if char.isalpha()]
+    # Short forms such as "OP TV" match unrelated releases
+    if len(title.replace(' ', '')) < 6 or not letters or title.lower() in _TITLE_STOP_WORDS:
+        return False
+    return sum(char.isascii() for char in letters) / len(letters) >= 0.8
+
+
+def get_search_titles(mal_id, kodi_meta):
+    """Alternate titles for text searches, most trusted first."""
+    mapping = database.get_mappings(mal_id, 'mal_id') or {}
+    primary = [kodi_meta.get('name'), kodi_meta.get('ename')]
+    candidates = [mapping.get('mal_title')]
+    candidates += get_anizip_summary(mal_id).get('titles', [])
+    candidates += kodi_meta.get('synonyms') or []
+
+    titles = {}
+    for candidate in primary:
+        if candidate:
+            titles.setdefault(candidate.lower(), _clean_search_title(candidate))
+    for candidate in candidates:
+        title = _clean_search_title(candidate) if candidate else ''
+        if _is_searchable_title(title):
+            titles.setdefault(title.lower(), title)
+    return list(titles.values())[:_MAX_SEARCH_TITLES]
+
+
 def get_source_context(mal_id, kodi_meta, stored_season, episode):
-    """Season and filter hints for a scrape. Returns (season, hints).
+    """Season and search hints for a scrape. Returns (season, hints).
 
     Runs on every scrape, so a season stored wrongly in the past corrects itself.
     """
-    season, source = resolve_season([kodi_meta.get('name'), kodi_meta.get('ename')], mal_id)
+    titles = get_search_titles(mal_id, kodi_meta)
+    season, source = resolve_season(titles, mal_id)
     if source == 'default' and stored_season and stored_season > 1:
         # The indexer saw more titles than are stored here
         season, source = stored_season, 'title'
@@ -245,8 +294,10 @@ def get_source_context(mal_id, kodi_meta, stored_season, episode):
     summary = get_anizip_summary(mal_id)
     offset = summary.get('offset')
     return season, {
+        'titles': titles,
         'season_source': source,
         'absolute_episode': int(episode) + offset if offset else None,
+        'tvdb_id': summary.get('tvdb_id'),
     }
 
 
