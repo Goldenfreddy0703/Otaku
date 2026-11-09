@@ -145,6 +145,11 @@ _SEASON_TOKEN_RE = re.compile('|'.join(
      r'(?:\bseason[\s._-]*\d{0,2}\b)',
      r'(?:(?<![a-z0-9])s\d{1,2}(?![a-z0-9]))')
 ), re.IGNORECASE)
+_PART_TOKEN_RE = re.compile(r'\b\d{1,2}(?:st|nd|rd|th)[\s._-]+(?:part|cour)\b|\b(?:part|cour)[\s._-]*\d{1,2}\b', re.IGNORECASE)
+# A trailing uppercase numeral marks a sequel ("Overlord III"); V and X are skipped as too ambiguous.
+_ROMAN_SEASONS = {'II': 2, 'III': 3, 'IV': 4, 'VI': 6, 'VII': 7, 'VIII': 8, 'IX': 9}
+_ROMAN_SEASON_RE = re.compile(r'(?<!\bPart )(?<!\bpart )(?<=\s)(II|III|IV|VI|VII|VIII|IX)(?=\s*(?:\(.*\))?$)')
+_CONTINUATION_RE = re.compile(r'\b(?:part|cour)[\s._-]*([2-9])\b|\b([2-9])(?:nd|rd|th)[\s._-]+(?:part|cour)\b', re.IGNORECASE)
 _TITLE_STOP_WORDS = {'season', 'anime', 'series', 'movie', 'special', 'part'}
 _MAX_SEARCH_TITLES = 6
 
@@ -175,6 +180,11 @@ def _parse_season(titles_list):
                 if 1 <= season <= 10:
                     return season, 'title'
 
+    for title in titles:
+        match = _ROMAN_SEASON_RE.search(title)
+        if match:
+            return _ROMAN_SEASONS[match.group(1)], 'title'
+
     if not any(' part ' in title.lower() or ' cour ' in title.lower() for title in titles):
         for title in titles:
             match = re.search(r'\s(\d+)$', title)
@@ -203,6 +213,7 @@ def _fetch_anizip_summary(mal_id):
     episodes = data.get('episodes') or {}
     numbers = sorted(int(number) for number in episodes if number.isdigit())
     first = episodes[str(numbers[0])] if numbers else {}
+    last = episodes[str(numbers[-1])] if numbers else {}
     season = first.get('seasonNumber')
     episode_number = first.get('episodeNumber')
     absolute_number = first.get('absoluteEpisodeNumber')
@@ -214,6 +225,8 @@ def _fetch_anizip_summary(mal_id):
     return {
         'season': season if isinstance(season, int) and season > 0 else None,
         'offset': offset,
+        'last_season': last.get('seasonNumber'),
+        'last_episode': last.get('episodeNumber'),
         'titles': [titles[key] for key in ('x-jat', 'en') if titles.get(key)],
         'tvdb_id': (data.get('mappings') or {}).get('thetvdb_id'),
     }
@@ -221,6 +234,44 @@ def _fetch_anizip_summary(mal_id):
 
 def get_anizip_summary(mal_id):
     return database.get(_fetch_anizip_summary, 24, mal_id, key='anizip_summary') or {}
+
+
+def _fetch_prequel(mal_id):
+    from resources.lib.ui import client
+    query = '''query ($idMal: Int) { Media(idMal: $idMal, type: ANIME) { relations { edges {
+        relationType node { idMal format episodes } } } } }'''
+    try:
+        response = client.post('https://graphql.anilist.co', json_data={'query': query, 'variables': {'idMal': mal_id}})
+        edges = response.json()['data']['Media']['relations']['edges']
+    except Exception as e:
+        control.log(f'Prequel lookup failed for {mal_id}: {e}', 'warning')
+        return None
+    for edge in edges:
+        node = edge.get('node') or {}
+        if edge.get('relationType') == 'PREQUEL' and node.get('idMal') and node.get('format') in ('TV', 'TV_SHORT', 'ONA'):
+            return {'mal_id': node['idMal'], 'episodes': node.get('episodes')}
+    return None
+
+
+def get_prequel(mal_id):
+    return database.get(_fetch_prequel, 24, mal_id, key='prequel') or {}
+
+
+def continuation_offset(mal_id, titles):
+    """Where the prequel of a 'Part 2' or '2nd Cour' entry ends. Returns (season, episodes).
+
+    season is the prequel's TVDB season, or None when unknown. episodes is 0 when this
+    is not a continuation.
+    """
+    if not any(title and _CONTINUATION_RE.search(title) for title in titles):
+        return None, 0
+    prequel = get_prequel(mal_id)
+    if not prequel:
+        return None, 0
+    summary = get_anizip_summary(prequel['mal_id'])
+    if summary.get('last_episode'):
+        return summary.get('last_season'), summary['last_episode']
+    return None, prequel.get('episodes') or 0
 
 
 def resolve_season(titles_list, mal_id):
@@ -239,9 +290,19 @@ def resolve_season(titles_list, mal_id):
     return _parse_season(titles_list)
 
 
-def strip_season_tokens(title):
-    """Remove season markers from a title: 'Foo 2nd Season' -> 'Foo'."""
-    return re.sub(r'\s+', ' ', _SEASON_TOKEN_RE.sub(' ', title)).strip(' -')
+def has_roman_season(title):
+    return bool(title and _ROMAN_SEASON_RE.search(title))
+
+
+def strip_season_tokens(title, parts=False):
+    """Remove season markers from a title: 'Foo 2nd Season' -> 'Foo'.
+
+    parts also removes 'Part 2' and '2nd Cour', which many releases keep in their names.
+    """
+    title = _ROMAN_SEASON_RE.sub(' ', _SEASON_TOKEN_RE.sub(' ', title))
+    if parts:
+        title = _PART_TOKEN_RE.sub(' ', title)
+    return re.sub(r'\s+', ' ', title).strip(' -:')
 
 
 def _clean_search_title(title):
@@ -287,16 +348,27 @@ def get_source_context(mal_id, kodi_meta, stored_season, episode):
     if source == 'default' and stored_season and stored_season > 1:
         # The indexer saw more titles than are stored here
         season, source = stored_season, 'title'
-    if stored_season and stored_season != season and source != 'default':
-        control.log(f'Correcting stored season {stored_season} -> {season} for {mal_id} ({source})')
-        database.update_show_season(mal_id, season)
 
     summary = get_anizip_summary(mal_id)
     offset = summary.get('offset')
+    season_episode = None
+    if not offset:
+        # TVDB often keeps a split cour in one season, so groups release Part 2 episode 4 as S01E17
+        prequel_season, continuation = continuation_offset(mal_id, titles)
+        if prequel_season and source in ('title', 'default'):
+            season, source = prequel_season, 'anizip'
+        if continuation and prequel_season in (None, season):
+            offset = continuation
+            season_episode = int(episode) + continuation
+
+    if stored_season and stored_season != season and source != 'default':
+        control.log(f'Correcting stored season {stored_season} -> {season} for {mal_id} ({source})')
+        database.update_show_season(mal_id, season)
     return season, {
         'titles': titles,
         'season_source': source,
         'absolute_episode': int(episode) + offset if offset else None,
+        'season_episode': season_episode,
         'tvdb_id': summary.get('tvdb_id'),
     }
 

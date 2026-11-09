@@ -17,6 +17,7 @@ class Sources(BrowserBase):
         self.media_id = None
         self.filter_kwargs = {}
         self.tvdb_hint = None
+        self.season_episode = None
 
     def _get_tvdb_id(self, mal_id):
         """Look up the TVDB ID from the mapping database."""
@@ -54,7 +55,15 @@ class Sources(BrowserBase):
                 control.log(f"nekoBT: Media search failed for '{title}': {e}")
         return None
 
-    def _get_episode_ids(self, media_id, season, episode):
+    def _find_episode_ids(self, media_id, season, episode):
+        # A split cour is usually listed as later episodes of the same season
+        if self.season_episode:
+            episode_ids = self._get_episode_ids(media_id, season, self.season_episode, exact=True)
+            if episode_ids:
+                return episode_ids
+        return self._get_episode_ids(media_id, season, episode)
+
+    def _get_episode_ids(self, media_id, season, episode, exact=False):
         """Fetch episode list from /media/<media_id> and find matching nekoBT episode IDs."""
         response = client.get(f'{self._BASE_URL}/media/{media_id}', timeout=20)
         if not response or response.status_code != 200:
@@ -69,6 +78,8 @@ class Sources(BrowserBase):
 
             # Strategy 1: Exact season + episode match
             matched = [str(ep['id']) for ep in episodes if ep.get('season') == season_int and ep.get('episode') == episode_int]
+            if exact:
+                return matched
 
             # Strategy 2: Try season 0 (absolute numbering) if no match
             if not matched:
@@ -114,6 +125,7 @@ class Sources(BrowserBase):
         hints = hints or {}
         self.filter_kwargs = source_utils.filter_kwargs(hints)
         self.tvdb_hint = hints.get('tvdb_id')
+        self.season_episode = hints.get('season_episode')
         self.media_type = media_type
         titles = hints.get('titles') or self._parse_query_titles(self._clean_title(query).replace('-', ' '))
         control.log(f"nekoBT: Parsed titles: {titles}")
@@ -125,7 +137,7 @@ class Sources(BrowserBase):
         # Resolve episode IDs for precise API-level filtering
         self.episode_ids = []
         if self.media_id and media_type != 'movie':
-            self.episode_ids = self._get_episode_ids(self.media_id, season, episode)
+            self.episode_ids = self._find_episode_ids(self.media_id, season, episode)
 
         if media_type == 'movie':
             return self.get_movie_sources(titles, mal_id)
@@ -139,7 +151,7 @@ class Sources(BrowserBase):
                 control.log(f"nekoBT: Retrying with simplified titles: {simplified}")
                 self.media_id = self._resolve_media_id(simplified, mal_id) or self.media_id
                 if self.media_id and not self.episode_ids:
-                    self.episode_ids = self._get_episode_ids(self.media_id, season, episode)
+                    self.episode_ids = self._find_episode_ids(self.media_id, season, episode)
                 episode_sources = self.get_episode_sources(simplified, mal_id, episode, season, part, status)
 
         self.sources = episode_sources

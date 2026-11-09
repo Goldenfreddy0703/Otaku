@@ -11,6 +11,8 @@ from resources.lib.ui.BrowserBase import BrowserBase
 class Sources(BrowserBase):
     _BASE_URL = 'https://nyaa-si.translate.goog/?_x_tr_sl=es&_x_tr_tl=en&_x_tr_hl=en/' if control.getBool('provider.nyaaalt') else 'https://nyaa.si/'
 
+    _SEASON_MARKER = re.compile(r'(?i)\bs(?:eason)?[ ._-]?\d{1,2}(?!\d)|\b\d{1,2}(?:st|nd|rd|th)[ ._-]+season\b')
+
     def __init__(self):
         self.media_type = None
         self.cached = []
@@ -18,11 +20,13 @@ class Sources(BrowserBase):
         self.sources = []
         self.filter_kwargs = {}
         self.absolute_episode = None
+        self.season_episode = None
 
     def get_sources(self, query, mal_id, episode, status, media_type, season=None, part=None, hints=None):
         hints = hints or {}
         self.filter_kwargs = source_utils.filter_kwargs(hints)
         self.absolute_episode = hints.get('absolute_episode')
+        self.season_episode = hints.get('season_episode')
         titles = hints.get('titles') or self._parse_query_titles(self._clean_title(query).replace('-', ' '))
         self.media_type = media_type
         if media_type == 'movie':
@@ -41,9 +45,9 @@ class Sources(BrowserBase):
         return {'cached': self.cached, 'uncached': self.uncached}
 
     @staticmethod
-    def season_stripped_query(titles):
+    def season_stripped_query(titles, parts=False):
         """Title query with season markers removed, or None if no title has one."""
-        stripped = [utils.strip_season_tokens(title) for title in titles]
+        stripped = [utils.strip_season_tokens(title, parts) for title in titles]
         changed = [base for base, title in zip(stripped, titles) if base and base != title]
         return Sources._build_title_query(list(dict.fromkeys(changed))) if changed else None
 
@@ -56,9 +60,12 @@ class Sources(BrowserBase):
         search_tasks = []
 
         # Primary episode search
-        query1 = f'{show} "- {episode_zfill}"|"S{season_zfill}E{episode_zfill}"'
+        episode_terms = f'"- {episode_zfill}"|"S{season_zfill}E{episode_zfill}"'
         if self.absolute_episode:
-            query1 += f'|"- {str(self.absolute_episode).zfill(2)}"'
+            episode_terms += f'|"- {str(self.absolute_episode).zfill(2)}"'
+        if self.season_episode:
+            episode_terms += f'|"S{season_zfill}E{str(self.season_episode).zfill(2)}"'
+        query1 = f'{show} {episode_terms}'
         search_tasks.append({
             'query': query1,
             'params': {'f': '0', 'c': '1_0', 'q': query1.replace(' ', '+'), 's': 'downloads', 'o': 'desc'},
@@ -93,19 +100,44 @@ class Sources(BrowserBase):
         })
 
         # Season search
+        # Without "II" in the query, a release with no season could be from any season
+        roman = any(utils.has_roman_season(title) for title in titles)
         query4 = self.season_stripped_query(titles) or show
         search_tasks.append({
             'query': query4,
             'params': {'f': '0', 'c': '1_0', 'q': query4.replace(' ', '+')},
-            'name': 'additional'
+            'name': 'additional',
+            'needs_season': roman
         })
+
+        # Releases often leave "II" out of the title, and split cours often drop "Part 2" and number on
+        if self.season_episode:
+            stripped = self.season_stripped_query(titles, parts=True)
+            stripped_episode = str(self.season_episode).zfill(2)
+            stripped_terms = f'"- {stripped_episode}"|"S{season_zfill}E{stripped_episode}"'
+        else:
+            stripped = self.season_stripped_query(titles)
+            stripped_episode = episode_zfill
+            stripped_terms = episode_terms
+        if stripped:
+            query5 = f'{stripped} {stripped_terms}'
+            search_tasks.append({
+                'query': query5,
+                'params': {'f': '0', 'c': '1_0', 'q': query5.replace(' ', '+'), 's': 'downloads', 'o': 'desc'},
+                'name': 'stripped_episode',
+                # Without "Part 2" in the query, a plain episode number would also match the first cour
+                'episode': stripped_episode,
+                'needs_season': roman and not self.season_episode
+            })
 
         # Execute all searches in parallel
         control.log(f"Nyaa: Running {len(search_tasks)} searches in parallel for episode {episode_zfill}")
 
         def run_search(task):
             try:
-                sources = self.process_nyaa_episodes(self._BASE_URL, task['params'], mal_id, episode_zfill, season_zfill, part)
+                sources = self.process_nyaa_episodes(self._BASE_URL, task['params'], mal_id, task.get('episode', episode_zfill), season_zfill, part)
+                if task.get('needs_season'):
+                    sources = [source for source in sources if self._SEASON_MARKER.search(source['release_title'])]
                 control.log(f"Nyaa: {task['name']} search returned {len(sources)} sources")
                 return sources
             except Exception as e:
