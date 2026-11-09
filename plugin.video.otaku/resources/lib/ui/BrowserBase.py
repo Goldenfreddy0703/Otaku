@@ -86,6 +86,21 @@ class BrowserBase(object):
         return text.replace(u'×', ' x ')
 
     @staticmethod
+    def _parse_query_titles(query):
+        """Titles from the '(Title1)|(Title2)' format, without duplicates."""
+        titles = re.findall(r'\(([^)]+)\)', query) or [query]
+        unique = {}
+        for title in titles:
+            title = title.strip()
+            if title:
+                unique.setdefault(title.lower(), title)
+        return list(unique.values())
+
+    @staticmethod
+    def _build_title_query(titles):
+        return '|'.join(f'({title})' for title in titles)
+
+    @staticmethod
     def clean_embed_title(text):
         return re.sub(r'\W', '', text).lower()
 

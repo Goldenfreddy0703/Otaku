@@ -113,7 +113,7 @@ class Sources(BrowserBase):
             return self._uniq_queries([f'{t} {year}'.strip() for t in search_titles])
         return self._uniq_queries(list(search_titles))
 
-    def get_sources(self, query, mal_id, episode, status, media_type, season=None, part=None):
+    def get_sources(self, query, mal_id, episode, status, media_type, season=None, part=None, hints=None):
         if not control.easynews_enabled():
             return {'cached': [], 'uncached': []}
 
@@ -179,7 +179,7 @@ class Sources(BrowserBase):
         else:
             prepared = [{'name': r['name'], 'hash': r['url_dl']} for r in relevant]
             filtered_dicts = source_utils.filter_sources(
-                'easynews', prepared, mal_id, season_int, episode, part)
+                'easynews', prepared, mal_id, season_int, episode, part, **source_utils.filter_kwargs(hints))
 
         control.log(f'Easynews: {len(filtered_dicts)} hits after episode/season filter', 'info')
 
@@ -206,7 +206,7 @@ class Sources(BrowserBase):
                 'episode_re': str(episode).zfill(2) if episode is not None else '01',
                 'size': source_utils.get_size(raw),
                 'byte_size': raw,
-                'info': source_utils.getInfo(name),
+                'info': source_utils.get_release_info(d),
                 'lang': source_utils.getAudio_lang(name),
                 'channel': source_utils.getAudio_channel(name),
                 'sub': source_utils.getSubtitle_lang(name),

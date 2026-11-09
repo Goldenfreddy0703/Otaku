@@ -1357,6 +1357,7 @@ class AniListBrowser(BrowserBase):
             'title_userPreferred': title_userPreferred,
             'start_date': start_date,
             'query': titles,
+            'synonyms': res.get('synonyms') or [],
             'episodes': res['episodes'],
             'poster': res['coverImage']['extraLarge'],
             'status': res.get('status'),

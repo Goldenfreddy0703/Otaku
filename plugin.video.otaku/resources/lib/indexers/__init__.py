@@ -83,6 +83,18 @@ def should_hide_unaired_episode(aired_date_str):
         return False
 
 
+def refresh_season(mal_id, episodes):
+    """Season for a show being refreshed, moving its stored episodes if it changed."""
+    stored_season = episodes[0]['season']
+    kodi_meta = pickle.loads(database.get_show(mal_id)['kodi_meta'])
+    season, source = utils.resolve_season([kodi_meta.get('name'), kodi_meta.get('ename')], mal_id)
+    if source == 'default':
+        return stored_season
+    if season != stored_season:
+        database.update_show_season(mal_id, season)
+    return season
+
+
 def update_database(mal_id, update_time, res, url, image, info, season, episode, episodes, title, fanart, poster, clearart, clearlogo, dub_data, filler, anidb_ep_id=None):
     code = endpoints.get_second_label(info, dub_data)
     if not code and control.getBool('jz.filler'):

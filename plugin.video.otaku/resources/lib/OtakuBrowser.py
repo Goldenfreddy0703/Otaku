@@ -136,7 +136,8 @@ class OtakuBrowser(BrowserBase):
         anilist_res = self.get_anilist_base_res([mal_id])
         get_meta.collect_meta([data])
         get_meta.collect_meta(anilist_res)
-        return self.database_update_show(data, anilist_res)
+        anilist_item = next((item for item in anilist_res or [] if item.get('idMal') == mal_id), None)
+        return self.database_update_show(data, anilist_item)
 
     def get_season_year(self, period='current'):
         date = datetime.datetime.today()
@@ -1008,6 +1009,7 @@ class OtakuBrowser(BrowserBase):
             'title_userPreferred': title_userPreferred,
             'start_date': start_date,
             'query': titles,
+            'synonyms': (anilist_res.get('synonyms') or []) if anilist_res else [],
             'episodes': episodes,
             'poster': poster,
             'status': status,

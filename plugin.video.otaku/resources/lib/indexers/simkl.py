@@ -60,8 +60,8 @@ class SIMKLAPI:
         if not result:
             return []
 
-        title_list = [name['name'] for name in result.get('alt_titles', [])]
-        season = utils.get_season(title_list, mal_id)
+        title_list = [result.get('title'), result.get('en_title')] + [name['name'] for name in result.get('alt_titles', [])]
+        season = utils.resolve_season(title_list, mal_id)[0]
         result_meta = self.get_episode_meta(mal_id)
 
         result_ep = [x for x in result_meta if x['type'] == 'episode']
@@ -85,7 +85,7 @@ class SIMKLAPI:
         if diff >= control.getInt('interface.check.updates'):
             result_meta = self.get_episode_meta(mal_id)
             result_ep = [x for x in result_meta if x['type'] == 'episode']
-            season = episodes[0]['season']
+            season = indexers.refresh_season(mal_id, episodes)
             mapfunc2 = partial(self.parse_episode_view, mal_id=mal_id, season=season, poster=poster, fanart=fanart, clearart=clearart, clearlogo=clearlogo, eps_watched=eps_watched, update_time=update_time, tvshowtitle=tvshowtitle, dub_data=dub_data, filler_data=None, episodes=episodes)
             # Parallelize episode parsing
             all_results = utils.parallel_process(result_ep, mapfunc2)
