@@ -45,7 +45,7 @@ class Sources(BrowserBase):
             self.anidb_id = meta_ids.get('anidb_id')
             if not self.anidb_id:
                 ids = SIMKLAPI().get_mapping_ids_from_simkl(mal_id, 'mal_id')
-                if ids:
+                if ids and ids.get('anidb'):
                     self.anidb_id = meta_ids['anidb_id'] = ids['anidb']
                     database.update_show_meta(mal_id, meta_ids, pickle.loads(show_meta['art']))
         if self.anidb_id:
@@ -170,7 +170,7 @@ class Sources(BrowserBase):
             self.anidb_id = meta_ids.get('anidb_id')
             if not self.anidb_id:
                 ids = SIMKLAPI().get_mapping_ids_from_simkl(mal_id, 'mal_id')
-                if ids:
+                if ids and ids.get('anidb'):
                     self.anidb_id = meta_ids['anidb_id'] = ids['anidb']
                     database.update_show_meta(mal_id, meta_ids, pickle.loads(show_meta['art']))
 
