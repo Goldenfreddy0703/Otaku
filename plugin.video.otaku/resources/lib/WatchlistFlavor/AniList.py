@@ -665,13 +665,50 @@ class AniListWLF(WatchlistFlavorBase):
         results = r.json() if r else {}
         return results
 
+    @staticmethod
+    def _clean_anilist_id(anilist_id):
+        try:
+            return int(str(anilist_id).rstrip('/').split('/')[-1]) if anilist_id else None
+        except ValueError:
+            return None
+
+    def _get_anilist_id(self, mal_id):
+        """Return the AniList ID for a MAL ID, asking AniList when it is not stored yet.
+
+        The mapping services behind _get_mapping_id often lack new shows, so AniList itself
+        is asked first and the answer is stored on the show for later updates.
+        """
+        show = database.get_show(mal_id)
+        anilist_id = self._clean_anilist_id(show.get('anilist_id')) if show else None
+        if anilist_id:
+            return anilist_id
+        query = '''
+        query ($malId: Int) {
+            Media (idMal: $malId, type: ANIME) {
+                id
+            }
+        }
+        '''
+        r = client.post(self._URL, headers=self.__headers(), json_data={'query': query, 'variables': {'malId': int(mal_id)}})
+        try:
+            media = ((r.json() if r else {}).get('data') or {}).get('Media') or {}
+        except ValueError:
+            media = {}
+        anilist_id = self._clean_anilist_id(media.get('id'))
+        if anilist_id:
+            database.add_mapping_id(mal_id, 'anilist_id', anilist_id)
+            return anilist_id
+        control.log(f'AniList: no AniList ID from AniList for MAL {mal_id}, trying mapping services', level='warning')
+        anilist_id = self._clean_anilist_id(self._get_mapping_id(mal_id, 'anilist_id'))
+        if not anilist_id:
+            control.log(f'AniList: no AniList ID found for MAL {mal_id}', level='warning')
+        return anilist_id
+
     def update_list_status(self, mal_id, status):
         from resources.lib.ui.database import clear_watchlist_cache
-        anilist_id = self._get_mapping_id(mal_id, 'anilist_id')
+        anilist_id = self._get_anilist_id(mal_id)
         if not anilist_id:
             return False
-        if anilist_id.startswith('http'):
-            anilist_id = anilist_id.split('/')[-1]
         query = '''
         mutation ($mediaId: Int, $status: MediaListStatus) {
             SaveMediaListEntry (mediaId: $mediaId, status: $status) {
@@ -693,11 +730,9 @@ class AniListWLF(WatchlistFlavorBase):
 
     def update_num_episodes(self, mal_id, episode):
         from resources.lib.ui.database import clear_watchlist_cache
-        anilist_id = self._get_mapping_id(mal_id, 'anilist_id')
+        anilist_id = self._get_anilist_id(mal_id)
         if not anilist_id:
             return False
-        if str(anilist_id).startswith('http'):
-            anilist_id = str(anilist_id).split('/')[-1]
         query = '''
         mutation ($mediaId: Int, $progress : Int, $status: MediaListStatus) {
             SaveMediaListEntry (mediaId: $mediaId, progress: $progress, status: $status) {
@@ -720,11 +755,9 @@ class AniListWLF(WatchlistFlavorBase):
 
     def update_score(self, mal_id, score):
         from resources.lib.ui.database import clear_watchlist_cache
-        anilist_id = self._get_mapping_id(mal_id, 'anilist_id')
+        anilist_id = self._get_anilist_id(mal_id)
         if not anilist_id:
             return False
-        if str(anilist_id).startswith('http'):
-            anilist_id = str(anilist_id).split('/')[-1]
         query = '''
         mutation ($mediaId: Int, $score: Float) {
             SaveMediaListEntry (mediaId: $mediaId, score: $score) {
@@ -746,7 +779,7 @@ class AniListWLF(WatchlistFlavorBase):
 
     def delete_anime(self, mal_id):
         from resources.lib.ui.database import clear_watchlist_cache
-        anilist_id = self._get_mapping_id(mal_id, 'anilist_id')
+        anilist_id = self._get_anilist_id(mal_id)
         if not anilist_id:
             return False
         media_entry = self.get_watchlist_anime_info(anilist_id)['data']['Media']['mediaListEntry']
