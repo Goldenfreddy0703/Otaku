@@ -12,7 +12,9 @@ from resources.lib.endpoints import anidb
 
 
 class Sources(BrowserBase):
-    _BASE_URL = 'https://animetosho-org.translate.goog/?_x_tr_sl=es&_x_tr_tl=en&_x_tr_hl=en/' if control.getBool('provider.animetoshoalt') else 'https://animetosho.org/'
+    # AnimeTosho moved to animetosho.net; animetosho.org no longer gets new releases
+    _BASE_URL = 'https://animetosho-net.translate.goog' if control.getBool('provider.animetoshoalt') else 'https://animetosho.net'
+    _BASE_PARAMS = {'_x_tr_sl': 'es', '_x_tr_tl': 'en', '_x_tr_hl': 'en'} if control.getBool('provider.animetoshoalt') else {}
 
     def __init__(self):
         self.sources = []
@@ -189,7 +191,7 @@ class Sources(BrowserBase):
         return {'cached': self.cached, 'uncached': self.uncached}
 
     def process_animetosho_episodes(self, url, params, mal_id, episode, season, part):
-        response = client.get(url, params=params)
+        response = client.get(url, params={**self._BASE_PARAMS, **params})
         if response:
             html = response.text
             soup = BeautifulSoup(html, "html.parser")
@@ -200,7 +202,7 @@ class Sources(BrowserBase):
                 list_item = {
                     'name': entry.find('div', class_='link').a.text,
                     'magnet': entry.find('a', {'href': re.compile(rex)}).get('href'),
-                    'size': entry.find('div', class_='size').text,
+                    'size': entry.find('div', class_='size').text.replace('iB', 'B'),
                     'downloads': 0,
                     'torrent': entry.find('a', class_='dllink').get('href')
                 }
@@ -209,14 +211,9 @@ class Sources(BrowserBase):
                 except AttributeError:
                     list_item['seeders'] = -1
 
-                try:
-                    list_item['hash'] = re.match(r'https://animetosho.org/storage/torrent/([^/]+)', list_item['torrent']).group(1)
-                except AttributeError:
-                    try:
-                        hash_32 = re.search(r'btih:(\w+)&tr=http', list_item['magnet']).group(1)
-                        list_item['hash'] = base64.b16encode(base64.b32decode(hash_32)).decode().lower()
-                    except AttributeError:
-                        continue
+                list_item['hash'] = self._magnet_hash(list_item['magnet'])
+                if not list_item['hash']:
+                    continue
 
                 list_.append(list_item)
 
@@ -238,7 +235,7 @@ class Sources(BrowserBase):
         return []
 
     def process_animetosho_movie(self, url, params, mal_id):
-        response = client.get(url, params=params)
+        response = client.get(url, params={**self._BASE_PARAMS, **params})
         if response:
             html = response.text
             soup = BeautifulSoup(html, "html.parser")
@@ -250,7 +247,7 @@ class Sources(BrowserBase):
                 list_item = {
                     'name': entry.find('div', class_='link').a.text,
                     'magnet': entry.find('a', {'href': re.compile(rex)}).get('href'),
-                    'size': entry.find('div', class_='size').text,
+                    'size': entry.find('div', class_='size').text.replace('iB', 'B'),
                     'downloads': 0,
                     'torrent': entry.find('a', class_='dllink').get('href')
                 }
@@ -259,14 +256,9 @@ class Sources(BrowserBase):
                 except AttributeError:
                     list_item['seeders'] = -1
 
-                try:
-                    list_item['hash'] = re.match(r'https://animetosho.org/storage/torrent/([^/]+)', list_item['torrent']).group(1)
-                except AttributeError:
-                    try:
-                        hash_32 = re.search(r'btih:(\w+)&tr=http', list_item['magnet']).group(1)
-                        list_item['hash'] = base64.b16encode(base64.b32decode(hash_32)).decode().lower()
-                    except AttributeError:
-                        continue
+                list_item['hash'] = self._magnet_hash(list_item['magnet'])
+                if not list_item['hash']:
+                    continue
 
                 list_.append(list_item)
 
@@ -284,6 +276,18 @@ class Sources(BrowserBase):
                 all_results += utils.parallel_process(uncashed_list, mapfunc2)
             return all_results
         return []
+
+    @staticmethod
+    def _magnet_hash(magnet):
+        """Return the lowercase hex info hash of a magnet link, which holds it in hex or base32."""
+        match = re.search(r'btih:([0-9a-zA-Z]+)', magnet or '')
+        info_hash = match.group(1) if match else ''
+        if len(info_hash) == 32:
+            try:
+                info_hash = base64.b16encode(base64.b32decode(info_hash.upper())).decode()
+            except ValueError:
+                return None
+        return info_hash.lower() if len(info_hash) == 40 else None
 
     @staticmethod
     def parse_animetosho_view(res, episode, cached=True):
