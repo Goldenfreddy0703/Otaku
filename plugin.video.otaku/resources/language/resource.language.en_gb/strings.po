@@ -1964,3 +1964,7 @@ msgstr ""
 msgctxt "#30486"
 msgid "AnimePahe Alt"
 msgstr ""
+
+msgctxt "#30487"
+msgid "Default Source View"
+msgstr ""
