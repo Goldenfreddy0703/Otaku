@@ -5,7 +5,7 @@ from resources.lib.windows.base_window import BaseWindow
 from resources.lib.ui import control
 
 # Define available sort methods
-SORT_METHODS = ['none', 'source type', 'debrid provider', 'audio', 'subtitles', 'resolution', 'size', 'seeders', 'audio channels']
+SORT_METHODS = ['none', 'source type', 'debrid provider', 'provider', 'audio', 'subtitles', 'resolution', 'size', 'seeders', 'audio channels']
 
 # Define sort options for each category
 SORT_OPTIONS = {
@@ -13,6 +13,7 @@ SORT_OPTIONS = {
     'none': [],
     "source type": ['files', 'cloud', 'torrent', 'hoster', 'embeds', "none"],
     "debrid provider": ['Real-Debrid', 'Premiumize', 'Alldebrid', 'Debrid-Link', 'Torbox', 'EasyDebrid', 'Easynews', 'none'],
+    "provider": ['Nyaa', 'AnimeTosho', 'NekoBT', 'Torrentio', 'Anikoto', 'AnimePahe', 'Animix', 'HiAnime', 'Watchnixtoons2', 'none'],
     "audio": ['multi-audio', 'dual-audio', 'sub', 'dub', 'none'],
     "subtitles": ['multi sub', 'none'],
     "resolution": [],
@@ -61,6 +62,16 @@ default_sort_options = {
     'debrid provider.6': 5,  # EasyDebrid
     'debrid provider.7': 6,  # Easynews
     'debrid provider.8': 7,  # none
+    'provider.1': 0,   # Nyaa
+    'provider.2': 1,   # AnimeTosho
+    'provider.3': 2,   # NekoBT
+    'provider.4': 3,   # Torrentio
+    'provider.5': 4,   # Anikoto
+    'provider.6': 5,   # AnimePahe
+    'provider.7': 6,   # Animix
+    'provider.8': 7,   # HiAnime
+    'provider.9': 8,   # Watchnixtoons2
+    'provider.10': 9,  # none
     'audio.1': 0,  # multi-audio
     'audio.2': 1,  # dual-audio
     'audio.3': 2,  # sub
@@ -104,6 +115,16 @@ default_sub_options = {
     'debrid provider.6': 5,  # EasyDebrid
     'debrid provider.7': 6,  # Easynews
     'debrid provider.8': 7,  # none
+    'provider.1': 0,   # Nyaa
+    'provider.2': 1,   # AnimeTosho
+    'provider.3': 2,   # NekoBT
+    'provider.4': 3,   # Torrentio
+    'provider.5': 4,   # Anikoto
+    'provider.6': 5,   # AnimePahe
+    'provider.7': 6,   # Animix
+    'provider.8': 7,   # HiAnime
+    'provider.9': 8,   # Watchnixtoons2
+    'provider.10': 9,  # none
     'audio.1': 0,  # multi-audio
     'audio.2': 1,  # dual-audio
     'audio.3': 2,  # sub
@@ -147,6 +168,16 @@ default_dub_options = {
     'debrid provider.6': 5,  # EasyDebrid
     'debrid provider.7': 6,  # Easynews
     'debrid provider.8': 7,  # none
+    'provider.1': 0,   # Nyaa
+    'provider.2': 1,   # AnimeTosho
+    'provider.3': 2,   # NekoBT
+    'provider.4': 3,   # Torrentio
+    'provider.5': 4,   # Anikoto
+    'provider.6': 5,   # AnimePahe
+    'provider.7': 6,   # Animix
+    'provider.8': 7,   # HiAnime
+    'provider.9': 8,   # Watchnixtoons2
+    'provider.10': 9,  # none
     'audio.1': 0,  # multi-audio
     'audio.2': 1,  # dual-audio
     'audio.3': 3,  # sub
@@ -190,6 +221,16 @@ default_multi_audio_options = {
     'debrid provider.6': 5,  # EasyDebrid
     'debrid provider.7': 6,  # Easynews
     'debrid provider.8': 7,  # none
+    'provider.1': 0,   # Nyaa
+    'provider.2': 1,   # AnimeTosho
+    'provider.3': 2,   # NekoBT
+    'provider.4': 3,   # Torrentio
+    'provider.5': 4,   # Anikoto
+    'provider.6': 5,   # AnimePahe
+    'provider.7': 6,   # Animix
+    'provider.8': 7,   # HiAnime
+    'provider.9': 8,   # Watchnixtoons2
+    'provider.10': 9,  # none
     'audio.1': 0,  # multi-audio
     'audio.2': 1,  # dual-audio
     'audio.3': 4,  # none
@@ -233,6 +274,16 @@ default_multi_sub_options = {
     'debrid provider.6': 5,  # EasyDebrid
     'debrid provider.7': 6,  # Easynews
     'debrid provider.8': 7,  # none
+    'provider.1': 0,   # Nyaa
+    'provider.2': 1,   # AnimeTosho
+    'provider.3': 2,   # NekoBT
+    'provider.4': 3,   # Torrentio
+    'provider.5': 4,   # Anikoto
+    'provider.6': 5,   # AnimePahe
+    'provider.7': 6,   # Animix
+    'provider.8': 7,   # HiAnime
+    'provider.9': 8,   # Watchnixtoons2
+    'provider.10': 9,  # none
     'audio.1': 0,  # multi-audio
     'audio.2': 1,  # dual-audio
     'audio.3': 4,  # none
@@ -307,6 +358,23 @@ def _normalize_debrid_provider(value):
     v = str(value).strip()
     return _DEBRID_UI_TO_CANONICAL.get(v, _DEBRID_UI_TO_CANONICAL.get(v.title(), v))
 
+def _normalize_provider(value):
+    if value is None:
+        return ''
+
+    v = str(value).strip()
+
+    # Torrentio dynamically includes its underlying source provider.
+    if v.casefold().startswith('tio ('):
+        return 'Torrentio'
+
+
+    for label in SORT_OPTIONS['provider']:
+        if v.casefold() == label.casefold():
+            return label
+
+    return v
+
 
 def _debrid_priorities(opts):
     labels = SORT_OPTIONS['debrid provider']
@@ -320,6 +388,19 @@ def _debrid_priorities(opts):
             continue
         canon = _DEBRID_UI_TO_CANONICAL.get(label, label)
         pri[canon] = -i
+    return pri
+
+def _provider_priorities(opts):
+    labels = SORT_OPTIONS['provider']
+    pri = {}
+    for i in range(1, len(labels) + 1):
+        key = f'provider.{i}'
+        if key not in opts:
+            continue
+        label = labels[opts[key]]
+        if label == 'none':
+            continue
+        pri[label] = -i
     return pri
 
 
@@ -395,6 +476,9 @@ def _build_sort_key_tuples(opts):
         elif name == 'debrid provider':
             pri = _debrid_priorities(opts)
             tuples.append((lambda s, p=pri: p.get(_normalize_debrid_provider(s.get('debrid_provider')), -99), reverse))
+        elif name == 'provider':
+            pri = _provider_priorities(opts)
+            tuples.append(( lambda s, p=pri: p.get(_normalize_provider(s.get('provider')), -99), reverse))
         elif name == 'audio':
             pri = _audio_priorities(opts)
             tuples.append((lambda s, p=pri: p.get(s.get('lang'), -99), reverse))
@@ -602,6 +686,7 @@ class SortSelect(BaseWindow):
                 if label == 'none' and method in (
                     'source type',
                     'debrid provider',
+                    'provider',
                     'audio',
                     'subtitles',
                 ):
