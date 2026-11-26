@@ -1,6 +1,6 @@
 import pickle
 
-from resources.lib.ui import control, database
+from resources.lib.ui import control, database, utils
 
 # Lazy browser initialization for improved startup performance
 _BROWSER_INSTANCE = None
@@ -100,6 +100,10 @@ def get_sources(mal_id, episode, media_type, rescrape=False, source_select=False
     episode_data = database.get_episode(mal_id)
     season = episode_data.get('season') if episode_data else None
 
+    hints = {}
+    if media_type != 'movie':
+        season, hints = utils.get_source_context(mal_id, kodi_meta, season, episode)
+
     part = None
     mal_mapping = database.get_mappings(mal_id, 'mal_id')
     if mal_mapping and 'thetvdb_part' in mal_mapping:
@@ -118,6 +122,7 @@ def get_sources(mal_id, episode, media_type, rescrape=False, source_select=False
         'silent': silent,
         'season': season,
         'part': part,
+        'hints': hints,
     }
 
     sources = pages.getSourcesHelper(actionArgs)

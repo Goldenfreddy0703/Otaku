@@ -10,8 +10,10 @@ class Sources(BrowserBase):
     def __init__(self):
         self.cloud_files = []
         self.threads = []
+        self.filter_kwargs = {}
 
-    def get_sources(self, query, mal_id, episode, season=None):
+    def get_sources(self, query, mal_id, episode, season=None, hints=None):
+        self.filter_kwargs = source_utils.filter_kwargs(hints)
         debrid = control.enabled_debrid()
         cloud = control.enabled_cloud()
         tasks = []
@@ -35,7 +37,7 @@ class Sources(BrowserBase):
     def rd_cloud_inspection(self, query, mal_id, episode, season=None):
         api = real_debrid.RealDebrid()
         torrents = api.list_torrents()
-        torrents = source_utils.filter_sources('realdebrid', torrents, mal_id, season, episode)
+        torrents = source_utils.filter_sources('realdebrid', torrents, mal_id, season, episode, **self.filter_kwargs)
         filenames = [re.sub(r'\[.*?]\s*', '', i['filename'].replace(',', '')) for i in torrents]
         resp = source_utils.get_fuzzy_match(query, filenames)
 
@@ -74,7 +76,7 @@ class Sources(BrowserBase):
 
     def premiumize_cloud_inspection(self, query, mal_id, episode, season=None):
         cloud_items = premiumize.Premiumize().list_folder()
-        cloud_items = source_utils.filter_sources('premiumize', cloud_items, mal_id, season, episode)
+        cloud_items = source_utils.filter_sources('premiumize', cloud_items, mal_id, season, episode, **self.filter_kwargs)
         filenames = [re.sub(r'\[.*?]\s*', '', i['name'].replace(',', '')) for i in cloud_items]
         resp = source_utils.get_fuzzy_match(query, filenames)
 
@@ -109,7 +111,7 @@ class Sources(BrowserBase):
 
     def torbox_cloud_inspection(self, query, mal_id, episode, season=None):
         cloud_items = torbox.TorBox().list_torrents()
-        cloud_items = source_utils.filter_sources('torbox', cloud_items, mal_id, season, episode)
+        cloud_items = source_utils.filter_sources('torbox', cloud_items, mal_id, season, episode, **self.filter_kwargs)
         filenames = [re.sub(r'\[.*?]\s*', '', i['name'].replace(',', '')) for i in cloud_items]
         resp = source_utils.get_fuzzy_match(query, filenames)
 
@@ -149,7 +151,7 @@ class Sources(BrowserBase):
                 torrents += saved['links']
         seen = set()
         torrents = [t for t in torrents if t.get('filename') and not (t['filename'] in seen or seen.add(t['filename']))]
-        torrents = source_utils.filter_sources('alldebrid', torrents, mal_id, season, episode)
+        torrents = source_utils.filter_sources('alldebrid', torrents, mal_id, season, episode, **self.filter_kwargs)
         filenames = [re.sub(r'\[.*?]\s*', '', i['filename'].replace(',', '')) for i in torrents]
         resp = source_utils.get_fuzzy_match(query, filenames)
 

@@ -90,6 +90,7 @@ class Sources(GetSources):
         rescrape = args['rescrape']
         season = args.get('season')
         part = args.get('part')
+        hints = args.get('hints')
 
         self.setProperty('process_started', 'true')
 
@@ -105,7 +106,7 @@ class Sources(GetSources):
         ]
 
         debrid_on = any(enabled_debrids.values())
-        t_args = (query, mal_id, episode, status, media_type, rescrape, season, part)
+        t_args = (query, mal_id, episode, status, media_type, rescrape, season, part, hints)
 
         for provider in self.torrentProviders:
             if debrid_on and control.getBool(f'provider.{provider}'):
@@ -121,12 +122,12 @@ class Sources(GetSources):
                 self.remainingProviders.remove(hoster)
 
         if common_debrids:
-            self.threads.append(self._start_worker(partial(self.user_cloud_inspection, query, mal_id, episode, season)))
+            self.threads.append(self._start_worker(partial(self.user_cloud_inspection, query, mal_id, episode, season, hints)))
         else:
             self.remainingProviders.remove('Cloud Inspection')
 
         if control.getBool('provider.localfiles'):
-            self.threads.append(self._start_worker(partial(self.user_local_inspection, query, mal_id, episode, season)))
+            self.threads.append(self._start_worker(partial(self.user_local_inspection, query, mal_id, episode, season, hints)))
         else:
             self.remainingProviders.remove('Local Inspection')
 
@@ -174,10 +175,10 @@ class Sources(GetSources):
         self.close()
         return self.return_data
 
-    def _torrent_sources_worker(self, provider, query, mal_id, episode, status, media_type, rescrape, season, part):
+    def _torrent_sources_worker(self, provider, query, mal_id, episode, status, media_type, rescrape, season, part, hints):
         mod, cache_key = _TORRENT_MODULES[provider]
         get_sources = mod.Sources().get_sources
-        call_args = (query, mal_id, episode, status, media_type, season, part)
+        call_args = (query, mal_id, episode, status, media_type, season, part, hints)
         if rescrape:
             all_sources = get_sources(*call_args)
         else:
@@ -189,10 +190,10 @@ class Sources(GetSources):
         self.torrentSources += all_sources['cached'] + all_sources['uncached']
         self.remainingProviders.remove(provider)
 
-    def _hoster_sources_worker(self, hoster, query, mal_id, episode, status, media_type, rescrape, season, part):
+    def _hoster_sources_worker(self, hoster, query, mal_id, episode, status, media_type, rescrape, season, part, hints):
         mod, cache_key, _, merge_mode = _HOSTER_MODULES[hoster]
         get_sources = mod.Sources().get_sources
-        call_args = (query, mal_id, episode, status, media_type, season, part)
+        call_args = (query, mal_id, episode, status, media_type, season, part, hints)
         if rescrape:
             all_sources = get_sources(*call_args)
         else:
@@ -224,12 +225,12 @@ class Sources(GetSources):
             self._apply_embed_skip(skip_prefix, src)
         self.remainingProviders.remove(pid)
 
-    def user_local_inspection(self, query, mal_id, episode, season):
-        self.local_files += localfiles.Sources().get_sources(query, mal_id, episode, season)
+    def user_local_inspection(self, query, mal_id, episode, season, hints):
+        self.local_files += localfiles.Sources().get_sources(query, mal_id, episode, season, hints)
         self.remainingProviders.remove('Local Inspection')
 
-    def user_cloud_inspection(self, query, mal_id, episode, season):
-        self.cloud_files += debrid_cloudfiles.Sources().get_sources(query, mal_id, episode, season)
+    def user_cloud_inspection(self, query, mal_id, episode, season, hints):
+        self.cloud_files += debrid_cloudfiles.Sources().get_sources(query, mal_id, episode, season, hints)
         self.remainingProviders.remove('Cloud Inspection')
 
     def _apply_embed_skip(self, prefix, sources):

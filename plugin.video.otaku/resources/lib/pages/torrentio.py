@@ -15,6 +15,7 @@ class Sources(BrowserBase):
         self.uncached = []
         self.sources = []
         self.kitsu_id = None
+        self.filter_kwargs = {}
 
     def _build_config(self):
         providers = control.getStringList('torrentio.config')
@@ -22,8 +23,9 @@ class Sources(BrowserBase):
             return f"providers={','.join(providers)}"
         return ''
 
-    def get_sources(self, query, mal_id, episode, status, media_type, season=None, part=None):
+    def get_sources(self, query, mal_id, episode, status, media_type, season=None, part=None, hints=None):
         self.media_type = media_type
+        self.filter_kwargs = source_utils.filter_kwargs(hints)
 
         show_ids = database.get_mappings(mal_id, 'mal_id')
         if show_ids:
@@ -68,7 +70,7 @@ class Sources(BrowserBase):
             return []
 
         season_int = int(season) if season else None
-        filtered_list = source_utils.filter_sources('torrentio', list_, mal_id, season_int, int(episode), part)
+        filtered_list = source_utils.filter_sources('torrentio', list_, mal_id, season_int, int(episode), part, **self.filter_kwargs)
         control.log(f"Torrentio: {len(filtered_list)} sources after filtering")
 
         cache_list, uncached_list_ = Debrid().torrentCacheCheck(filtered_list, mal_id=mal_id, episode=episode, media_type=self.media_type)

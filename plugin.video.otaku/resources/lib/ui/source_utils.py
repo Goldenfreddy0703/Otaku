@@ -25,6 +25,11 @@ from resources.lib.ui import control
 
 res = ['EQ', '480p', '720p', '1080p', '4k']
 
+UNVERIFIED_TAG = 'UNVERIFIED-SEASON'
+
+# Queried by ID for one exact episode, so their results already belong to the right season
+_ID_BASED_PROVIDERS = {'torrentio'}
+
 # Filter dialog: selectable tags per category (see windows/filter_select.py)
 INFO_STRUCT = {
     "videocodec": {
@@ -449,11 +454,30 @@ def get_best_match(dict_key, dictionary_list, episode, pack_select=False, filena
 #  Torrent Filtering
 # ═══════════════════════════════════════════════════════════════════════════
 
-def filter_sources(provider, torrent_list, mal_id, season=None, episode=None, part=None, anidb_id=True):
+def filter_kwargs(hints):
+    """filter_sources keyword arguments from a scrape's hints."""
+    hints = hints or {}
+    return {'season_source': hints.get('season_source'), 'absolute_episode': hints.get('absolute_episode')}
+
+
+def get_release_info(res):
+    """getInfo for a scraped release, flagging a season the filter could not confirm."""
+    info = getInfo(res['name'])
+    if res.get('relaxed'):
+        info.append(UNVERIFIED_TAG)
+    return info
+
+
+def filter_sources(provider, torrent_list, mal_id, season=None, episode=None, part=None, anidb_id=True, season_source=None, absolute_episode=None):
     from resources.lib.ui import database
     """
     Filter torrents based on season, episode, and part information.
     Uses improved regex patterns to handle a wider variety of media title formats.
+
+    season_source says how the season was found (see utils.resolve_season). A 'default'
+    season never rejects a release, and a 'title' season is dropped from the check when
+    it would otherwise reject everything. absolute_episode also counts as a match for
+    groups that number later seasons continuously.
     """
     # Check for Large Animes or Tvdb Animes with season 0
     if season == 1:
@@ -463,8 +487,27 @@ def filter_sources(provider, torrent_list, mal_id, season=None, episode=None, pa
             if thetvdb_season == 'a' or thetvdb_season == 0:
                 season = None
 
+    check_season = provider not in _ID_BASED_PROVIDERS and season_source != 'default'
+    stats = {'season': 0, 'episode': 0, 'part': 0}
+    filtered = _filter_pass(provider, torrent_list, season, episode, part, absolute_episode, check_season, stats)
+
+    if not filtered and torrent_list and check_season and season_source == 'title':
+        filtered = _filter_pass(provider, torrent_list, season, episode, part, absolute_episode, False, {'season': 0, 'episode': 0, 'part': 0})
+        for torrent in filtered:
+            torrent['relaxed'] = True
+
+    control.log(
+        f"Filter {provider}: kept {len(filtered)}/{len(torrent_list)} "
+        f"(dropped season={stats['season']} episode={stats['episode']} part={stats['part']}) "
+        f"season={season} source={season_source} episode={episode} absolute={absolute_episode}")
+    return filtered
+
+
+def _filter_pass(provider, torrent_list, season, episode, part, absolute_episode, check_season, stats):
     # Define regexes from the testing file
     regex_season = re.compile(r"(?i)\b(?:s(?:eason)?[ ._-]?(\d{1,2}))(?!\d)")
+    regex_ordinal_season = re.compile(r"(?i)\b(\d{1,2})(?:st|nd|rd|th)[ ._-]+season\b")
+    regex_season_pack = re.compile(r"(?i)\b(?:seasons?[ ._-]?\d{1,2}[~-]\d{1,2}|s\d{1,2}\s*[~-]\s*s\d{1,2})(?!\d)")
     regex_episode = re.compile(r"""(?ix)
         (?:^|[\s._-])                     # separator
         (?:e(?:p)?\s?(\d{1,4}))           # E12, EP12
@@ -534,7 +577,7 @@ def filter_sources(provider, torrent_list, mal_id, season=None, episode=None, pa
                     extracted_parts.append(group)
 
         # Extract seasons
-        season_matches = regex_season.findall(title)
+        season_matches = regex_season.findall(title) + regex_ordinal_season.findall(title)
         extracted_seasons = None
         if season_matches:
             extracted_seasons = ", ".join(season_matches)
@@ -552,12 +595,16 @@ def filter_sources(provider, torrent_list, mal_id, season=None, episode=None, pa
             if not (extracted_parts and epnum in extracted_parts):
                 extracted_episode = epnum
 
+        # A season token next to a dash would read as an episode range: "s2 - 05" is not 2-5
+        clean_title_no_parts = regex_season_pack.sub(" ", clean_title_no_parts)
+        clean_title_no_parts = regex_ordinal_season.sub(" ", regex_season.sub(" ", clean_title_no_parts))
+
         # Otherwise, check for a dedicated episode range using "~" or "-"
         if not extracted_episode:
             range_match = regex_episode_range.search(clean_title_no_parts)
             if range_match:
                 start, end = range_match.group(1), range_match.group(2)
-                if not (extracted_parts and (start in extracted_parts or end in extracted_parts)):
+                if int(start) <= int(end) and not (extracted_parts and (start in extracted_parts or end in extracted_parts)):
                     extracted_episode = f"{start}-{end}"
 
         # Fallback: use the regex_episode findall approach
@@ -569,15 +616,6 @@ def filter_sources(provider, torrent_list, mal_id, season=None, episode=None, pa
                     for group in match:
                         if group and group not in extracted_parts:
                             episodes.append(group)
-
-                # If season is detected, drop a leading number equal to a season
-                if extracted_seasons and episodes:
-                    try:
-                        season_nums = [int(s.strip()) for s in extracted_seasons.split(",") if s.strip().isdigit()]
-                        if episodes[0].isdigit() and int(episodes[0]) in season_nums:
-                            episodes = episodes[1:]
-                    except Exception:
-                        season_nums = []
 
                 if len(episodes) >= 2 and episodes[0].isdigit() and episodes[-1].isdigit():
                     extracted_episode = f"{episodes[0]}-{episodes[-1]}"
@@ -611,6 +649,7 @@ def filter_sources(provider, torrent_list, mal_id, season=None, episode=None, pa
             continue
 
         valid = True
+        absolute_match = False
 
         # Check episode match if applicable
         if episode and extracted_episode:
@@ -633,12 +672,16 @@ def filter_sources(provider, torrent_list, mal_id, season=None, episode=None, pa
                 try:
                     req_ep = int(episode)
                     if req_ep not in episode_nums:
-                        valid = False
+                        if absolute_episode in episode_nums:
+                            absolute_match = True
+                        else:
+                            valid = False
+                            stats['episode'] += 1
                 except (ValueError, TypeError):
                     valid = False
 
         # Check season match if applicable
-        if season and extracted_seasons:
+        if check_season and season and extracted_seasons and not absolute_match:
             season_nums = []
             for s in extracted_seasons.split(","):
                 try:
@@ -651,6 +694,7 @@ def filter_sources(provider, torrent_list, mal_id, season=None, episode=None, pa
                     req_season = int(season)
                     if req_season not in season_nums:
                         valid = False
+                        stats['season'] += 1
                 except (ValueError, TypeError):
                     valid = False
 
@@ -668,6 +712,7 @@ def filter_sources(provider, torrent_list, mal_id, season=None, episode=None, pa
                     req_part = int(part)
                     if req_part not in part_nums:
                         valid = False
+                        stats['part'] += 1
                 except (ValueError, TypeError):
                     valid = False
 
