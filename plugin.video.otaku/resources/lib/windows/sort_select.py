@@ -5,7 +5,7 @@ from resources.lib.windows.base_window import BaseWindow
 from resources.lib.ui import control
 
 # Define available sort methods
-SORT_METHODS = ['none', 'source type', 'debrid provider', 'provider', 'audio', 'subtitles', 'resolution', 'size', 'seeders', 'audio channels']
+SORT_METHODS = ['none', 'source type', 'debrid provider', 'audio', 'subtitles', 'resolution', 'size', 'seeders', 'audio channels', 'provider']
 
 # Define sort options for each category
 SORT_OPTIONS = {
@@ -13,7 +13,7 @@ SORT_OPTIONS = {
     'none': [],
     "source type": ['files', 'cloud', 'torrent', 'hoster', 'embeds', "none"],
     "debrid provider": ['Real-Debrid', 'Premiumize', 'Alldebrid', 'Debrid-Link', 'Torbox', 'EasyDebrid', 'Easynews', 'none'],
-    "provider": ['Nyaa', 'AnimeTosho', 'NekoBT', 'Torrentio', 'Anikoto', 'AnimePahe', 'Animix', 'HiAnime', 'Watchnixtoons2', 'none'],
+    "provider": ['Nyaa', 'AnimeTosho', 'NekoBT', 'Torrentio', 'Anikoto', 'AnimePahe', 'Animix', 'HiAnime', 'Watchnixtoons2', 'animekai', 'gogo', 'aniwave', 'easynews', 'none'],
     "audio": ['multi-audio', 'dual-audio', 'sub', 'dub', 'none'],
     "subtitles": ['multi sub', 'none'],
     "resolution": [],
@@ -71,7 +71,11 @@ default_sort_options = {
     'provider.7': 6,   # Animix
     'provider.8': 7,   # HiAnime
     'provider.9': 8,   # Watchnixtoons2
-    'provider.10': 9,  # none
+    'provider.10': 9,  # animekai
+    'provider.11': 10, # gogo
+    'provider.12': 11, # aniwave
+    'provider.13': 12, # easynews
+    'provider.14': 13, # none
     'audio.1': 0,  # multi-audio
     'audio.2': 1,  # dual-audio
     'audio.3': 2,  # sub
@@ -124,7 +128,11 @@ default_sub_options = {
     'provider.7': 6,   # Animix
     'provider.8': 7,   # HiAnime
     'provider.9': 8,   # Watchnixtoons2
-    'provider.10': 9,  # none
+    'provider.10': 9,  # animekai
+    'provider.11': 10, # gogo
+    'provider.12': 11, # aniwave
+    'provider.13': 12, # easynews
+    'provider.14': 13, # none
     'audio.1': 0,  # multi-audio
     'audio.2': 1,  # dual-audio
     'audio.3': 2,  # sub
@@ -177,7 +185,11 @@ default_dub_options = {
     'provider.7': 6,   # Animix
     'provider.8': 7,   # HiAnime
     'provider.9': 8,   # Watchnixtoons2
-    'provider.10': 9,  # none
+    'provider.10': 9,  # animekai
+    'provider.11': 10, # gogo
+    'provider.12': 11, # aniwave
+    'provider.13': 12, # easynews
+    'provider.14': 13, # none
     'audio.1': 0,  # multi-audio
     'audio.2': 1,  # dual-audio
     'audio.3': 3,  # sub
@@ -230,7 +242,11 @@ default_multi_audio_options = {
     'provider.7': 6,   # Animix
     'provider.8': 7,   # HiAnime
     'provider.9': 8,   # Watchnixtoons2
-    'provider.10': 9,  # none
+    'provider.10': 9,  # animekai
+    'provider.11': 10, # gogo
+    'provider.12': 11, # aniwave
+    'provider.13': 12, # easynews
+    'provider.14': 13, # none
     'audio.1': 0,  # multi-audio
     'audio.2': 1,  # dual-audio
     'audio.3': 4,  # none
@@ -283,7 +299,11 @@ default_multi_sub_options = {
     'provider.7': 6,   # Animix
     'provider.8': 7,   # HiAnime
     'provider.9': 8,   # Watchnixtoons2
-    'provider.10': 9,  # none
+    'provider.10': 9,  # animekai
+    'provider.11': 10, # gogo
+    'provider.12': 11, # aniwave
+    'provider.13': 12, # easynews
+    'provider.14': 13, # none
     'audio.1': 0,  # multi-audio
     'audio.2': 1,  # dual-audio
     'audio.3': 4,  # none
