@@ -87,6 +87,20 @@ def sync_watchlist(silent=False):
             control.ok_dialog(control.ADDON_NAME, "Watchilst Sync is Disabled")
 
 
+def retry_pending_updates():
+    """Replay watchlist updates that failed earlier."""
+    if not control.getBool('watchlist.update.enabled'):
+        return
+    try:
+        from resources.lib.WatchlistFlavor import WatchlistFlavor
+
+        _, any_completed = WatchlistFlavor.retry_pending_updates()
+        if any_completed:
+            sync_watchlist(True)
+    except Exception as e:
+        control.log(f'Retry pending watchlist updates failed: {e}', 'error')
+
+
 def prefetch_watchlist():
     """Prefetch all watchlist statuses in background for faster loading."""
     if not control.getBool('watchlist.prefetch.enabled'):
@@ -312,6 +326,7 @@ if __name__ == "__main__":
     version_check()
     database_sync.SyncDatabase()
     refresh_apis()
+    threading.Thread(target=retry_pending_updates, daemon=True).start()
     if control.getInt('update.time.30') == 0 or control.getInt('update.time.7') == 0:
         update_mappings_db()
         update_dub_json()

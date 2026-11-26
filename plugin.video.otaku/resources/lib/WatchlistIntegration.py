@@ -211,9 +211,9 @@ def add_watchlist(items):
     return items
 
 
-def watchlist_update_episode(mal_id, episode):
+def watchlist_update_episode(mal_id, episode, failed=None):
     """Update episode progress on ALL enabled watchlists."""
-    return WatchlistFlavor.watchlist_update_all_episodes(mal_id, episode)
+    return WatchlistFlavor.watchlist_update_all_episodes(mal_id, episode, failed)
 
 
 def set_watchlist_status(mal_id, status):
