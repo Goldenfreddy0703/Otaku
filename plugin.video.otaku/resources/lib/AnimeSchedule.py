@@ -690,7 +690,7 @@ class AnimeScheduleCalendar:
 
                 # If MDBList has no MAL rating (0.0), fallback to database score
                 if rating_mal == 0.0 and mal_id:
-                    db_mapping = database.get_mappings(mal_id, 'mal_id')
+                    db_mapping = database.get_mappings(mal_id, 'mal_id', fallback=False)
                     if db_mapping and db_mapping.get('score'):
                         try:
                             # Round to 1 decimal place (8.64 -> 8.6)

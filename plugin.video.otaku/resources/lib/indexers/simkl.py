@@ -176,7 +176,7 @@ class SIMKLAPI:
 
     def get_mapping_ids_from_simkl(self, anime_id, send_id):
         # Query local database for all available IDs
-        meta_ids = database.get_mappings(anime_id, send_id)
+        meta_ids = database.get_mappings(anime_id, send_id, fallback=False)
         if meta_ids:
             return meta_ids  # Return the full mapping dictionary
         # Fallback to SIMKL API if not found
