@@ -82,16 +82,9 @@ class Sources(BrowserBase):
 
         # Season search
         query4 = show
-        show_lower = show.lower()
-        if 'season' in show_lower:
-            query1_part, query2_part = show.rsplit('|', 2)
-            match_1 = re.match(r'.+?(?=season)', query1_part)
-            if match_1:
-                match_1 = match_1.group(0).strip() + ')'
-            match_2 = re.match(r'.+?(?=season)', query2_part)
-            if match_2:
-                match_2 = match_2.group(0).strip() + ')'
-            query4 = f'{match_1}|{match_2}'
+        if 'season' in show.lower():
+            matches = [re.match(r'\(.+?(?=season)', title, re.IGNORECASE) for title in show.split('|')]
+            query4 = '|'.join(match.group(0).strip() + ')' for match in matches if match) or show
 
         search_tasks.append({
             'query': query4,
