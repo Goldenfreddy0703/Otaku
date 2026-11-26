@@ -683,6 +683,47 @@ class KitsuWLF(WatchlistFlavorBase):
                 database.add_mapping_id(mal_id, 'mal_id', mal_id)
         return mal_id
 
+    @staticmethod
+    def _clean_kitsu_id(kitsu_id):
+        try:
+            return int(kitsu_id) if kitsu_id else None
+        except (TypeError, ValueError):
+            return None
+
+    def _get_kitsu_id(self, mal_id):
+        """Return the Kitsu ID for a MAL ID, asking Kitsu when it is not stored yet.
+
+        The mappings DB and the mapping services behind _get_mapping_id often lack new shows,
+        so Kitsu itself is asked next and the answer is stored on the show for later updates.
+        """
+        show = database.get_show(mal_id)
+        kitsu_id = self._clean_kitsu_id(show.get('kitsu_id')) if show else None
+        if kitsu_id:
+            return kitsu_id
+        kitsu_id = self._clean_kitsu_id((database.get_mappings(mal_id, 'mal_id') or {}).get('kitsu_id'))
+        if not kitsu_id:
+            params = {
+                'filter[externalSite]': 'myanimelist/anime',
+                'filter[externalId]': mal_id,
+                'include': 'item'
+            }
+            r = client.get(f'{self._URL}/edge/mappings', headers=self.__headers(), params=params)
+            try:
+                data = (r.json() if r else {}).get('data') or []
+                item = data[0]['relationships']['item']['data'] if data else {}
+                if item.get('type') == 'anime':
+                    kitsu_id = self._clean_kitsu_id(item.get('id'))
+            except (ValueError, KeyError, TypeError, AttributeError):
+                kitsu_id = None
+        if kitsu_id:
+            database.add_mapping_id(mal_id, 'kitsu_id', kitsu_id)
+            return kitsu_id
+        control.log(f'Kitsu: no Kitsu ID from Kitsu for MAL {mal_id}, trying mapping services', level='warning')
+        kitsu_id = self._clean_kitsu_id(self._get_mapping_id(mal_id, 'kitsu_id'))
+        if not kitsu_id:
+            control.log(f'Kitsu: no Kitsu ID found for MAL {mal_id}', level='warning')
+        return kitsu_id
+
     def get_library_entries(self, kitsu_id):
         params = {
             "filter[user_id]": self.user_id,
@@ -693,7 +734,7 @@ class KitsuWLF(WatchlistFlavorBase):
         return r
 
     def get_watchlist_anime_entry(self, mal_id):
-        kitsu_id = self._get_mapping_id(mal_id, 'kitsu_id')
+        kitsu_id = self._get_kitsu_id(mal_id)
         if not kitsu_id:
             return {}
 
@@ -753,7 +794,7 @@ class KitsuWLF(WatchlistFlavorBase):
 
     def update_list_status(self, mal_id, status):
         from resources.lib.ui.database import clear_watchlist_cache
-        kitsu_id = self._get_mapping_id(mal_id, 'kitsu_id')
+        kitsu_id = self._get_kitsu_id(mal_id)
         if not kitsu_id:
             return False
 
@@ -802,7 +843,7 @@ class KitsuWLF(WatchlistFlavorBase):
 
     def update_num_episodes(self, mal_id, episode):
         from resources.lib.ui.database import clear_watchlist_cache
-        kitsu_id = self._get_mapping_id(mal_id, 'kitsu_id')
+        kitsu_id = self._get_kitsu_id(mal_id)
         if not kitsu_id:
             return False
 
@@ -855,7 +896,7 @@ class KitsuWLF(WatchlistFlavorBase):
 
     def update_score(self, mal_id, score):
         from resources.lib.ui.database import clear_watchlist_cache
-        kitsu_id = self._get_mapping_id(mal_id, 'kitsu_id')
+        kitsu_id = self._get_kitsu_id(mal_id)
         if not kitsu_id:
             return False
 
@@ -908,7 +949,7 @@ class KitsuWLF(WatchlistFlavorBase):
 
     def delete_anime(self, mal_id):
         from resources.lib.ui.database import clear_watchlist_cache
-        kitsu_id = self._get_mapping_id(mal_id, 'kitsu_id')
+        kitsu_id = self._get_kitsu_id(mal_id)
         if not kitsu_id:
             return False
 
