@@ -20,7 +20,6 @@ class SourceSelect(BaseWindow):
         self.canceled = False
         self.display_list = None
         self.stream_link = None
-        self.view_mode = 'both'  # Default view mode
         episode = actionArgs.get('episode')
 
         # Set properties for the selected episode
@@ -66,8 +65,8 @@ class SourceSelect(BaseWindow):
         embeds = [s for s in self.sources if s.get('type') in ('embed', 'direct')]
         both = list(self.sources)
 
-        # always start on “both”
-        self.view_mode = 'both'
+        # default start on “both”
+        self.view_mode = control.getStr('source.select.view_mode') or 'both'
         self._show_current_sources(cached, both, uncached, embeds)
         self.setFocusId(1000)
 
