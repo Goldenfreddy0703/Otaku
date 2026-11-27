@@ -430,12 +430,38 @@ def update_episode_batch(episode_batch):
 #  Mapping & Info Lookups
 # ═══════════════════════════════════════════════════════════════════════════
 
-def get_mappings(anime_id, send_id):
+def get_mappings(anime_id, send_id, fallback=True):
+    """Mappings row for an ID; MAL IDs missing from the mappings DB fall back to AniZip."""
     with SQL(control.mappingDB) as cur:
         cur.execute(
             f'SELECT * FROM anime WHERE {send_id}=?', (anime_id,))
         rows = cur.fetchall()
-        return rows[0] if rows else {}
+        if rows:
+            return rows[0]
+    if fallback and send_id == 'mal_id':
+        return get(_anizip_mappings, 24, int(anime_id)) or {}
+    return {}
+
+
+def _anizip_mappings(mal_id):
+    """AniZip IDs under the mappings DB column names, or None on a failed request (so it isn't cached)."""
+    from resources.lib.indexers.anizip import ANIZIPAPI
+    control.log(f'Mappings: MAL {mal_id} not in mappings DB, using AniZip', 'debug')
+    try:
+        ids = (ANIZIPAPI().get_anime_info(mal_id) or {}).get('mappings')
+    except Exception as e:
+        control.log(f'Mappings: AniZip lookup failed for MAL {mal_id}: {e}', 'warning')
+        return None
+    if not ids:
+        return None
+    mapping = {key: ids[key] for key in ('mal_id', 'anilist_id', 'kitsu_id', 'anidb_id', 'thetvdb_id', 'themoviedb_id', 'imdb_id') if ids.get(key)}
+    # AniZip returns some numeric IDs as strings; the mappings DB stores them as integers
+    for key in ('mal_id', 'anilist_id', 'kitsu_id', 'anidb_id', 'thetvdb_id', 'themoviedb_id'):
+        if isinstance(mapping.get(key), str) and mapping[key].isdigit():
+            mapping[key] = int(mapping[key])
+    if ids.get('type'):
+        mapping['anime_media_type'] = ids['type']
+    return mapping
 
 
 def get_unique_ids(anime_id, send_id):
