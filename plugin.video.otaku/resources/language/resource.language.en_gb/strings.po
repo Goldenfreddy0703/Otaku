@@ -1965,6 +1965,10 @@ msgctxt "#30486"
 msgid "AnimePahe Alt"
 msgstr ""
 
+msgctxt "#30487"
+msgid "Default Source View"
+msgstr ""
+
 msgctxt "#30488"
 msgid "Update failed - will retry later"
 msgstr ""
