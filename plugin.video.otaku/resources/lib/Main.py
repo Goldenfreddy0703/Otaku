@@ -1647,18 +1647,23 @@ def MARKED_AS_WATCHED(payload, params):
         mal_id = payload_list[0] if payload_list else ""
         episode = 1
 
-    any_completed = watchlist_update_episode(mal_id, episode)
+    failed = []
+    any_completed = watchlist_update_episode(mal_id, episode, failed=failed)
     if any_completed:
         control.sleep(3000)
         service.sync_watchlist(True)
 
     # Build notification showing updated watchlists
+    from resources.lib.WatchlistFlavor import WatchlistFlavor
     enabled = control.enabled_watchlists()
-    flavor_labels = {'anilist': 'AniList', 'kitsu': 'Kitsu', 'mal': 'MAL', 'simkl': 'Simkl'}
-    updated_names = ', '.join([flavor_labels.get(f, f.capitalize()) for f in enabled]) if enabled else 'No Watchlist'
+    flavor_labels = WatchlistFlavor.FLAVOR_TITLES
+    updated = [f for f in enabled if f not in failed]
+    all_failed = bool(enabled) and not updated
+    updated_names = ', '.join([flavor_labels.get(f, f.capitalize()) for f in updated]) if enabled else 'No Watchlist'
 
     if len(payload_list) == 2 and payload_list[1]:
-        control.notify(control.ADDON_NAME, f'Episode #{episode} was Marked as Watched in {updated_names}')
+        if not all_failed:
+            control.notify(control.ADDON_NAME, f'Episode #{episode} was Marked as Watched in {updated_names}')
         control.execute(f'ActivateWindow(Videos,plugin://{control.ADDON_ID}/watchlist_to_ep/{mal_id}/{episode})')
     else:
         show = database.get_show(mal_id)
@@ -1666,7 +1671,8 @@ def MARKED_AS_WATCHED(payload, params):
         if show:
             kodi_meta = pickle.loads(show['kodi_meta'])
             title = kodi_meta.get('title_userPreferred', '')
-        control.notify(control.ADDON_NAME, f'{title} was Marked as Watched in {updated_names}')
+        if not all_failed:
+            control.notify(control.ADDON_NAME, f'{title} was Marked as Watched in {updated_names}')
     control.exit_code()
 
 

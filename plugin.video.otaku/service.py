@@ -87,6 +87,20 @@ def sync_watchlist(silent=False):
             control.ok_dialog(control.ADDON_NAME, "Watchilst Sync is Disabled")
 
 
+def retry_pending_updates():
+    """Replay watchlist updates that failed earlier."""
+    if not control.getBool('watchlist.update.enabled'):
+        return
+    try:
+        from resources.lib.WatchlistFlavor import WatchlistFlavor
+
+        _, any_completed = WatchlistFlavor.retry_pending_updates()
+        if any_completed:
+            sync_watchlist(True)
+    except Exception as e:
+        control.log(f'Retry pending watchlist updates failed: {e}', 'error')
+
+
 def prefetch_watchlist():
     """Prefetch all watchlist statuses in background for faster loading."""
     if not control.getBool('watchlist.prefetch.enabled'):
@@ -331,6 +345,8 @@ if __name__ == "__main__":
             # update_calendars()
             sync_watchlist(True)
             control.setInt('update.time.1', int(time.time()))
+    # Retry failed watchlist updates after the syncs above, so they don't run at the same time
+    threading.Thread(target=retry_pending_updates, daemon=True).start()
     # Prefetch watchlist in background thread (non-blocking)
     threading.Thread(target=prefetch_watchlist, daemon=True).start()
     # Prefetch airing calendar in background thread (non-blocking)
