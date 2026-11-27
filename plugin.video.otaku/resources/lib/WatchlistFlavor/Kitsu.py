@@ -705,7 +705,8 @@ class KitsuWLF(WatchlistFlavorBase):
             params = {
                 'filter[externalSite]': 'myanimelist/anime',
                 'filter[externalId]': mal_id,
-                'include': 'item'
+                'include': 'item',
+                'fields[anime]': 'slug'  # only the ID is needed, so skip the full anime record
             }
             r = client.get(f'{self._URL}/edge/mappings', headers=self.__headers(), params=params)
             try:
@@ -718,7 +719,7 @@ class KitsuWLF(WatchlistFlavorBase):
         if kitsu_id:
             database.add_mapping_id(mal_id, 'kitsu_id', kitsu_id)
             return kitsu_id
-        control.log(f'Kitsu: no Kitsu ID from Kitsu for MAL {mal_id}, trying mapping services', level='warning')
+        control.log(f'Kitsu: MAL {mal_id} not in the mappings DB or on Kitsu, trying mapping services', level='warning')
         kitsu_id = self._clean_kitsu_id(self._get_mapping_id(mal_id, 'kitsu_id'))
         if not kitsu_id:
             control.log(f'Kitsu: no Kitsu ID found for MAL {mal_id}', level='warning')
