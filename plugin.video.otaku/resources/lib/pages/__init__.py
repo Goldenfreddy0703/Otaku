@@ -5,7 +5,8 @@ from functools import partial
 
 from resources.lib.pages import (
     nyaa, animetosho, nekobt, torrentio, debrid_cloudfiles, easynews,
-    animepahe, anikoto, animixplay, hianime, watchnixtoons2, localfiles
+    animepahe, anikoto, animixplay, hianime, watchnixtoons2, localfiles,
+    animeworld
 )
 from resources.lib.ui import control, database
 from resources.lib.windows.get_sources_window import GetSources
@@ -31,6 +32,7 @@ _HOSTER_MODULES = {
 _EMBED_MODULES = (
     ('animepahe', animepahe, 'animepahe', None, False),
     ('animix', animixplay, 'animix', None, False),
+    ('animeworld', animeworld, 'animeworld', None, False),
     # ('aniwave', aniwave, 'aniwave', 'aniwave', False),
     ('hianime', hianime, 'hianime', 'hianime', False),
     # ('animekai', animekai, 'animekai', 'animekai', False),
