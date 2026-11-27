@@ -927,6 +927,11 @@
 					<default>true</default>
 					<control type="toggle"/>
 				</setting>
+				<setting id="provider.animeworld" type="boolean" label="30488" help="">
+					<level>0</level>
+					<default>true</default>
+					<control type="toggle"/>
+				</setting>
 				<!-- <setting id="provider.animixalt" type="boolean" label="30243" help="" parent="provider.animix">
 					<level>0</level>
 					<default>false</default>
