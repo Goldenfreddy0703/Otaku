@@ -1,4 +1,5 @@
 import json
+import os
 import time
 
 from resources.lib.ui import control
@@ -17,7 +18,7 @@ class WatchlistFlavor:
         'rewatching':    {'anilist': 'REPEATING', 'mal': 'watching',      'kitsu': 'current',   'simkl': 'watching'},
     }
 
-    _FLAVOR_TITLES = {'anilist': 'AniList', 'kitsu': 'Kitsu', 'mal': 'MAL', 'simkl': 'Simkl'}
+    FLAVOR_TITLES = {'anilist': 'AniList', 'kitsu': 'Kitsu', 'mal': 'MAL', 'simkl': 'Simkl'}
 
     def __init__(self):
         raise Exception("Static Class should not be created")
@@ -227,6 +228,7 @@ class WatchlistFlavor:
 
         flavors = WatchlistFlavor.get_all_update_flavors()
         any_completed = False
+        newly_failed = []
 
         for flavor in flavors:
             ok, completed = WatchlistFlavor._update_flavor_episode(flavor, mal_id, episode, kodi_episodes, finished_airing)
@@ -234,18 +236,20 @@ class WatchlistFlavor:
                 _clear_queued_update(flavor.flavor_name, mal_id)
                 any_completed = any_completed or completed
                 continue
-            _queue_failed_update(flavor.flavor_name, mal_id, episode)
-            title = WatchlistFlavor._FLAVOR_TITLES.get(flavor.flavor_name, flavor.flavor_name)
-            control.notify(f'{control.ADDON_NAME}: {title}', control.lang(30488))
+            # Only toast the first failure per show, so a show a tracker can't match doesn't toast every episode
+            if _queue_failed_update(flavor.flavor_name, mal_id, episode):
+                newly_failed.append(WatchlistFlavor.FLAVOR_TITLES.get(flavor.flavor_name, flavor.flavor_name))
             if failed is not None:
                 failed.append(flavor.flavor_name)
 
+        if newly_failed:
+            control.notify(f'{control.ADDON_NAME}: {", ".join(newly_failed)}', control.lang(30488))
         return any_completed
 
     @staticmethod
     def retry_pending_updates():
         """Replay queued updates for enabled, logged-in flavors. Returns (synced, any_completed).
-        Drops entries the tracker is already at or past, and keeps entries that fail again."""
+        Drops entries the tracker is already at or past, and entries that failed too many times."""
         queue = _load_sync_queue()
         if not queue:
             return 0, False
@@ -253,35 +257,39 @@ class WatchlistFlavor:
         flavors = {f.flavor_name: f for f in WatchlistFlavor.get_all_update_flavors()}
         synced = 0
         any_completed = False
-        changed = False
+        done = {}    # (flavor_name, key) -> episode that no longer needs a retry
+        tries = {}   # (flavor_name, key) -> (episode, failed attempts)
 
-        for flavor_name, entries in list(queue.items()):
+        for flavor_name, entries in queue.items():
             flavor = flavors.get(flavor_name)
             if not flavor:
                 continue
-            for key, item in list(entries.items()):
-                mal_id = int(key)
+            for key, item in entries.items():
                 episode = item.get('episode')
                 try:
+                    mal_id = int(key)
                     entry = flavor.get_watchlist_anime_entry(mal_id)
                     if entry and int(entry.get('eps_watched') or 0) >= int(episode):
                         control.log(f'Dropped queued ep {episode} for {mal_id} on {flavor_name} (tracker already ahead)')
-                        del entries[key]
-                        changed = True
+                        done[(flavor_name, key)] = episode
                         continue
                     _, kodi_episodes, finished_airing = WatchlistFlavor._get_show_completion_info(mal_id)
+                    ok, completed = WatchlistFlavor._update_flavor_episode(flavor, mal_id, episode, kodi_episodes, finished_airing)
                 except Exception as e:
-                    control.log(f'Failed to check queued update for {mal_id} on {flavor_name}: {e}', 'warning')
-                    continue
-                ok, completed = WatchlistFlavor._update_flavor_episode(flavor, mal_id, episode, kodi_episodes, finished_airing)
+                    control.log(f'Failed to check queued update for {key} on {flavor_name}: {e}', 'warning')
+                    ok, completed = False, False
                 if ok:
-                    del entries[key]
-                    changed = True
+                    done[(flavor_name, key)] = episode
                     synced += 1
                     any_completed = any_completed or completed
+                elif item.get('tries', 0) + 1 >= _QUEUE_MAX_TRIES:
+                    control.log(f'Gave up on queued ep {episode} for {key} on {flavor_name}', 'warning')
+                    done[(flavor_name, key)] = episode
+                else:
+                    tries[(flavor_name, key)] = (episode, item.get('tries', 0) + 1)
 
-        if changed:
-            _save_sync_queue(queue)
+        if done or tries:
+            _apply_retry_results(done, tries)
         if synced:
             control.notify(control.ADDON_NAME, control.lang(30489).format(synced))
         return synced, any_completed
@@ -409,6 +417,7 @@ class WatchlistFlavor:
 # ==================== Retry Queue Helpers ====================
 
 _QUEUE_MAX_AGE = 30 * 24 * 3600
+_QUEUE_MAX_TRIES = 5
 
 
 def _load_sync_queue():
@@ -434,22 +443,40 @@ def _save_sync_queue(queue):
     """Write the pending update queue, removing empty flavors."""
     try:
         queue = {name: entries for name, entries in queue.items() if entries}
-        with open(control.sync_queue_json, 'w', encoding='utf-8') as f:
+        tmp_path = f'{control.sync_queue_json}.tmp'
+        with open(tmp_path, 'w', encoding='utf-8') as f:
             json.dump(queue, f)
+        os.replace(tmp_path, control.sync_queue_json)
     except Exception as e:
         control.log(f'Failed to save sync queue: {e}', 'warning')
 
 
 def _queue_failed_update(flavor_name, mal_id, episode):
-    """Queue a failed update, keeping only the highest episode per flavor and show."""
+    """Queue a failed update, keeping only the highest episode per flavor and show.
+    Returns True if the show wasn't already queued for this flavor."""
     queue = _load_sync_queue()
     entries = queue.setdefault(flavor_name, {})
     old = entries.get(str(mal_id))
     if old and int(old.get('episode', 0)) > int(episode):
-        return
-    entries[str(mal_id)] = {'episode': int(episode), 'time': int(time.time())}
+        return False
+    entries[str(mal_id)] = {'episode': int(episode), 'time': int(time.time()), 'tries': old.get('tries', 0) if old else 0}
     _save_sync_queue(queue)
     control.log(f'Queued ep {episode} for {mal_id} on {flavor_name}')
+    return not old
+
+
+def _apply_retry_results(done, tries):
+    """Apply a replay's results to a freshly loaded queue, so updates queued during the replay are kept."""
+    queue = _load_sync_queue()
+    for (flavor_name, key), episode in done.items():
+        item = queue.get(flavor_name, {}).get(key)
+        if item and int(item.get('episode', 0)) <= int(episode):
+            del queue[flavor_name][key]
+    for (flavor_name, key), (episode, count) in tries.items():
+        item = queue.get(flavor_name, {}).get(key)
+        if item and item.get('episode') == episode:
+            item['tries'] = count
+    _save_sync_queue(queue)
 
 
 def _clear_queued_update(flavor_name, mal_id):

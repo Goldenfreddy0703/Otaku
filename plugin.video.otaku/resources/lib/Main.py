@@ -1656,7 +1656,7 @@ def MARKED_AS_WATCHED(payload, params):
     # Build notification showing updated watchlists
     from resources.lib.WatchlistFlavor import WatchlistFlavor
     enabled = control.enabled_watchlists()
-    flavor_labels = WatchlistFlavor._FLAVOR_TITLES
+    flavor_labels = WatchlistFlavor.FLAVOR_TITLES
     updated = [f for f in enabled if f not in failed]
     all_failed = bool(enabled) and not updated
     updated_names = ', '.join([flavor_labels.get(f, f.capitalize()) for f in updated]) if enabled else 'No Watchlist'

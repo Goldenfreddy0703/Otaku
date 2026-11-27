@@ -326,7 +326,6 @@ if __name__ == "__main__":
     version_check()
     database_sync.SyncDatabase()
     refresh_apis()
-    threading.Thread(target=retry_pending_updates, daemon=True).start()
     if control.getInt('update.time.30') == 0 or control.getInt('update.time.7') == 0:
         update_mappings_db()
         update_dub_json()
@@ -346,6 +345,8 @@ if __name__ == "__main__":
             # update_calendars()
             sync_watchlist(True)
             control.setInt('update.time.1', int(time.time()))
+    # Retry failed watchlist updates after the syncs above, so they don't run at the same time
+    threading.Thread(target=retry_pending_updates, daemon=True).start()
     # Prefetch watchlist in background thread (non-blocking)
     threading.Thread(target=prefetch_watchlist, daemon=True).start()
     # Prefetch airing calendar in background thread (non-blocking)
